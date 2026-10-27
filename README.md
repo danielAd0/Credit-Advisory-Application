@@ -89,18 +89,28 @@ Open http://localhost:5173
 
 ## Git workflow
 
-- `main` - released code only. Never commit directly.
-- `develop` - integration branch. Never commit directly.
-- Create every piece of work on a `feature/<short-name>` branch from an up-to-date `develop`:
+Everyone works directly on `main`. To avoid overwriting each other:
+
+1. **Before you start working**, get the latest code:
 
 ```powershell
-git checkout develop
 git pull
-git checkout -b feature/<short-name>
 ```
 
-- Open a pull request into `develop` and merge with **Squash and merge**.
-- `develop` into `main` uses **Create a merge commit** (never squash).
+2. **Commit small and often** - one finished piece of work per commit, with a clear message.
+
+3. **Before you push**, pull again in case someone else pushed in the meantime:
+
+```powershell
+git add .
+git status
+git commit -m "Describe what you did"
+git pull
+git push
+```
+
+4. If `git pull` reports a **CONFLICT**, stop and sort it out together - do not force push.
+5. Never push code that does not compile or build.
 
 ## Team rules
 
@@ -109,6 +119,7 @@ git checkout -b feature/<short-name>
 - Never edit a migration that has already been merged - write a new one.
 - Never commit `application-local.properties`, passwords, keys, or any `.xlsx` / `.csv` client data.
 - Run `npm run lint` and `.\mvnw.cmd clean compile` before opening a pull request.
+- Never use `git push --force`.
 
 ## Known pins
 
