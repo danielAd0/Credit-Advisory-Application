@@ -6,8 +6,13 @@ backend/target/
 # IDEs
 .idea/
 *.iml
-.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
 .DS_Store
+
+# VS Code extension tooling
+.github/modernize/
 
 # Node
 frontend/node_modules/
