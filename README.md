@@ -35,7 +35,6 @@ Install these before anything else:
 cd C:\dev
 git clone https://github.com/danielAd0/Credit-Advisory-Application.git
 cd Credit-Advisory-Application
-git checkout develop
 ```
 
 ### 2. Database
