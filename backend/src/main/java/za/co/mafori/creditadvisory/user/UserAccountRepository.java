@@ -25,4 +25,8 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, Long> 
      * consultant is suspended.
      */
     Optional<UserAccount> findByConsultantId(Long consultantId);
+
+    /** One user with roles and consultant loaded - used by GET /api/auth/me. */
+    @EntityGraph(attributePaths = { "roles", "consultant" })
+    Optional<UserAccount> findWithRolesAndConsultantById(Long id);
 }

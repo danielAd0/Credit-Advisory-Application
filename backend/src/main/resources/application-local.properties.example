@@ -1,2 +1,9 @@
 DB_USERNAME=ca_user
-DB_PASSWORD=
+DB_PASSWORD=ca_dev_2026
+
+# Allow the Vite dev server to call the API
+app.auth.cors-allowed-origins=http://localhost:5173
+
+# Local admin created on start-up (local profile only)
+app.dev.admin-email=admin@local.test
+app.dev.admin-password=Local-Admin-Pass-2026
