@@ -1,6 +1,6 @@
-# API contract - auth, consultants, clients, transfers
+# API contract - auth, consultants, clients, transfers, users
 
-Owner: Ntiyiso. Consumers: Jack (frontend). Status: DRAFT - not yet implemented.
+Owner: Ntiyiso. Consumers: Jack (frontend). Status: DRAFT - sections 2, 3, 5 and 6 and `GET /api/clients` are implemented. The other client endpoints in section 4 wait on the ID-number protection code.
 
 Any change to a request or response shape must be agreed with Jack before it is coded.
 
@@ -167,6 +167,33 @@ Giving the same answer for every failure stops anyone from finding out which ema
 - The frontend uses `roles` only to decide which buttons and pages to show. The backend checks permissions again on every request.
 
 **401** if not signed in.
+
+### POST /api/auth/change-password
+
+**Who:** everyone signed in (changes their own password)
+
+**Request**
+
+```json
+{
+  "currentPassword": "Old-Password-123",
+  "newPassword": "New-Password-456"
+}
+```
+
+| Field             | Rules                                                                                                                      |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `currentPassword` | required                                                                                                                   |
+| `newPassword`     | required; 12 characters minimum; 72 bytes maximum; not the same as the email address; different from the current password |
+
+**204 No Content** - the session stays signed in.
+
+**Errors**
+| Status | When |
+|---|---|
+| 400 | invalid fields; `urn:credit-advisory:auth:wrong-current-password` when the current password is wrong; `urn:credit-advisory:validation:weak-password` when the new password breaks a rule (`detail` says which) |
+
+Passwords are never logged or returned by any endpoint.
 
 ---
 
@@ -588,12 +615,184 @@ The `409` does **not** say which consultant has the existing client or show any 
 
 ---
 
-## 6. Open questions
+## 6. Users (ADMIN only)
+
+Every endpoint in this section returns `403` for CONSULTANT and MANAGER.
+
+### The User object
+
+```json
+{
+  "id": 2,
+  "email": "thandi@mafori.co.za",
+  "enabled": true,
+  "roles": ["CONSULTANT"],
+  "consultant": {
+    "id": 4,
+    "consultantCode": "C004",
+    "fullName": "Thandi Xundu",
+    "status": "ACTIVE"
+  },
+  "locked": false,
+  "lockedUntil": null,
+  "lastLoginAt": "2026-10-29T08:12:00Z",
+  "version": 3,
+  "createdAt": "2026-10-20T09:00:00Z",
+  "updatedAt": "2026-10-29T08:12:00Z"
+}
+```
+
+| Field         | Meaning                                                            |
+| ------------- | ------------------------------------------------------------------ |
+| `roles`       | any of `CONSULTANT`, `MANAGER`, `ADMIN`, sorted in that order      |
+| `consultant`  | the linked consultant record, or `null`                            |
+| `locked`      | `true` while the account is locked after too many failed sign-ins  |
+| `lockedUntil` | when the lock ends (only set while `locked` is `true`)             |
+| `lastLoginAt` | last successful sign-in, or `null` if the user has never signed in |
+
+The password (and its hash) is never returned.
+
+### Rules that apply to every user change
+
+- A user with the `CONSULTANT` role must be linked to a consultant record.
+- Only an ACTIVE consultant can be linked, and each consultant can have at most one login.
+- The last enabled ADMIN cannot be disabled or lose the `ADMIN` role, so there is always someone who can manage users.
+- Emails are stored trimmed and lower-case, and must be unique.
+
+### GET /api/users
+
+**Query parameters**
+| Name | Example | Meaning |
+|---|---|---|
+| `search` | `thandi` | part of the email, case-insensitive |
+| `page`, `size` | `0`, `20` | paging (max size 100) |
+
+Sorted by `email`.
+
+**200 OK** - a page of User objects.
+
+### GET /api/users/{id}
+
+**200 OK** - one User object.
+
+**Errors:** `404` user does not exist.
+
+### POST /api/users
+
+**Request**
+
+```json
+{
+  "email": "thandi@mafori.co.za",
+  "temporaryPassword": "Temp-Password-2026",
+  "roles": ["CONSULTANT"],
+  "consultantId": 4
+}
+```
+
+| Field               | Rules                                                           |
+| ------------------- | --------------------------------------------------------------- |
+| `email`             | required; valid email; max 254                                  |
+| `temporaryPassword` | required; same rules as `newPassword` in change-password        |
+| `roles`             | required; at least one                                          |
+| `consultantId`      | required when `roles` contains `CONSULTANT`; otherwise optional |
+
+The admin gives the temporary password to the user in person; the user should then change it with `POST /api/auth/change-password`.
+
+**201 Created** - the new User object, with a `Location` header.
+
+**Errors**
+| Status | When |
+|---|---|
+| 400 | invalid fields; `urn:credit-advisory:validation:weak-password` |
+| 404 | `consultantId` does not exist (`urn:credit-advisory:consultant:not-found`) |
+| 409 | email already used (`urn:credit-advisory:user:duplicate-email`); consultant already has a login (`urn:credit-advisory:user:consultant-already-linked`) |
+| 422 | `CONSULTANT` role without a consultant (`urn:credit-advisory:user:consultant-role-needs-link`); consultant is not ACTIVE (`urn:credit-advisory:user:consultant-not-active`) |
+
+### PATCH /api/users/{id}/roles
+
+Replaces the user's roles with exactly the ones sent.
+
+```json
+{ "roles": ["MANAGER", "ADMIN"], "version": 3 }
+```
+
+**200 OK** - the updated User object.
+
+**Errors**
+| Status | When |
+|---|---|
+| 400 | invalid fields (empty `roles`, missing `version`) |
+| 404 | user does not exist |
+| 409 | stale `version`; removing `ADMIN` from the last enabled admin (`urn:credit-advisory:user:last-admin`) |
+| 422 | adding `CONSULTANT` to a user with no linked consultant (`urn:credit-advisory:user:consultant-role-needs-link`) |
+
+### PATCH /api/users/{id}/consultant
+
+Links the user to a consultant, or unlinks them with `"consultantId": null`.
+
+```json
+{ "consultantId": 4, "version": 3 }
+```
+
+**200 OK** - the updated User object.
+
+**Errors**
+| Status | When |
+|---|---|
+| 400 | missing `version` |
+| 404 | user or consultant does not exist |
+| 409 | stale `version`; consultant already has another login (`urn:credit-advisory:user:consultant-already-linked`) |
+| 422 | consultant is not ACTIVE; unlinking a user who still has the `CONSULTANT` role (remove the role first) |
+
+### PATCH /api/users/{id}/enabled
+
+```json
+{ "enabled": false, "version": 3 }
+```
+
+Disabling a user signs them out: their next request returns `401` (FR-18).
+
+**200 OK** - the updated User object.
+
+**Errors**
+| Status | When |
+|---|---|
+| 400 | missing fields |
+| 404 | user does not exist |
+| 409 | stale `version`; disabling the last enabled admin (`urn:credit-advisory:user:last-admin`) |
+
+### POST /api/users/{id}/password-reset
+
+Sets a new temporary password and clears any lockout. Used when a user forgets their password, until password reset by email exists (FR-01).
+
+```json
+{ "temporaryPassword": "Reset-Password-2026" }
+```
+
+No `version` is needed.
+
+**200 OK** - the updated User object.
+
+**Errors:** `400` invalid or weak password; `404` user does not exist.
+
+### POST /api/users/{id}/unlock
+
+No body. Clears the failed sign-in count and any lockout.
+
+**200 OK** - the updated User object.
+
+**Errors:** `404` user does not exist.
+
+---
+
+## 7. Open questions
 
 - **Correcting ID numbers:** can consultants correct a client's ID number, or only managers/admins? (SRS 15) - not editable for now.
 - **Bulk transfer limit:** draft says 500 clients per transfer (SRS 2) - to confirm.
 - **Session idle timeout:** draft says 30 minutes - to confirm.
 - **Manager scope:** all clients for now; department-level scope if departments are confirmed (SRS 4).
 - **Password reset (FR-01):** needs email sending (future). Until then an admin resets passwords.
-- **User management:** endpoints to create users, link them to consultants and assign roles - to be added in a later version of this contract.
 - **Unassigning clients:** `UNASSIGN` exists in the history table, but there is no endpoint to unassign a client yet. Needed?
+- **Forcing a password change:** users are not yet forced to change an admin-set temporary password on first sign-in. Needs a `must_change_password` column (Sifiso, migration V10) and a check in the frontend.
+- **Sessions after a password reset:** a reset does not sign the user out of sessions that are already open. Should it?
