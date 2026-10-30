@@ -1,6 +1,9 @@
 package za.co.mafori.creditadvisory.consultant;
 
+import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -33,12 +36,14 @@ public class ConsultantService {
         PageRequest pageable = PageRequest.of(safePage, safeSize, Sort.by("fullName").and(Sort.by("id")));
 
         Page<Consultant> result = consultants.search(toLikePattern(search), status, pageable);
-        return PageResponse.of(result, ConsultantResponse::from);
+        Map<Long, Long> clientCounts = clientCounts(result.getContent());
+        return PageResponse.of(result,
+                c -> ConsultantResponse.from(c, clientCounts.getOrDefault(c.getId(), 0L)));
     }
 
     @Transactional(readOnly = true)
     public ConsultantResponse get(long id) {
-        return ConsultantResponse.from(load(id));
+        return withClientCount(load(id));
     }
 
     @Transactional
@@ -49,7 +54,8 @@ public class ConsultantService {
                     "A consultant with code " + code + " already exists.");
         }
         Consultant saved = consultants.save(new Consultant(code, request.fullName()));
-        return ConsultantResponse.from(saved);
+        // A brand-new consultant has no clients yet.
+        return ConsultantResponse.from(saved, 0);
     }
 
     @Transactional
@@ -58,14 +64,15 @@ public class ConsultantService {
         requireVersion(consultant, request.version());
         consultant.rename(request.fullName());
         consultants.flush();
-        return ConsultantResponse.from(consultant);
+        return withClientCount(consultant);
     }
 
     /**
      * Changes status. When a consultant becomes INACTIVE or SUSPENDED, their
      * signed-in session
      * ends on its next request (AccountStillActiveFilter), and they can no longer
-     * sign in.
+     * sign in. Their clients stay with them; the response's clientCount tells the
+     * frontend how many still need to be handed over.
      */
     @Transactional
     public ConsultantResponse changeStatus(long id, ChangeConsultantStatusRequest request) {
@@ -75,7 +82,24 @@ public class ConsultantService {
         // TODO: write an audit entry with request.reason() once Sifiso's AuditLogWriter
         // is on main.
         consultants.flush();
-        return ConsultantResponse.from(consultant);
+        return withClientCount(consultant);
+    }
+
+    private ConsultantResponse withClientCount(Consultant consultant) {
+        return ConsultantResponse.from(consultant, consultants.countClients(consultant.getId()));
+    }
+
+    /** consultantId -> number of clients, for one page of consultants. */
+    private Map<Long, Long> clientCounts(List<Consultant> page) {
+        Map<Long, Long> counts = new HashMap<>();
+        if (page.isEmpty()) {
+            return counts;
+        }
+        List<Long> ids = page.stream().map(Consultant::getId).toList();
+        for (Object[] row : consultants.countClientsByConsultant(ids)) {
+            counts.put(((Number) row[0]).longValue(), ((Number) row[1]).longValue());
+        }
+        return counts;
     }
 
     private Consultant load(long id) {

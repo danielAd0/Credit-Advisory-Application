@@ -208,6 +208,7 @@ Passwords are never logged or returned by any endpoint.
   "fullName": "Thandi Xundu",
   "status": "ACTIVE",
   "statusChangedAt": "2026-10-01T07:30:00Z",
+  "clientCount": 42,
   "version": 3,
   "createdAt": "2026-09-14T06:00:00Z",
   "updatedAt": "2026-10-01T07:30:00Z"
@@ -215,6 +216,8 @@ Passwords are never logged or returned by any endpoint.
 ```
 
 `status` is one of `ACTIVE`, `INACTIVE`, `SUSPENDED`.
+
+`clientCount` is how many clients are currently assigned to the consultant (unassigned clients count for nobody). Read-only; it changes when clients are transferred. A new consultant starts at `0`.
 
 ### GET /api/consultants
 
@@ -281,7 +284,8 @@ The consultant code cannot be changed (it is the stable key for Excel matching).
 
 - `reason` required (max 500) - recorded in the audit log.
 - Setting `INACTIVE` or `SUSPENDED` immediately ends the linked user's sessions (FR-18). Their next request returns `401`.
-- Their clients stay assigned to them; managers find them with `GET /api/clients?consultantStatus=INACTIVE` and reassign manually. Nothing is redistributed automatically.
+- Their clients stay assigned to them; managers find them with `GET /api/clients?consultantStatus=INACTIVE` (or `GET /api/clients?consultantId={id}`) and reassign them with `POST /api/client-transfers`. Nothing is redistributed automatically.
+- The response's `clientCount` says how many clients still need to be handed over. If it is above `0` after setting `INACTIVE` or `SUSPENDED`, the frontend should offer "Reassign N clients" straight away.
 - An INACTIVE or SUSPENDED consultant cannot receive new clients (FR-17).
 
 **Errors:** `400` invalid status or missing reason, `404`, `409` stale version.
