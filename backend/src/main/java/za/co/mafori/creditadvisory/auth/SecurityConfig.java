@@ -18,6 +18,7 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.security.web.authentication.logout.HttpStatusReturningLogoutSuccessHandler;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
@@ -25,17 +26,23 @@ import org.springframework.security.web.savedrequest.NullRequestCache;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import za.co.mafori.creditadvisory.user.UserAccountRepository;
 
 /**
  * Session-based security for a React frontend (see
  * docs/api-auth-consultants-clients.md section 1).
  *
- * Sign-in through POST /api/auth/login; the session is kept in a JSESSIONID
- * cookie.
- * CSRF: XSRF-TOKEN cookie, echoed back in the X-XSRF-TOKEN header (csrf.spa()).
- * 401 / 403 are JSON ProblemDetail, never a browser login popup or redirect.
- *
- * @PreAuthorize is enabled here (method security).
+ * <ul>
+ * <li>Sign-in through POST /api/auth/login; the session is kept in a JSESSIONID
+ * cookie.</li>
+ * <li>CSRF: XSRF-TOKEN cookie, echoed back in the X-XSRF-TOKEN header
+ * (csrf.spa()).</li>
+ * <li>401 / 403 are JSON ProblemDetail, never a browser login popup or
+ * redirect.</li>
+ * <li>Disabled users and non-ACTIVE consultants are signed out on their next
+ * request (FR-18).</li>
+ * <li>@PreAuthorize is enabled here (method security).</li>
+ * </ul>
  */
 @Configuration
 @EnableWebSecurity
@@ -61,8 +68,9 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain apiSecurity(HttpSecurity http, SecurityContextRepository contextRepository)
-            throws Exception {
+    public SecurityFilterChain apiSecurity(HttpSecurity http,
+            SecurityContextRepository contextRepository,
+            UserAccountRepository users) throws Exception {
         http
                 .cors(Customizer.withDefaults())
                 .csrf(csrf -> csrf.spa())
@@ -70,6 +78,8 @@ public class SecurityConfig {
                 // An API never redirects to a login page, so don't remember "where they were
                 // going".
                 .requestCache(cache -> cache.requestCache(new NullRequestCache()))
+                // FR-18: re-check the account on every request, just before access is decided.
+                .addFilterBefore(new AccountStillActiveFilter(users), AuthorizationFilter.class)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.GET, "/api/auth/csrf").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
@@ -112,9 +122,8 @@ public class SecurityConfig {
      * Writes a fixed ProblemDetail body. Only constant strings go in, so no
      * escaping is needed.
      */
-    private static void writeProblem(HttpServletResponse response, HttpStatus status, String title, String detail,
-            String type)
-            throws IOException {
+    private static void writeProblem(HttpServletResponse response, HttpStatus status, String title,
+            String detail, String type) throws IOException {
         response.setStatus(status.value());
         response.setContentType("application/problem+json");
         response.setCharacterEncoding("UTF-8");
