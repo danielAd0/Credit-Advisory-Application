@@ -70,6 +70,13 @@
 			<version>5.5.1</version>
 			<scope>compile</scope>
 		</dependency>
+
+		<!-- Tests: JUnit, AssertJ, JsonPath, Spring test support -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
 	</dependencies>
 
 	<build>
