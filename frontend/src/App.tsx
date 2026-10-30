@@ -1,5 +1,6 @@
 import { BrowserRouter , Route , Routes } from "react-router-dom";
-import { AuthProvider , useAuth } from "./auth/AuthContext";
+import { AuthProvider } from "./auth/AuthContext";
+import { useAuth } from "./auth/useAuth";
 import RequireAuth  from "./auth/RequireAuth";
 import LoginPage from "./pages/LoginPage";
 
@@ -8,7 +9,7 @@ function Home(){
   return (
       <main className="center-msg">
           <h1>You are signed in</h1>
-          <p>Welcome, {session?.username}</p>
+          <p>Welcome, {session?.email}</p>
           <button className="btn" onClick={() => void signOut()}>Sign out</button>
       </main>
   );

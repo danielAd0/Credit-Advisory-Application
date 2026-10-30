@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import {Navigate , useNavigate , useSearchParams} from 'react-router-dom';
 import { ApiError } from '../api';
-import {useAuth} from '../auth/AuthContext';
+import {useAuth} from '../auth/useAuth';
 import LoginGauge from '../components/LoginGauge';
 import './login.css';
 
@@ -13,9 +13,8 @@ export default function LoginPage(){
     const {session , signIn} = useAuth();
     const navigate = useNavigate();
     const [params] = useSearchParams();
-    const [username, setUsername] = useState('');
+    const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [remember, setRemember] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
     const [capsOn, setCapsOn] = useState(false);
     const [busy, setBusy] = useState(false);
@@ -37,7 +36,7 @@ export default function LoginPage(){
         setError(null);
 
         try{
-            await signIn(username.trim() , password , remember);
+            await signIn(email.trim() , password);
             navigate('/' , {replace : true});
         }
         catch(err){
@@ -83,26 +82,26 @@ export default function LoginPage(){
             <main className="lg-signin">
                 <div className="lg-inner">
           <h2>Sign in</h2>
-          <p className="lg-lead">Enter your staff username and password.</p>
+          <p className="lg-lead">Enter your work email and password.</p>
 
           {error && <div className="lg-alert error" role="alert">{error}</div>}
           {!error && params.has('logout') && <div className="lg-alert info" role="status">You have been signed out.</div>}
           {DEMO && !error && (
-            <div className="lg-alert demo">Demo mode: any username and password work. Use the password "wrong" to see the error.</div>
+            <div className="lg-alert demo">Demo mode: any email and password work. Use the password "wrong" to see the error.</div>
           )}
 
           <form onSubmit={onSubmit} noValidate>
             <div className="lg-field">
-              <label htmlFor="username">Username</label>
+              <label htmlFor="email">Email</label>
               <div className="lg-control">
                 <svg className="lg-icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
                   <circle cx="12" cy="8" r="3.6" fill="none" stroke="currentColor" strokeWidth="1.7" />
                   <path d="M4.6 20c.6-3.6 3.6-5.6 7.4-5.6s6.8 2 7.4 5.6" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
                 </svg>
                 <input
-                  id="username" name="username" type="text" required maxLength={64} autoFocus
+                  id="email" name="email" type="email" required maxLength={254} autoFocus
                   autoComplete="username" autoCapitalize="none" spellCheck={false}
-                  value={username} onChange={(e) => setUsername(e.target.value)}
+                  value={email} onChange={(e) => setEmail(e.target.value)}
                 />
               </div>
             </div>
@@ -141,18 +140,8 @@ export default function LoginPage(){
               {capsOn && <p className="lg-hint" id="caps-hint" role="status">Caps Lock is on.</p>}
             </div>
 
-            <label className="lg-remember">
-              <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
-              <span className="lg-box" aria-hidden="true">
-                <svg viewBox="0 0 16 16" width="12" height="12"><path d="m3.5 8.5 3 3 6-7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-              </span>
-              <span className="lg-remember-text">
-                Keep me signed in for 14 days
-                <small>Use this on private devices only.</small>
-              </span>
-            </label>
 
-            <button type="submit" className={`lg-primary${busy ? ' is-loading' : ''}`} disabled={busy || !username || !password} aria-busy={busy}>
+            <button type="submit" className={`lg-primary${busy ? ' is-loading' : ''}`} disabled={busy || !email || !password} aria-busy={busy}>
               <span className="lg-label">Sign in</span>
               <span className="lg-spinner" aria-hidden="true" />
             </button>

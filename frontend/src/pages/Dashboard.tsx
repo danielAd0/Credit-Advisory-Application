@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { data } from '../api';
-import { useSession } from '../auth/AuthContext';
+import { hasAnyRole, useSession } from '../auth/useAuth';
 
 export default function Dashboard() {
   const session = useSession();
@@ -13,19 +13,19 @@ export default function Dashboard() {
       .listClients('')
       .then((list) => {
         setClients(list.length);
-        setUnassigned(list.filter((c) => c.consultantName === null).length);
+        setUnassigned(list.filter((c) => c.consultant === null).length);
       })
       .catch(() => {
         setClients(null);
       });
   }, []);
 
-  const manager = session.role !== 'CONSULTANT';
+  const manager = hasAnyRole(session, ['MANAGER', 'ADMIN']);
 
   return (
     <>
       <h1>Dashboard</h1>
-      <p className="muted">Signed in as {session.username}.</p>
+      <p className="muted">Signed in as {session.email}.</p>
       <div className="cards">
         <Link to="/clients" className="card">
           <span className="card-label">{manager ? 'Clients' : 'My clients'}</span>

@@ -1,45 +1,95 @@
-import { ApiError }  from "./http";
-import type { ClientSummary , ConsultantSummary , Role , Session } from "./types";
+import { ApiError } from './http';
+import type { ClientSummary, ConsultantSummary, Role, Session } from './types';
 
-const delay = (ms = 250) => new Promise((r) => setTimeout(r , ms));
+// Invented data only - never real client details (contract: mock data must be invented).
 
-const consultants : ConsultantSummary[] = [
+const delay = (ms = 250) => new Promise((r) => setTimeout(r, ms));
+const when = (day: number) => new Date(2026, 9, day).toISOString();
 
-  { id: 'c1', fullName: 'Sample Consultant A', username: 'consultant.a', role: 'CONSULTANT', status: 'ACTIVE', clientCount: 4 },
-  { id: 'c2', fullName: 'Sample Consultant B', username: 'consultant.b', role: 'CONSULTANT', status: 'ACTIVE', clientCount: 3 },
-  { id: 'c3', fullName: 'Sample Consultant C', username: 'consultant.c', role: 'CONSULTANT', status: 'SUSPENDED', clientCount: 1 },
-  { id: 'c4', fullName: 'Sample Manager', username: 'manager.a', role: 'MANAGER', status: 'ACTIVE', clientCount: 0 },
+const consultants: ConsultantSummary[] = [
+  {
+    id: 1,
+    consultantCode: 'C001',
+    fullName: 'Sample Consultant A',
+    status: 'ACTIVE',
+    statusChangedAt: when(1),
+    version: 0,
+    createdAt: when(1),
+    updatedAt: when(1),
+  },
+  {
+    id: 2,
+    consultantCode: 'C002',
+    fullName: 'Sample Consultant B',
+    status: 'ACTIVE',
+    statusChangedAt: when(2),
+    version: 0,
+    createdAt: when(2),
+    updatedAt: when(2),
+  },
+  {
+    id: 3,
+    consultantCode: 'C003',
+    fullName: 'Sample Consultant C',
+    status: 'SUSPENDED',
+    statusChangedAt: when(15),
+    version: 1,
+    createdAt: when(3),
+    updatedAt: when(15),
+  },
 ];
 
-const clients: ClientSummary[] = Array.from({ length: 8 }, (_, i) => ({
-  id: `k${i + 1}`,
-  fullName: `Sample Client ${String(i + 1).padStart(2, '0')}`,
-  idNumberMasked: `XXXXXXXXX${String(i + 1).padStart(4, '0')}`,
-  consultantName: i === 7 ? null : consultants[i % 3].fullName,
-  openCases: (i * 3) % 4,
-  updatedAt: new Date(2026, 9, 20 - i).toISOString(),
-}));
+const clients: ClientSummary[] = Array.from({ length: 8 }, (_, i) => {
+  const c = i === 7 ? null : consultants[i % 3];
+  return {
+    id: i + 1,
+    idNumberMasked: `*********${String(i + 1).padStart(4, '0')}`,
+    firstName: 'Sample',
+    lastName: `Client ${String(i + 1).padStart(2, '0')}`,
+    email: null,
+    phone: null,
+    consultant: c && {
+      id: c.id,
+      consultantCode: c.consultantCode,
+      fullName: c.fullName,
+      status: c.status,
+    },
+    version: 0,
+    createdAt: when(20 - i),
+    updatedAt: when(20 - i),
+  };
+});
 
-const KEY = 'mockerUser';
+const KEY = 'mockUser';
 
-export async function getSession() : Promise<Session | null>{
-    await delay(150);
-    const username = sessionStorage.getItem(KEY);
-    if(!username) return null;
-    const role = (import.meta.env.VITE_MOCK_ROLE as Role | undefined) ?? 'MANAGER';
-    return { username, role, mustChangePassword: false, csrf: { headerName: 'X-CSRF-TOKEN', token: 'mock' } };
+function mockSession(email: string): Session {
+  const role = (import.meta.env.VITE_MOCK_ROLE as Role | undefined) ?? 'MANAGER';
+  const consultant =
+    role === 'CONSULTANT'
+      ? { id: 1, consultantCode: 'C001', fullName: 'Sample Consultant A' }
+      : null;
+  return { id: 1, email, roles: [role], consultant };
 }
 
-export async function login(username: string, password: string, _remember: boolean): Promise<void> {
+export async function getSession(): Promise<Session | null> {
+  await delay(150);
+  const email = sessionStorage.getItem(KEY);
+  return email ? mockSession(email) : null;
+}
+
+export async function login(email: string, password: string): Promise<Session> {
   await delay(600);
-  if (!username || !password || password === 'wrong') throw new ApiError(401, 'Sign-in failed.');
-  sessionStorage.setItem(KEY, username);
+  if (!email || !password || password === 'wrong') throw new ApiError(401, 'Sign-in failed.');
+  sessionStorage.setItem(KEY, email);
+  return mockSession(email);
 }
 
-export async function listClients(query: string): Promise<ClientSummary[]> {
+export async function listClients(search: string): Promise<ClientSummary[]> {
   await delay();
-  const q = query.trim().toLowerCase();
-  return q ? clients.filter((c) => c.fullName.toLowerCase().includes(q) || c.idNumberMasked.toLowerCase().includes(q)) : clients;
+  const q = search.trim().toLowerCase();
+  return q
+    ? clients.filter((c) => `${c.firstName} ${c.lastName}`.toLowerCase().includes(q))
+    : clients;
 }
 
 export async function listConsultants(): Promise<ConsultantSummary[]> {
@@ -47,6 +97,6 @@ export async function listConsultants(): Promise<ConsultantSummary[]> {
   return consultants;
 }
 
-export async function logout() : Promise<void>{
+export async function logout(): Promise<void> {
   sessionStorage.removeItem(KEY);
 }

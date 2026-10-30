@@ -19,5 +19,14 @@ export default defineConfig([
     languageOptions: {
       globals: globals.browser,
     },
+    rules: {
+      // A leading underscore marks a parameter or variable as unused on purpose.
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
+    },
   },
+  // Must be last: switches off ESLint rules that would fight with Prettier.
+  eslintConfigPrettier,
 ]);

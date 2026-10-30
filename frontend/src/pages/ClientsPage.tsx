@@ -3,19 +3,20 @@ import { data, type ClientSummary } from '../api';
 
 export default function ClientsPage() {
   const [query, setQuery] = useState('');
-  const [rows, setRows] = useState<ClientSummary[] | null>(null);
+  // Remember which search the rows belong to, so "loading" can be worked out
+  // instead of being set inside the effect.
+  const [result, setResult] = useState<{ query: string; rows: ClientSummary[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Wait 250 ms after typing stops, and ignore answers that arrive late.
   useEffect(() => {
     let current = true;
-    setRows(null);
     const t = setTimeout(() => {
       data
         .listClients(query)
-        .then((r) => {
+        .then((rows) => {
           if (current) {
-            setRows(r);
+            setResult({ query, rows });
             setError(null);
           }
         })
@@ -29,13 +30,16 @@ export default function ClientsPage() {
     };
   }, [query]);
 
+  // null while the results for the current search have not arrived yet
+  const rows = result && result.query === query ? result.rows : null;
+
   return (
     <>
       <h1>Clients</h1>
       <div className="toolbar">
         <input
           type="search"
-          placeholder="Search by name or ID ending"
+          placeholder="Search by name"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           aria-label="Search clients"
@@ -43,7 +47,11 @@ export default function ClientsPage() {
         />
       </div>
 
-      {error && <p className="alert error" role="alert">{error}</p>}
+      {error && (
+        <p className="alert error" role="alert">
+          {error}
+        </p>
+      )}
       {!error && rows === null && <p className="muted">Loading...</p>}
       {rows && rows.length === 0 && <p className="muted">No clients match your search.</p>}
 
@@ -55,17 +63,15 @@ export default function ClientsPage() {
                 <th>Name</th>
                 <th>ID number</th>
                 <th>Consultant</th>
-                <th className="num">Open cases</th>
                 <th>Updated</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((c) => (
                 <tr key={c.id}>
-                  <td>{c.fullName}</td>
+                  <td>{`${c.firstName} ${c.lastName}`}</td>
                   <td className="mono">{c.idNumberMasked}</td>
-                  <td>{c.consultantName ?? <span className="muted">Unassigned</span>}</td>
-                  <td className="num">{c.openCases}</td>
+                  <td>{c.consultant?.fullName ?? <span className="muted">Unassigned</span>}</td>
                   <td>{new Date(c.updatedAt).toLocaleDateString('en-ZA')}</td>
                 </tr>
               ))}

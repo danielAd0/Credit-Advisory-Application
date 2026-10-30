@@ -1,6 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import type { Role } from '../api';
-import { useAuth, useSession } from '../auth/AuthContext';
+import { hasAnyRole, useAuth, useSession } from '../auth/useAuth';
 
 const nav: { to: string; label: string; roles: Role[] }[] = [
   { to: '/', label: 'Dashboard', roles: ['ADMIN', 'MANAGER', 'CONSULTANT'] },
@@ -22,7 +22,7 @@ export default function Layout() {
         </div>
         <nav aria-label="Main">
           {nav
-            .filter((n) => n.roles.includes(session.role))
+            .filter((n) => hasAnyRole(session, n.roles))
             .map((n) => (
               <NavLink key={n.to} to={n.to} end={n.to === '/'} className={({ isActive }) => (isActive ? 'active' : '')}>
                 {n.label}
@@ -34,8 +34,8 @@ export default function Layout() {
       <div className="main">
         <header className="topbar">
           <div className="who">
-            <strong>{session.username}</strong>
-            <span className="role">{session.role.toLowerCase()}</span>
+            <strong>{session.email}</strong>
+            <span className="role">{session.roles.map((r) => r.toLowerCase()).join(', ')}</span>
           </div>
           <button className="btn ghost" onClick={() => void signOut()}>
             Sign out
