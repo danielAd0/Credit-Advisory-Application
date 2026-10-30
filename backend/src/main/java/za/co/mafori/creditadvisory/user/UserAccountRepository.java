@@ -1,6 +1,8 @@
 package za.co.mafori.creditadvisory.user;
 
 import java.util.Optional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -41,4 +43,30 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, Long> 
               and (c is null or c.status = :activeStatus)
             """)
     boolean mayStaySignedIn(@Param("id") long id, @Param("activeStatus") ConsultantStatus activeStatus);
+
+    /**
+     * GET /api/users. searchPattern is a lower-case, escaped LIKE pattern, or null
+     * for all.
+     */
+    @EntityGraph(attributePaths = { "consultant" })
+    @Query(value = """
+            select u from UserAccount u
+            where :searchPattern is null
+               or lower(u.email) like :searchPattern escape '\\'
+            """, countQuery = """
+            select count(u) from UserAccount u
+            where :searchPattern is null
+               or lower(u.email) like :searchPattern escape '\\'
+            """)
+    Page<UserAccount> search(@Param("searchPattern") String searchPattern, Pageable pageable);
+
+    /**
+     * How many enabled users have this role - used to protect the last
+     * administrator.
+     */
+    @Query("""
+            select count(u) from UserAccount u join u.roles r
+            where r.name = :role and u.enabled = true
+            """)
+    long countEnabledWithRole(@Param("role") RoleName role);
 }

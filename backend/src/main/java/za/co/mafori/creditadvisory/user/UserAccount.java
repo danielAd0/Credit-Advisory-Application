@@ -21,7 +21,8 @@ import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
 import java.util.stream.Collectors;
-import za.co.mafori.creditadvisory.consultant.Consultant;;
+import za.co.mafori.creditadvisory.consultant.Consultant;
+import org.hibernate.annotations.OptimisticLock;
 
 /**
  * A login account, Maps to the users table (V1).
@@ -62,12 +63,15 @@ public class UserAccount {
     @JoinColumn(name = "linked_consultant_id")
     private Consultant consultant;
 
+    @OptimisticLock(excluded = true)
     @Column(name = "failed_login_attempts", nullable = false)
     private int failedLoginAttempts;
 
+    @OptimisticLock(excluded = true)
     @Column(name = "locked_until")
     private Instant lockedUntil;
 
+    @OptimisticLock(excluded = true)
     @Column(name = "last_login_at")
     private Instant lastLoginAt;
 
@@ -85,6 +89,7 @@ public class UserAccount {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    @OptimisticLock(excluded = true)
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
@@ -172,8 +177,14 @@ public class UserAccount {
         this.consultant = consultant;
     }
 
-    public void unlinkConsultant(Consultant consultant) {
+    public void unlinkConsultant() {
         this.consultant = null;
+    }
+
+    /** Clears failed attempts and any lockout (admin unlock or password reset). */
+    public void unlock() {
+        this.failedLoginAttempts = 0;
+        this.lockedUntil = null;
     }
 
     public static String normalizeEmail(String email) {

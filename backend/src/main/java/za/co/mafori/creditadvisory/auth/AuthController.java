@@ -87,7 +87,7 @@ public class AuthController {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(
                 HttpStatus.UNAUTHORIZED, DatabaseAuthenticationProvider.GENERIC_FAILURE);
         problem.setTitle("Sign-in failed");
-        problem.setType(URI.create("urn:credut-advisory:auth:sign-in-failed"));
+        problem.setType(URI.create("urn:credit-advisory:auth:sign-in-failed"));
         return problem;
     }
 }
