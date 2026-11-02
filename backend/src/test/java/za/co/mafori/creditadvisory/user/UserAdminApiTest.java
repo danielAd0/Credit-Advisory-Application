@@ -29,7 +29,10 @@ class UserAdminApiTest extends ApiTestBase {
         assertThat(created.status()).as(created.body()).isEqualTo(201);
         assertThat(created.text("$.email")).isEqualTo("thandi@test.local");
         assertThat(created.number("$.consultant.id")).isEqualTo(consultantId);
-        assertThat(created.body()).doesNotContainIgnoringCase("password");
+        // Neither the hash nor the temporary password itself (mustChangePassword is
+        // fine).
+        assertThat(created.body()).doesNotContainIgnoringCase("passwordHash").doesNotContain("{bcrypt}")
+                .doesNotContain("Temp-Password-2026");
         assertThat(browser().signIn("thandi@test.local", "Temp-Password-2026").status()).isEqualTo(200);
     }
 

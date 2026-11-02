@@ -14,6 +14,7 @@ public record UserResponse(
         ConsultantLink consultant,
         boolean locked,
         Instant lockedUntil,
+        boolean mustChangePassword,
         Instant lastLoginAt,
         long version,
         Instant createdAt,
@@ -31,7 +32,7 @@ public record UserResponse(
         boolean locked = user.isLocked(now);
         return new UserResponse(user.getId(), user.getEmail(), user.isEnabled(),
                 user.getRoleNames().stream().sorted().toList(), link, locked,
-                locked ? user.getLockedUntil() : null, user.getLastLoginAt(),
+                locked ? user.getLockedUntil() : null, user.mustChangePassword(), user.getLastLoginAt(),
                 user.getVersion(), user.getCreatedAt(), user.getUpdatedAt());
     }
 }

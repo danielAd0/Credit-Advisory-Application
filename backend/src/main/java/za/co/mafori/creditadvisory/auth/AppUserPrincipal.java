@@ -21,10 +21,15 @@ import za.co.mafori.creditadvisory.user.UserAccount;
  * longer matches. Sign-in bookkeeping (failed attempts, lockout, last login)
  * does not change it.
  *
+ * <p>
+ * mustChangePassword: the password was set by an admin, so only the
+ * change-password, me, csrf and logout endpoints may be used
+ * (PasswordChangeRequiredFilter).
+ *
  * Serializable because the servlet container may write sessions to disk.
  */
 public record AppUserPrincipal(long userId, String email, Set<RoleName> roles, Long consultantId,
-        long accountVersion)
+        long accountVersion, boolean mustChangePassword)
         implements AuthenticatedPrincipal, Serializable {
 
     public AppUserPrincipal {
@@ -34,15 +39,15 @@ public record AppUserPrincipal(long userId, String email, Set<RoleName> roles, L
     public static AppUserPrincipal from(UserAccount user) {
         Long consultantId = user.getConsultant() == null ? null : user.getConsultant().getId();
         return new AppUserPrincipal(user.getId(), user.getEmail(), user.getRoleNames(), consultantId,
-                user.getVersion());
+                user.getVersion(), user.mustChangePassword());
     }
 
     /**
-     * The same user with a new account version (used after they change their own
-     * password).
+     * This session after the user changed their own password: the new account
+     * version, and no longer forced to change it.
      */
-    public AppUserPrincipal withAccountVersion(long newVersion) {
-        return new AppUserPrincipal(userId, email, roles, consultantId, newVersion);
+    public AppUserPrincipal afterOwnPasswordChange(long newVersion) {
+        return new AppUserPrincipal(userId, email, roles, consultantId, newVersion, false);
     }
 
     /**

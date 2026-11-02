@@ -41,6 +41,8 @@ import za.co.mafori.creditadvisory.user.UserAccountRepository;
  * redirect.</li>
  * <li>Disabled users and non-ACTIVE consultants are signed out on their next
  * request (FR-18).</li>
+ * <li>Users with an admin-set password must change it before doing anything
+ * else.</li>
  * <li>@PreAuthorize is enabled here (method security).</li>
  * </ul>
  */
@@ -80,6 +82,10 @@ public class SecurityConfig {
                 .requestCache(cache -> cache.requestCache(new NullRequestCache()))
                 // FR-18: re-check the account on every request, just before access is decided.
                 .addFilterBefore(new AccountStillActiveFilter(users), AuthorizationFilter.class)
+                // Admin-set password: only change-password, me, csrf and logout until it is
+                // changed.
+                // Added after AccountStillActiveFilter, so it runs after it.
+                .addFilterBefore(new PasswordChangeRequiredFilter(), AuthorizationFilter.class)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.GET, "/api/auth/csrf").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()

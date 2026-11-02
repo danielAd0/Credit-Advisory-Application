@@ -23,6 +23,8 @@ Any change to a request or response shape must be agreed with Jack before it is 
 - Signing in creates a server session. The browser stores it in an `HttpOnly` cookie (`JSESSIONID`) that JavaScript cannot read.
 - **Every** frontend request must send cookies: `fetch(url, { credentials: 'include' })`.
 - Sessions expire after **30 minutes** of inactivity. The next request then returns `401`; the frontend redirects to the login page.
+- A session also ends early (its next request returns `401`) when the user is disabled, their consultant becomes INACTIVE or SUSPENDED, or an admin resets their password or changes their roles or consultant link. The user signs in again and gets their up-to-date roles. Failed sign-ins, lockouts and unlocks do **not** end an open session.
+- Any `401` from an endpoint other than login means "signed out": the frontend clears what it knows about the user and shows the login page.
 
 ### CSRF protection
 
@@ -190,15 +192,27 @@ Giving the same answer for every failure stops anyone from finding out which ema
     "id": 4,
     "consultantCode": "C004",
     "fullName": "Thandi Xundu"
-  }
+  },
+  "mustChangePassword": false
 }
 ```
 
 - `roles` contains one or more of `CONSULTANT`, `MANAGER`, `ADMIN`.
 - `consultant` is `null` for users who are not consultants (e.g. an admin).
+- `mustChangePassword` is `true` when an admin set the password (new account or reset). See "Password change required" below.
 - The frontend uses `roles` only to decide which buttons and pages to show. The backend checks permissions again on every request.
 
 **401** if not signed in.
+
+### Password change required
+
+When `mustChangePassword` is `true` (in the login response and `GET /api/auth/me`), the user may **only**:
+
+- `GET /api/auth/me`, `GET /api/auth/csrf`
+- `POST /api/auth/change-password`
+- `POST /api/auth/logout`
+
+Every other request returns `403` with type `urn:credit-advisory:auth:password-change-required`. The frontend should go straight to a "Choose your own password" screen after sign-in, and treat this `403` anywhere as "send them there". After a successful change the same session continues and `mustChangePassword` is `false`.
 
 ### POST /api/auth/change-password
 
@@ -218,7 +232,7 @@ Giving the same answer for every failure stops anyone from finding out which ema
 | `currentPassword` | required                                                                                                                   |
 | `newPassword`     | required; 12 characters minimum; 72 bytes maximum; not the same as the email address; different from the current password |
 
-**204 No Content** - the session stays signed in.
+**204 No Content** - this session stays signed in (with a new session id) and `mustChangePassword` becomes `false`. The user's other sessions - other browsers or devices - are signed out on their next request.
 
 **Errors**
 | Status | When |
@@ -681,6 +695,7 @@ Every endpoint in this section returns `403` for CONSULTANT and MANAGER.
   },
   "locked": false,
   "lockedUntil": null,
+  "mustChangePassword": false,
   "lastLoginAt": "2026-10-29T08:12:00Z",
   "version": 3,
   "createdAt": "2026-10-20T09:00:00Z",
@@ -704,6 +719,7 @@ The password (and its hash) is never returned.
 - Only an ACTIVE consultant can be linked, and each consultant can have at most one login.
 - The last enabled ADMIN cannot be disabled or lose the `ADMIN` role, so there is always someone who can manage users.
 - Emails are stored trimmed and lower-case, and must be unique.
+- Changing a user's roles, consultant link or enabled flag, or resetting their password, signs that user out of every open session (their next request returns `401`). This includes an admin editing their **own** roles. Unlocking does not sign anyone out.
 
 ### GET /api/users
 
@@ -743,7 +759,7 @@ Sorted by `email`.
 | `roles`             | required; at least one                                          |
 | `consultantId`      | required when `roles` contains `CONSULTANT`; otherwise optional |
 
-The admin gives the temporary password to the user in person; the user should then change it with `POST /api/auth/change-password`.
+The admin gives the temporary password to the user in person. The new user has `mustChangePassword: true` and must choose their own password before they can do anything else (section 2, "Password change required").
 
 **201 Created** - the new User object, with a `Location` header.
 
@@ -757,7 +773,7 @@ The admin gives the temporary password to the user in person; the user should th
 
 ### PATCH /api/users/{id}/roles
 
-Replaces the user's roles with exactly the ones sent.
+Replaces the user's roles with exactly the ones sent. The user is signed out and gets the new roles when they sign in again.
 
 ```json
 { "roles": ["MANAGER", "ADMIN"], "version": 3 }
@@ -775,7 +791,7 @@ Replaces the user's roles with exactly the ones sent.
 
 ### PATCH /api/users/{id}/consultant
 
-Links the user to a consultant, or unlinks them with `"consultantId": null`.
+Links the user to a consultant, or unlinks them with `"consultantId": null`. The user is signed out.
 
 ```json
 { "consultantId": 4, "version": 3 }
@@ -810,7 +826,7 @@ Disabling a user signs them out: their next request returns `401` (FR-18).
 
 ### POST /api/users/{id}/password-reset
 
-Sets a new temporary password and clears any lockout. Used when a user forgets their password, until password reset by email exists (FR-01).
+Sets a new temporary password and clears any lockout. Used when a user forgets their password, until password reset by email exists (FR-01). Every open session of that user is signed out, so a reset also locks out anyone who was using a stolen password. The user then has `mustChangePassword: true` again.
 
 ```json
 { "temporaryPassword": "Reset-Password-2026" }
@@ -943,5 +959,3 @@ Sorted newest first.
 - **Manager scope:** all clients for now; department-level scope if departments are confirmed (SRS 4).
 - **Password reset (FR-01):** needs email sending (future). Until then an admin resets passwords.
 - **Unassigning clients:** `UNASSIGN` exists in the history table, but there is no endpoint to unassign a client yet. Needed?
-- **Forcing a password change:** users are not yet forced to change an admin-set temporary password on first sign-in. Needs a `must_change_password` column (Sifiso, migration V10) and a check in the frontend.
-- **Sessions after a password reset:** a reset does not sign the user out of sessions that are already open. Should it?

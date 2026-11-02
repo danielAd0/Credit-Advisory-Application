@@ -58,6 +58,14 @@ public class UserAccount {
     @Column(name = "enabled", nullable = false)
     private boolean enabled;
 
+    /**
+     * True after an admin set the password (new account or reset): the user must
+     * choose their own before using the application. Not excluded from @Version on
+     * purpose - changing it signs other sessions out.
+     */
+    @Column(name = "must_change_password", nullable = false)
+    private boolean mustChangePassword;
+
     /** Set only for users who are consultants. One login per consultant. */
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "linked_consultant_id")
@@ -151,6 +159,20 @@ public class UserAccount {
 
     public void changePasswordHash(String newPasswordHash) {
         this.passwordHash = newPasswordHash;
+    }
+
+    /** An admin chose this password: the user must replace it on first use. */
+    public void requirePasswordChange() {
+        this.mustChangePassword = true;
+    }
+
+    /** The user chose their own password. */
+    public void passwordChangedByUser() {
+        this.mustChangePassword = false;
+    }
+
+    public boolean mustChangePassword() {
+        return mustChangePassword;
     }
 
     public void enable() {

@@ -87,6 +87,10 @@ public class UserService {
         if (consultant != null) {
             user.linkConsultant(consultant);
         }
+
+        // The admin knows this password, so the user must choose their own first.
+        user.requirePasswordChange();
+
         UserAccount saved = users.saveAndFlush(user);
         audit.record("USER_CREATED", "USER", saved.getId(),
                 meta("email", saved.getEmail(), "roles", sortedRoles(saved),
@@ -182,6 +186,7 @@ public class UserService {
         UserAccount user = load(id);
         PasswordPolicy.check(request.temporaryPassword(), user.getEmail());
         user.changePasswordHash(passwordEncoder.encode(request.temporaryPassword()));
+        user.requirePasswordChange();
         user.unlock();
         users.flush();
         // Only THAT it happened - never the password.
@@ -213,6 +218,7 @@ public class UserService {
                     "Password not allowed", "The new password must be different from the current one.");
         }
         user.changePasswordHash(passwordEncoder.encode(newPassword));
+        user.passwordChangedByUser();
         users.flush();
         audit.record("PASSWORD_CHANGED", "USER", user.getId(), meta());
     }

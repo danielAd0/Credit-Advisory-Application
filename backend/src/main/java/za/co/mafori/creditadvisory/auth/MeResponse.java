@@ -7,7 +7,8 @@ import za.co.mafori.creditadvisory.user.UserAccount;
 /**
  * Response of GET /api/auth/me and POST /api/auth/login (contract section 2)
  */
-public record MeResponse(long id, String email, List<String> roles, ConsultantSummary consultant) {
+public record MeResponse(long id, String email, List<String> roles, ConsultantSummary consultant,
+        boolean mustChangePassword) {
 
     public record ConsultantSummary(long id, String consultantCode, String fullName) {
     }
@@ -17,6 +18,6 @@ public record MeResponse(long id, String email, List<String> roles, ConsultantSu
         ConsultantSummary consultant = c == null ? null
                 : new ConsultantSummary(c.getId(), c.getConsultantCode(), c.getFullName());
         List<String> roles = user.getRoleNames().stream().map(Enum::name).sorted().toList();
-        return new MeResponse(user.getId(), user.getEmail(), roles, consultant);
+        return new MeResponse(user.getId(), user.getEmail(), roles, consultant, user.mustChangePassword());
     }
 }

@@ -19,7 +19,8 @@ class AuthApiTest extends ApiTestBase {
         assertThat(me.status()).isEqualTo(200);
         assertThat(me.text("$.email")).isEqualTo(ADMIN_EMAIL);
         assertThat(me.texts("$.roles")).containsExactly("ADMIN");
-        assertThat(me.body()).doesNotContainIgnoringCase("password");
+        // No password hash in any form (mustChangePassword is fine).
+        assertThat(me.body()).doesNotContainIgnoringCase("passwordHash").doesNotContain("{bcrypt}");
     }
 
     @Test

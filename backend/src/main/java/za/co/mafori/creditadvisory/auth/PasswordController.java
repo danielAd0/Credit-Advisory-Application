@@ -51,7 +51,8 @@ public class PasswordController {
         // fresh
         // session id.
         accounts.findVersionIfMayStaySignedIn(principal.userId(), ConsultantStatus.ACTIVE)
-                .ifPresent(newVersion -> keepThisSession(principal.withAccountVersion(newVersion), request, response));
+                .ifPresent(
+                        newVersion -> keepThisSession(principal.afterOwnPasswordChange(newVersion), request, response));
 
         return ResponseEntity.noContent().build();
     }

@@ -41,6 +41,12 @@ public class ConsultantAccountApiTest extends ApiTestBase {
 
         ApiClient consultant = browser();
         assertThat(consultant.signIn("naledi@test.local", TEMP_PASSWORD).status()).isEqualTo(200);
+        // The admin chose this password, so the consultant must replace it before
+        // anything else.
+        assertThat(consultant.get("/api/clients").status()).isEqualTo(403);
+        assertThat(consultant.post("/api/auth/change-password", """
+                {"currentPassword":"%s","newPassword":"Own-Password-2026"}""".formatted(TEMP_PASSWORD))
+                .status()).isEqualTo(204);
         assertThat(consultant.get("/api/clients").status()).isEqualTo(200);
 
         assertThat(count("select count(*) from audit_logs where action = 'CONSULTANT_ACCOUNT_CREATED'"))
