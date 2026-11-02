@@ -14,9 +14,17 @@ import za.co.mafori.creditadvisory.user.UserAccount;
  * never the password
  * hash or any client data.
  *
+ * <p>
+ * accountVersion is the user's version at sign-in. It goes up whenever an admin
+ * changes something that matters for security (password, roles, consultant
+ * link, enabled), and AccountStillActiveFilter signs the session out when it no
+ * longer matches. Sign-in bookkeeping (failed attempts, lockout, last login)
+ * does not change it.
+ *
  * Serializable because the servlet container may write sessions to disk.
  */
-public record AppUserPrincipal(long userId, String email, Set<RoleName> roles, Long consultantId)
+public record AppUserPrincipal(long userId, String email, Set<RoleName> roles, Long consultantId,
+        long accountVersion)
         implements AuthenticatedPrincipal, Serializable {
 
     public AppUserPrincipal {
@@ -25,7 +33,16 @@ public record AppUserPrincipal(long userId, String email, Set<RoleName> roles, L
 
     public static AppUserPrincipal from(UserAccount user) {
         Long consultantId = user.getConsultant() == null ? null : user.getConsultant().getId();
-        return new AppUserPrincipal(user.getId(), user.getEmail(), user.getRoleNames(), consultantId);
+        return new AppUserPrincipal(user.getId(), user.getEmail(), user.getRoleNames(), consultantId,
+                user.getVersion());
+    }
+
+    /**
+     * The same user with a new account version (used after they change their own
+     * password).
+     */
+    public AppUserPrincipal withAccountVersion(long newVersion) {
+        return new AppUserPrincipal(userId, email, roles, consultantId, newVersion);
     }
 
     /**

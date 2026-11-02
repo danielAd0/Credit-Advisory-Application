@@ -31,18 +31,20 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, Long> 
     Optional<UserAccount> findWithRolesAndConsultantById(Long id);
 
     /**
-     * True if a signed-in user may keep their session: still enabled, and either
-     * not a
-     * consultant or a consultant with the given (ACTIVE) status. Checked on every
-     * request (FR-18).
+     * Checked on every request (AccountStillActiveFilter). Returns the user's
+     * current version if they may keep their session - still enabled, and either
+     * not a consultant or a consultant with the given (ACTIVE) status (FR-18).
+     * Empty if they must be signed out. The caller compares the version with the
+     * one stored in the session at sign-in.
      */
     @Query("""
-            select count(u) > 0 from UserAccount u left join u.consultant c
+            select u.version from UserAccount u left join u.consultant c
             where u.id = :id
               and u.enabled = true
               and (c is null or c.status = :activeStatus)
             """)
-    boolean mayStaySignedIn(@Param("id") long id, @Param("activeStatus") ConsultantStatus activeStatus);
+    Optional<Long> findVersionIfMayStaySignedIn(@Param("id") long id,
+            @Param("activeStatus") ConsultantStatus activeStatus);
 
     /**
      * GET /api/users. searchPattern is a lower-case, escaped LIKE pattern, or null
