@@ -1,6 +1,6 @@
-# API contract - auth, consultants, clients, transfers, users, dashboard
+# API contract - auth, consultants, clients, transfers, users, dashboard, audit log
 
-Owner: Ntiyiso. Consumers: Jack (frontend). Status: DRAFT - sections 2, 3, 5, 6 and 7 and `GET /api/clients` are implemented. The other client endpoints in section 4 wait on the ID-number protection code.
+Owner: Ntiyiso. Consumers: Jack (frontend). Status: DRAFT - sections 2, 3, 5, 6, 7 and 8 and `GET /api/clients` are implemented. The other client endpoints in section 4 wait on the ID-number protection code.
 
 Any change to a request or response shape must be agreed with Jack before it is coded.
 
@@ -126,7 +126,7 @@ Every successful change below writes one row to `audit_logs` in the **same trans
 | `CLIENTS_ASSIGNED` | consultant | `clientIds`, `count`, `batchId`, `reason` (see `docs/api-admin.md`) |
 | `CONSULTANT_ACCOUNT_CREATED` | consultant | `consultantCode`, `userId`, `email` (see `docs/api-admin.md`) |
 
-Entries only record that something changed when it really changed (renaming to the same name, or setting the status it already has, writes nothing). Audit rows cannot be updated or deleted - the database refuses.
+Entries only record that something changed when it really changed (renaming to the same name, or setting the status it already has, writes nothing). Audit rows cannot be updated or deleted - the database refuses. Admins read them with `GET /api/audit-logs` (section 8).
 
 ---
 
@@ -353,8 +353,8 @@ Used by `GET /api/clients/{id}`, `POST /api/clients` and `PATCH /api/clients/{id
 ```json
 {
   "id": 101,
-  "idNumber": "9001014800083",
-  "idNumberMasked": "*********0083",
+  "idNumber": "9001014800089",
+  "idNumberMasked": "*********0089",
   "firstName": "Lerato",
   "lastName": "Mokoena",
   "email": "lerato.mokoena@example.com",
@@ -435,7 +435,7 @@ Sorted by `lastName`, then `firstName`.
 **Request**
 
 ```json
-{ "idNumber": "9001014800083" }
+{ "idNumber": "9001014800089" }
 ```
 
 Spaces and hyphens in `idNumber` are ignored.
@@ -461,7 +461,7 @@ Spaces and hyphens in `idNumber` are ignored.
 
 ```json
 {
-  "idNumber": "9001014800083",
+  "idNumber": "9001014800089",
   "firstName": "Lerato",
   "lastName": "Mokoena",
   "email": "lerato.mokoena@example.com",
@@ -873,7 +873,64 @@ Counts only - no names or ID numbers.
 
 ---
 
-## 8. Open questions
+## 8. Audit log (ADMIN only)
+
+### GET /api/audit-logs
+
+**Who:** ADMIN (`403` for everyone else)
+
+**Purpose:** answer "who did what, when, and why" from the app (FR-21) - for example "who suspended Thandi?". Read-only.
+
+**Query parameters** - all optional, combine freely:
+| Name | Example | Meaning |
+|---|---|---|
+| `action` | `CONSULTANT_STATUS_CHANGED` | one action from the table in section 1 (case-insensitive) |
+| `targetType` | `CONSULTANT` | `CONSULTANT` or `USER` (case-insensitive) |
+| `targetId` | `4` | the id of that consultant or user - use together with `targetType` |
+| `actorUserId` | `1` | only entries made by this user |
+| `from` | `2026-11-01T00:00:00Z` | on or after this moment (ISO-8601, UTC) |
+| `to` | `2026-11-02T00:00:00Z` | before this moment |
+| `page`, `size` | `0`, `50` | paging (default size 50, max 100) |
+
+Sorted newest first.
+
+**200 OK** - a page of entries:
+
+```json
+{
+  "items": [
+    {
+      "id": 812,
+      "occurredAt": "2026-11-02T09:31:12.408Z",
+      "action": "CONSULTANT_STATUS_CHANGED",
+      "actor": { "id": 1, "email": "admin@mafori.co.za" },
+      "targetType": "CONSULTANT",
+      "targetId": "4",
+      "metadata": { "from": "ACTIVE", "to": "INACTIVE", "reason": "Left the company", "clientCount": 42 }
+    },
+    {
+      "id": 811,
+      "occurredAt": "2026-11-02T09:02:40.115Z",
+      "action": "ACCOUNT_LOCKED",
+      "actor": null,
+      "targetType": "USER",
+      "targetId": "7",
+      "metadata": { "lockedUntil": "2026-11-02T09:17:40.115Z" }
+    }
+  ],
+  "page": 0, "size": 50, "totalItems": 2, "totalPages": 1
+}
+```
+
+- `actor` is `null` for events where nobody was signed in (`ACCOUNT_LOCKED`, `SIGN_IN_RATE_LIMITED`).
+- `metadata` is a JSON object whose keys depend on the action (section 1). The frontend should show the keys it knows and ignore the rest.
+- Useful links from other screens: a consultant's history is `?targetType=CONSULTANT&targetId={id}`, a user's is `?targetType=USER&targetId={id}`.
+
+**Errors:** `400` bad date format, or `from` not before `to` (`urn:credit-advisory:validation:invalid-filter`); `401` not signed in; `403` not ADMIN.
+
+---
+
+## 9. Open questions
 
 - **Correcting ID numbers:** can consultants correct a client's ID number, or only managers/admins? (SRS 15) - not editable for now.
 - **Bulk transfer limit:** draft says 500 clients per transfer (SRS 2) - to confirm.

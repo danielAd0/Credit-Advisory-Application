@@ -64,14 +64,33 @@ Leave both empty: Flyway creates the tables.
    and rename the copy to `application-local.properties`.
 2. Set `DB_PASSWORD` in it to the password you chose above, and choose your own
    `app.dev.admin-password` (12+ characters). That admin account is created on first start-up.
-3. Run from the `backend` folder:
+3. Generate your own **ID-number keys**. The backend will not start without them. In PowerShell,
+   run this line **twice** (each run prints a different key):
+
+```powershell
+$b = New-Object byte[] 32; [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b)
+```
+
+   Add both to `application-local.properties` - the first as the lookup key, the second as the encryption key:
+
+```properties
+app.idnumber.lookup-key=<first key>
+app.idnumber.encryption-key=<second key>
+```
+
+   - These keys go **only** in `application-local.properties` (gitignored) - never in the `.example`
+     file, a commit, a chat message or a screenshot. Each developer has their own.
+   - If you ever change them, client ID numbers already in your local database can no longer be read:
+     reset your local database. Production keys are created and kept by IT, never by developers.
+
+4. Run from the `backend` folder:
 
 ```powershell
 .\mvnw.cmd spring-boot:run
 ```
 
-4. Open http://localhost:8080/actuator/health - you should see `{"status":"UP"}`.
-5. Run the automated tests (stop the running backend first). Every test must pass:
+5. Open http://localhost:8080/actuator/health - you should see `{"status":"UP"}`.
+6. Run the automated tests (stop the running backend first). Every test must pass:
 
 ```powershell
 .\mvnw.cmd clean test
