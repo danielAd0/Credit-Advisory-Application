@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import java.io.IOException;
+import java.util.Optional;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.context.SecurityContextHolderStrategy;
@@ -14,11 +15,16 @@ import za.co.mafori.creditadvisory.consultant.ConsultantStatus;
 import za.co.mafori.creditadvisory.user.UserAccountRepository;
 
 /**
- * FR-18: ends the session of a user who was disabled, or whose consultant
- * became INACTIVE or
- * SUSPENDED, on their very next request. The request then continues as "not
- * signed in", so
- * protected endpoints answer 401.
+ * Ends a signed-in session on its very next request when:
+ * <ul>
+ * <li>the user was disabled, or their consultant became INACTIVE or SUSPENDED
+ * (FR-18), or</li>
+ * <li>an admin changed their password, roles or consultant link since they
+ * signed in (the account version no longer matches), so a reset password or a
+ * removed role takes effect immediately.</li>
+ * </ul>
+ * The request then continues as "not signed in", so protected endpoints answer
+ * 401.
  *
  * <p>
  * Deliberately not a @Component: Spring Boot would then also run it outside the
@@ -41,7 +47,7 @@ public class AccountStillActiveFilter extends OncePerRequestFilter {
 
         if (authentication != null
                 && authentication.getPrincipal() instanceof AppUserPrincipal principal
-                && !users.mayStaySignedIn(principal.userId(), ConsultantStatus.ACTIVE)) {
+                && !maySessionContinue(principal)) {
             HttpSession session = request.getSession(false);
             if (session != null) {
                 session.invalidate();
@@ -50,5 +56,15 @@ public class AccountStillActiveFilter extends OncePerRequestFilter {
         }
 
         chain.doFilter(request, response);
+    }
+
+    /**
+     * One small query per request: still allowed in, and nothing security-relevant
+     * changed.
+     */
+    private boolean maySessionContinue(AppUserPrincipal principal) {
+        Optional<Long> currentVersion = users.findVersionIfMayStaySignedIn(principal.userId(),
+                ConsultantStatus.ACTIVE);
+        return currentVersion.isPresent() && currentVersion.get() == principal.accountVersion();
     }
 }

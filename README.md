@@ -50,19 +50,32 @@ CREATE USER ca_user WITH PASSWORD 'your-own-password';
 CREATE DATABASE credit_advisory OWNER ca_user ENCODING 'UTF8';
 ```
 
+```sql
+CREATE DATABASE credit_advisory_test OWNER ca_user ENCODING 'UTF8';
+```
+
+`credit_advisory` is your normal local database. `credit_advisory_test` is used only by the
+automated tests and is **wiped before every test** - never keep anything in it.
+Leave both empty: Flyway creates the tables.
+
 ### 3. Backend
 
 1. In `backend/src/main/resources`, copy `application-local.properties.example`
    and rename the copy to `application-local.properties`.
-2. Set `DB_PASSWORD` in it to the password you chose above.
+2. Set `DB_PASSWORD` in it to the password you chose above, and choose your own
+   `app.dev.admin-password` (12+ characters). That admin account is created on first start-up.
 3. Run from the `backend` folder:
 
 ```powershell
 .\mvnw.cmd spring-boot:run
 ```
 
-4. Open http://localhost:8080/actuator/health - log in with username `user` and the
-   generated password printed in the console. You should see `"status":"UP"`.
+4. Open http://localhost:8080/actuator/health - you should see `{"status":"UP"}`.
+5. Run the automated tests (stop the running backend first). Every test must pass:
+
+```powershell
+.\mvnw.cmd clean test
+```
 
 ### 4. Frontend
 
@@ -73,7 +86,8 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173
+Open http://localhost:5173 and sign in with the admin email and password from your
+`application-local.properties`. Use `localhost`, not `127.0.0.1`.
 
 ## Everyday commands
 
@@ -81,6 +95,7 @@ Open http://localhost:5173
 | ---------- | ---------------------------- | ----------------------------------- |
 | `backend`  | `.\mvnw.cmd clean compile`   | Compile and check for errors        |
 | `backend`  | `.\mvnw.cmd spring-boot:run` | Run the API on port 8080            |
+| `backend`  | `.\mvnw.cmd clean test`      | Run the automated API tests         |
 | `frontend` | `npm run dev`                | Run the frontend on port 5173       |
 | `frontend` | `npm run lint`               | Check code with ESLint              |
 | `frontend` | `npm run format`             | Format code with Prettier           |
@@ -101,7 +116,7 @@ git pull
 3. **Before you push**, pull again in case someone else pushed in the meantime:
 
 ```powershell
-git add .
+git add backend/src frontend/src docs
 git status
 git commit -m "Describe what you did"
 git pull
@@ -109,7 +124,8 @@ git push
 ```
 
 4. If `git pull` reports a **CONFLICT**, stop and sort it out together - do not force push.
-5. Never push code that does not compile or build.
+5. Never push code that does not compile or build, or backend code whose tests fail.
+6. Check every file in `git status` before committing. Stage folders you worked in rather than `git add .`.
 
 ## Team rules
 
@@ -117,7 +133,8 @@ git push
   `backend/src/main/resources/db/migration`.
 - Never edit a migration that has already been merged - write a new one.
 - Never commit `application-local.properties`, passwords, keys, or any `.xlsx` / `.csv` client data.
-- Run `npm run lint` and `.\mvnw.cmd clean compile` before opening a pull request.
+- Run `npm run lint` (frontend) and `.\mvnw.cmd clean test` (backend) before you push.
+- Never test with the real workbook or real client data. Full ID numbers never go in URLs, logs or audit logs.
 - Never use `git push --force`.
 
 ## Known pins
@@ -127,5 +144,6 @@ git push
 
 ## Documents
 
+- `docs/api-auth-consultants-clients.md` - API contract between backend and frontend
 - `docs/SRS-v1.docx` - requirements specification and technical architecture
 - `docs/spreadsheet-business-breakdown.docx` - analysis of the original Excel workbook

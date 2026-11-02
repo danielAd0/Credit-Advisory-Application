@@ -49,4 +49,8 @@ public interface ConsultantRepository extends JpaRepository<Consultant, Long> {
             group by cl.currentConsultant.id
             """)
     List<Object[]> countClientsByConsultant(@Param("consultantIds") Collection<Long> consultantIds);
+
+    /** Dashboard: consultants per status. Each row is [ConsultantStatus, count]. */
+    @Query("select c.status, count(c) from Consultant c group by c.status")
+    List<Object[]> countByStatus();
 }

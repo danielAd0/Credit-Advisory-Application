@@ -1,6 +1,6 @@
-# API contract - auth, consultants, clients, transfers, users
+# API contract - auth, consultants, clients, transfers, users, dashboard
 
-Owner: Ntiyiso. Consumers: Jack (frontend). Status: DRAFT - sections 2, 3, 5 and 6 and `GET /api/clients` are implemented. The other client endpoints in section 4 wait on the ID-number protection code.
+Owner: Ntiyiso. Consumers: Jack (frontend). Status: DRAFT - sections 2, 3, 5, 6 and 7 and `GET /api/clients` are implemented. The other client endpoints in section 4 wait on the ID-number protection code.
 
 Any change to a request or response shape must be agreed with Jack before it is coded.
 
@@ -76,6 +76,7 @@ Error messages **never** contain a full ID number.
 | 404  | Not found - **also used when the record exists but you may not see it**, so its existence is not leaked |
 | 409  | Conflict - duplicate (e.g. ID number, consultant code) or stale `version`                               |
 | 422  | Request is valid but breaks a business rule (e.g. assigning to a SUSPENDED consultant)                  |
+| 429  | Too many failed sign-ins from this network address - wait and try again (see `POST /api/auth/login`)    |
 
 ### Paging
 
@@ -129,6 +130,7 @@ List endpoints accept `?page=0&size=20` (page is 0-based, size max 100) and retu
 |---|---|
 | 400 | email or password missing |
 | 401 | sign-in failed - for **every** reason: wrong email, wrong password, account locked, user disabled, consultant INACTIVE or SUSPENDED |
+| 429 | too many failed sign-ins from this network address (`urn:credit-advisory:auth:too-many-attempts`). The `Retry-After` header says how many seconds to wait. |
 
 The `401` always has the same message: _"Sign-in failed. Check your details or try again later."_
 Giving the same answer for every failure stops anyone from finding out which emails exist or which accounts are locked. Locked or suspended staff are told by their manager.
@@ -137,6 +139,8 @@ Giving the same answer for every failure stops anyone from finding out which ema
 
 - Email is matched case-insensitively and trimmed.
 - 5 failed attempts in a row lock the account for 15 minutes. A successful sign-in resets the count.
+- Separately, 20 failed sign-ins from one network address within 5 minutes block sign-in **from that address** (any account, even with the right password) until the 5 minutes are up. This stops one address trying a common password against many accounts. Successful sign-ins never count, so staff sharing an office connection are not affected, and people who are already signed in are not affected either.
+- On `429` the frontend should show: _"Too many failed sign-in attempts. Please wait a few minutes and try again."_
 - A new session id is issued on sign-in (prevents session fixation).
 
 ### POST /api/auth/logout
@@ -790,7 +794,53 @@ No body. Clears the failed sign-in count and any lockout.
 
 ---
 
-## 7. Open questions
+## 7. Dashboard
+
+### GET /api/dashboard/summary
+
+**Who:** everyone signed in (numbers are scoped by role)
+
+**Purpose:** the counts on the dashboard (FR-20). Computed in the database, so they are correct however many clients there are. The frontend must use this instead of counting a page of `GET /api/clients`.
+
+**200 OK** - MANAGER or ADMIN:
+
+```json
+{
+  "scope": "ALL",
+  "totalClients": 1250,
+  "unassignedClients": 12,
+  "clientsNeedingHandover": 42,
+  "consultants": { "active": 18, "inactive": 3, "suspended": 1 }
+}
+```
+
+**200 OK** - CONSULTANT:
+
+```json
+{
+  "scope": "OWN",
+  "totalClients": 87,
+  "unassignedClients": null,
+  "clientsNeedingHandover": null,
+  "consultants": null
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `scope` | `ALL` (whole organisation) or `OWN` (the consultant's own clients) |
+| `totalClients` | all clients, or for a CONSULTANT only their own (`0` if their login is not linked to a consultant) |
+| `unassignedClients` | clients with no consultant. List them with `GET /api/clients?unassigned=true` |
+| `clientsNeedingHandover` | clients still assigned to an INACTIVE or SUSPENDED consultant - the manager follow-up queue (SRS 7). List them with `GET /api/clients?consultantStatus=INACTIVE` and `...=SUSPENDED` |
+| `consultants` | how many consultants have each status |
+
+Counts only - no names or ID numbers.
+
+**Errors:** `401` if not signed in.
+
+---
+
+## 8. Open questions
 
 - **Correcting ID numbers:** can consultants correct a client's ID number, or only managers/admins? (SRS 15) - not editable for now.
 - **Bulk transfer limit:** draft says 500 clients per transfer (SRS 2) - to confirm.
