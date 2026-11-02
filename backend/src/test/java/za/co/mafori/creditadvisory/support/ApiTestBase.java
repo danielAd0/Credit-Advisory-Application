@@ -2,7 +2,6 @@ package za.co.mafori.creditadvisory.support;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.concurrent.ThreadLocalRandom;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,6 +11,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import za.co.mafori.creditadvisory.auth.LoginRateLimiter;
+import za.co.mafori.creditadvisory.common.idnumber.IdNumberProtector;
+import za.co.mafori.creditadvisory.common.idnumber.ProtectedIdNumber;
+import za.co.mafori.creditadvisory.common.idnumber.SaIdNumber;
 import za.co.mafori.creditadvisory.consultant.Consultant;
 import za.co.mafori.creditadvisory.consultant.ConsultantRepository;
 import za.co.mafori.creditadvisory.consultant.ConsultantStatus;
@@ -57,6 +59,9 @@ public abstract class ApiTestBase {
 
     @Autowired
     private LoginRateLimiter loginRateLimiter;
+
+    @Autowired
+    protected IdNumberProtector idNumberProtector;
 
     protected long adminId;
 
@@ -113,22 +118,37 @@ public abstract class ApiTestBase {
     }
 
     /**
-     * Inserts a FAKE client straight into the table. The hash and "encrypted" bytes
-     * are random
-     * filler, not a real ID number, so these rows can never be decrypted.
+     * Inserts a client straight into the table, with a MADE-UP but valid ID number
+     * (see fakeIdNumber), protected exactly like the real code does. Quicker than
+     * the
+     * API when a test only needs clients to exist.
      */
     protected long createClient(String firstName, String lastName, Long consultantId) {
         clientCounter++;
-        byte[] fakeHash = new byte[32];
-        ThreadLocalRandom.current().nextBytes(fakeHash);
-        byte[] fakeEncrypted = new byte[40];
-        String last4 = String.format("%04d", clientCounter);
+        ProtectedIdNumber stored = idNumberProtector.protect(SaIdNumber.parse(fakeIdNumber(clientCounter)));
         return jdbc.queryForObject("""
                 insert into clients (id_number_hash, id_number_encrypted, id_number_last4,
                                      first_name, last_name, current_consultant_id)
                 values (?, ?, ?, ?, ?, ?)
                 returning id
-                """, Long.class, fakeHash, fakeEncrypted, last4, firstName, lastName, consultantId);
+                """, Long.class, stored.lookupHash(), stored.encrypted(), stored.last4(), firstName, lastName,
+                consultantId);
+    }
+
+    /**
+     * A made-up SA ID number that passes validation: born 1 Jan 1990, sequence n,
+     * with the right check digit. Different n gives a different number. NEVER use a
+     * real person's ID number in a test.
+     */
+    protected static String fakeIdNumber(int n) {
+        String withoutCheckDigit = String.format("900101%04d08", n % 10_000);
+        for (int checkDigit = 0; checkDigit <= 9; checkDigit++) {
+            String candidate = withoutCheckDigit + checkDigit;
+            if (SaIdNumber.isValid(candidate)) {
+                return candidate;
+            }
+        }
+        throw new IllegalStateException("No check digit found");
     }
 
     /**

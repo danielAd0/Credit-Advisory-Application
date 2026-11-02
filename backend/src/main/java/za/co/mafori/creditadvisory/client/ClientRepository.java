@@ -23,6 +23,10 @@ public interface ClientRepository extends JpaRepository<Client, Long> {
 
     boolean existsByIdNumberHash(byte[] idNumberHash);
 
+    /** One client with its consultant loaded - for the single-client endpoints. */
+    @EntityGraph(attributePaths = { "currentConsultant" })
+    Optional<Client> findWithCurrentConsultantById(Long id);
+
     /**
      * GET /api/clients. Every filter is optional (null / false = no filter).
      *

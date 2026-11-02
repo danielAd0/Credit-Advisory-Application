@@ -8,6 +8,4 @@ app.auth.cors-allowed-origins=http://localhost:5173
 app.dev.admin-email=admin@local.test
 app.dev.admin-password=Local-Admin-Pass-2026
 
-# ID-number keys - local only, never commit, never share
-app.idnumber.lookup-key=3AFtiAEpB6Mnfz+gqQRt7aKEuWgAehZaISGrmr3XKkA=
-app.idnumber.encryption-key=6rvCt+V1ULcVOPckGO4ktVYDbNrxNU9T3BsmpECkkMk=
+

@@ -1,6 +1,6 @@
 # API contract - auth, consultants, clients, transfers, users, dashboard, audit log
 
-Owner: Ntiyiso. Consumers: Jack (frontend). Status: DRAFT - sections 2, 3, 5, 6, 7 and 8 and `GET /api/clients` are implemented. The other client endpoints in section 4 wait on the ID-number protection code.
+Owner: Ntiyiso. Consumers: Jack (frontend). Status: DRAFT - sections 2 to 8 are implemented.
 
 Any change to a request or response shape must be agreed with Jack before it is coded.
 
@@ -122,6 +122,10 @@ Every successful change below writes one row to `audit_logs` in the **same trans
 | `PASSWORD_CHANGED` | user (the user themselves) | - |
 | `ACCOUNT_LOCKED` | user | `lockedUntil` (no actor: nobody is signed in) |
 | `SIGN_IN_RATE_LIMITED` | - | `address`, `failures`, `window` (never the emails tried) |
+| `CLIENT_CREATED` | client | `consultantId` (or `null` if unassigned) |
+| `CLIENT_VIEWED` | client | - (every time the full ID number is returned by `GET /api/clients/{id}`) |
+| `CLIENT_LOOKUP` | client, or none if not found | `result`: `found`, `not-found`, or `not-visible` (exists, but the caller may not see it) |
+| `CLIENT_UPDATED` | client | `fields`: the names of the fields that changed, never their values |
 | `CLIENTS_TRANSFERRED` | destination consultant | `fromConsultantId`, `clientIds`, `count`, `batchId`, `reason` |
 | `CLIENTS_ASSIGNED` | consultant | `clientIds`, `count`, `batchId`, `reason` (see `docs/api-admin.md`) |
 | `CONSULTANT_ACCOUNT_CREATED` | consultant | `consultantCode`, `userId`, `email` (see `docs/api-admin.md`) |
@@ -444,13 +448,13 @@ Spaces and hyphens in `idNumber` are ignored.
 
 **Rules**
 
-- Every lookup writes an audit entry: action `CLIENT_LOOKUP`, the actor, the result (`found` / `not-found`) and the client id if found. The ID number searched for is **never** logged.
+- Every lookup writes an audit entry: action `CLIENT_LOOKUP`, the actor, the result (`found` / `not-found` / `not-visible`) and the client id if one exists. The ID number searched for is **never** logged. The entry is written even when the answer is `404`.
 - A CONSULTANT looking up someone else's client gets `404`, the same as if it did not exist.
 
 **Errors**
 | Status | When |
 |---|---|
-| 400 | not a valid SA ID number (must be 13 digits, start with a real date, have citizenship digit 0/1/2, pass the check digit) |
+| 400 | not a valid SA ID number (`urn:credit-advisory:validation:invalid-id-number`): must be 13 digits, start with a real date, have citizenship digit 0/1/2 and pass the check digit. `detail` says which rule failed and never repeats the number. |
 | 404 | no such client, or not visible to the caller |
 
 ### POST /api/clients
@@ -476,7 +480,7 @@ Spaces and hyphens in `idNumber` are ignored.
 | `firstName`    | yes      | trimmed, not blank, max 100                                                                 |
 | `lastName`     | yes      | trimmed, not blank, max 100                                                                 |
 | `email`        | no       | valid email, max 254                                                                        |
-| `phone`        | no       | SA or international number; normalised to `+27...` using the same rules as the Excel import |
+| `phone`        | no       | SA or international number, normalised to international format (same rules as the Excel import): `082 123 4567`, `0821234567` and `27821234567` all become `+27821234567`; `+` or `00` numbers are kept. Spaces, hyphens, dots and brackets are ignored. Anything else is `400` (`urn:credit-advisory:validation:invalid-phone`). |
 | `consultantId` | no       | see assignment rules below                                                                  |
 
 **201 Created** - the **single client** object, with `Location: /api/clients/101`.
@@ -485,7 +489,8 @@ Spaces and hyphens in `idNumber` are ignored.
 | Caller | `consultantId` | Result |
 |---|---|---|
 | CONSULTANT | omitted, or their own consultant id | assigned to themselves |
-| CONSULTANT | someone else's id | `403` - consultants cannot assign clients to others |
+| CONSULTANT | someone else's id | `403` (`urn:credit-advisory:client:cannot-assign-to-others`) |
+| CONSULTANT whose login has no consultant record | anything | `403` (`urn:credit-advisory:client:no-consultant-record`) |
 | MANAGER / ADMIN | an ACTIVE consultant's id | assigned to that consultant |
 | MANAGER / ADMIN | omitted | created unassigned |
 | anyone | an INACTIVE or SUSPENDED consultant | `422` (`urn:credit-advisory:client:consultant-not-active`) |
@@ -499,8 +504,8 @@ Spaces and hyphens in `idNumber` are ignored.
 **Errors**
 | Status | When |
 |---|---|
-| 400 | invalid fields (each listed in `errors`) |
-| 403 | CONSULTANT tried to assign to someone else |
+| 400 | invalid fields (each listed in `errors`), invalid ID number, invalid phone |
+| 403 | CONSULTANT tried to assign to someone else, or has no consultant record |
 | 404 | `consultantId` does not exist |
 | 409 | a client with this ID number already exists (`urn:credit-advisory:client:duplicate-id-number`) |
 | 422 | the chosen consultant is not ACTIVE |
@@ -511,17 +516,17 @@ The `409` does **not** say which consultant has the existing client or show any 
 
 **Who:** everyone signed in (scoped)
 
-**Request** - send only the fields being changed, plus `version`:
+**Request** - send **all four** editable fields as they should be afterwards (the edit form has them all), plus `version`:
 
 ```json
-{ "email": "lerato.m@example.com", "phone": null, "version": 2 }
+{ "firstName": "Lerato", "lastName": "Mokoena", "email": "lerato.m@example.com", "phone": null, "version": 2 }
 ```
 
-| Field                   | Rules                                            |
-| ----------------------- | ------------------------------------------------ |
-| `firstName`, `lastName` | same as create; cannot be set to blank or `null` |
-| `email`, `phone`        | same as create; `null` clears the value          |
-| `version`               | required                                         |
+| Field                   | Rules                                                         |
+| ----------------------- | ------------------------------------------------------------- |
+| `firstName`, `lastName` | required; same as create                                      |
+| `email`, `phone`        | same as create; `null`, blank or left out clears the value    |
+| `version`               | required                                                      |
 
 **200 OK** - the updated **single client** object.
 
@@ -529,7 +534,7 @@ The `409` does **not** say which consultant has the existing client or show any 
 
 - The ID number cannot be changed here. Who may correct an ID number is still to be decided by the business (SRS 15).
 - The consultant cannot be changed here - use `POST /api/client-transfers`.
-- An audit entry `CLIENT_UPDATED` is written, listing which field names changed (not their values).
+- An audit entry `CLIENT_UPDATED` is written, listing which field names changed (not their values). Nothing changed, no entry.
 
 **Errors:** `400` invalid fields, `404` not found or not visible, `409` stale version.
 
