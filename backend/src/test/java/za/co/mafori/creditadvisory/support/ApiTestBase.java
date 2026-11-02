@@ -11,6 +11,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
+import za.co.mafori.creditadvisory.auth.LoginRateLimiter;
 import za.co.mafori.creditadvisory.consultant.Consultant;
 import za.co.mafori.creditadvisory.consultant.ConsultantRepository;
 import za.co.mafori.creditadvisory.consultant.ConsultantStatus;
@@ -54,6 +55,9 @@ public abstract class ApiTestBase {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    @Autowired
+    private LoginRateLimiter loginRateLimiter;
+
     protected long adminId;
 
     private int clientCounter;
@@ -67,6 +71,9 @@ public abstract class ApiTestBase {
         }
         flyway.clean();
         flyway.migrate();
+        // Every test signs in from 127.0.0.1, so start each test with a clean rate
+        // limit.
+        loginRateLimiter.clear();
         adminId = createUser(ADMIN_EMAIL, null, RoleName.ADMIN);
     }
 

@@ -4,6 +4,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import java.net.URI;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
@@ -34,17 +35,20 @@ public class AuthController {
     private final AuthenticationManager authenticationManager;
     private final SecurityContextRepository securityContextRepository;
     private final CurrentAccountService accounts;
-    private SecurityContextHolderStrategy contextHolder = SecurityContextHolder.getContextHolderStrategy();
+    private final LoginRateLimiter rateLimiter;
+    private final SecurityContextHolderStrategy contextHolder = SecurityContextHolder.getContextHolderStrategy();
 
     public AuthController(AuthenticationManager authenticationManager,
-            SecurityContextRepository securityContextRepository, CurrentAccountService accounts) {
+            SecurityContextRepository securityContextRepository, CurrentAccountService accounts,
+            LoginRateLimiter rateLimiter) {
         this.authenticationManager = authenticationManager;
         this.securityContextRepository = securityContextRepository;
         this.accounts = accounts;
+        this.rateLimiter = rateLimiter;
     }
 
     /**
-     * Makes sure the XSRF-TOKEN cookies iset. The frontend calls this once on
+     * Makes sure the XSRF-TOKEN cookie is set. The frontend calls this once on
      * start-up.
      */
     @GetMapping("/csrf")
@@ -55,8 +59,19 @@ public class AuthController {
     @PostMapping("/login")
     public MeResponse login(@Valid @RequestBody LoginRequest body, HttpServletRequest request,
             HttpServletResponse response) {
-        Authentication result = authenticationManager
-                .authenticate(UsernamePasswordAuthenticationToken.unauthenticated(body.email(), body.password()));
+        // Checked before the password, so a blocked address learns nothing - not even
+        // whether a password was right.
+        String address = request.getRemoteAddr();
+        rateLimiter.checkAllowed(address);
+
+        Authentication result;
+        try {
+            result = authenticationManager
+                    .authenticate(UsernamePasswordAuthenticationToken.unauthenticated(body.email(), body.password()));
+        } catch (AuthenticationException e) {
+            rateLimiter.recordFailure(address);
+            throw e;
+        }
 
         // New session id on sign-in, so a session id planted before login is useless
         // (session fixation).
@@ -89,5 +104,17 @@ public class AuthController {
         problem.setTitle("Sign-in failed");
         problem.setType(URI.create("urn:credit-advisory:auth:sign-in-failed"));
         return problem;
+    }
+
+    /** Too many failed sign-ins from this address (contract section 2). */
+    @ExceptionHandler(TooManySignInAttemptsException.class)
+    public ResponseEntity<ProblemDetail> tooManyAttempts(TooManySignInAttemptsException e) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS,
+                "Too many failed sign-in attempts from this network. Try again in a few minutes.");
+        problem.setTitle("Too many attempts");
+        problem.setType(URI.create("urn:credit-advisory:auth:too-many-attempts"));
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, String.valueOf(e.retryAfterSeconds()))
+                .body(problem);
     }
 }

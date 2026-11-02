@@ -55,6 +55,19 @@ public interface ClientRepository extends JpaRepository<Client, Long> {
             @Param("unassignedOnly") boolean unassignedOnly,
             Pageable pageable);
 
+    /** Dashboard: clients with no consultant at all. */
+    long countByCurrentConsultantIsNull();
+
+    /**
+     * Dashboard: clients still assigned to a consultant whose status is not the
+     * given
+     * one (called with ACTIVE, so: clients whose consultant left or was suspended
+     * and
+     * who still need a handover).
+     */
+    @Query("select count(c) from Client c join c.currentConsultant con where con.status <> :status")
+    long countAssignedToConsultantNotIn(@Param("status") ConsultantStatus status);
+
     /**
      * Loads clients and locks their rows until the transaction ends, so two
      * transfers of the same
