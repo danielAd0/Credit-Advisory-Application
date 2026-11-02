@@ -104,6 +104,30 @@ List endpoints accept `?page=0&size=20` (page is 0-based, size max 100) and retu
 - The full number (`"idNumber"`) appears only in a single-client response to an authorised user. Every such response is recorded in the audit log.
 - **Full ID numbers are never put in URLs or query strings** (they would end up in server logs and browser history). Searching by ID number uses a POST body.
 
+### Audit trail (FR-21)
+
+Every successful change below writes one row to `audit_logs` in the **same transaction** as the change, so a refused or failed change leaves no entry. The actor is the signed-in user (or nobody, for sign-in events). Metadata never contains a password, a password hash or a full ID number - any 13-digit number in free text such as a reason is stored as `[redacted]`.
+
+| Action | Target | Metadata |
+|---|---|---|
+| `CONSULTANT_CREATED` | consultant | `consultantCode`, `fullName` |
+| `CONSULTANT_RENAMED` | consultant | `from`, `to` |
+| `CONSULTANT_STATUS_CHANGED` | consultant | `from`, `to`, `reason`, `clientCount` (clients still assigned at that moment) |
+| `USER_CREATED` | user | `email`, `roles`, `consultantId` |
+| `USER_ROLES_CHANGED` | user | `from`, `to` (role lists) |
+| `USER_CONSULTANT_LINK_CHANGED` | user | `fromConsultantId`, `toConsultantId` |
+| `USER_ENABLED` / `USER_DISABLED` | user | - |
+| `USER_PASSWORD_RESET` | user | - (never the password) |
+| `USER_UNLOCKED` | user | - |
+| `PASSWORD_CHANGED` | user (the user themselves) | - |
+| `ACCOUNT_LOCKED` | user | `lockedUntil` (no actor: nobody is signed in) |
+| `SIGN_IN_RATE_LIMITED` | - | `address`, `failures`, `window` (never the emails tried) |
+| `CLIENTS_TRANSFERRED` | destination consultant | `fromConsultantId`, `clientIds`, `count`, `batchId`, `reason` |
+| `CLIENTS_ASSIGNED` | consultant | `clientIds`, `count`, `batchId`, `reason` (see `docs/api-admin.md`) |
+| `CONSULTANT_ACCOUNT_CREATED` | consultant | `consultantCode`, `userId`, `email` (see `docs/api-admin.md`) |
+
+Entries only record that something changed when it really changed (renaming to the same name, or setting the status it already has, writes nothing). Audit rows cannot be updated or deleted - the database refuses.
+
 ---
 
 ## 2. Auth
@@ -512,6 +536,15 @@ The `409` does **not** say which consultant has the existing client or show any 
 ---
 
 ## 5. Transfers
+
+Two endpoints change who a client belongs to; the "Reassign clients" screen uses both:
+
+| Situation | Endpoint |
+|---|---|
+| Client has **no** consultant yet (`GET /api/clients?unassigned=true`) | `POST /api/client-assignments` - see `docs/api-admin.md` section 4 |
+| Client already has a consultant and must move | `POST /api/client-transfers` - below |
+
+Both are all-or-nothing, lock the client rows, write one history row per client and an audit entry.
 
 ### POST /api/client-transfers
 

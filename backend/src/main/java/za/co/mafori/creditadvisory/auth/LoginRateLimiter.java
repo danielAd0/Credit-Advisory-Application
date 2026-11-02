@@ -7,6 +7,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import za.co.mafori.creditadvisory.audit.AuditLogWriter;
 
 /**
  * Limits FAILED sign-ins per network address. The per-account lockout stops
@@ -40,11 +41,13 @@ public class LoginRateLimiter {
     private final ConcurrentHashMap<String, Window> windows = new ConcurrentHashMap<>();
     private final int maxFailures;
     private final Duration window;
+    private final AuditLogWriter audit;
     private final Clock clock = Clock.systemUTC();
 
-    public LoginRateLimiter(AuthProperties properties) {
+    public LoginRateLimiter(AuthProperties properties, AuditLogWriter audit) {
         this.maxFailures = properties.maxFailedSignInsPerIp();
         this.window = properties.ipWindow();
+        this.audit = audit;
     }
 
     /** Call BEFORE checking the password. Throws if this address must wait. */
@@ -65,8 +68,11 @@ public class LoginRateLimiter {
                 : new Window(current.start(), current.failures() + 1));
 
         if (updated.failures() == maxFailures) {
-            // The address only, never the email that was tried.
+            // The address only, never the email that was tried. Logged once per blocked
+            // window.
             log.warn("Sign-in blocked for {} after {} failed attempts in {}", address, maxFailures, window);
+            audit.record("SIGN_IN_RATE_LIMITED", null, null,
+                    AuditLogWriter.meta("address", address, "failures", maxFailures, "window", window.toString()));
         }
         if (windows.size() > CLEANUP_THRESHOLD) {
             windows.values().removeIf(w -> isExpired(w, now));

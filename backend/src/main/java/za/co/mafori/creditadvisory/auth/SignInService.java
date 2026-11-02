@@ -8,6 +8,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import jakarta.transaction.Transactional;
+import za.co.mafori.creditadvisory.audit.AuditLogWriter;
 import za.co.mafori.creditadvisory.user.UserAccount;
 import za.co.mafori.creditadvisory.user.UserAccountRepository;
 
@@ -17,6 +18,7 @@ public class SignInService {
     private final UserAccountRepository users;
     private final PasswordEncoder passwordEncoder;
     private final AuthProperties properties;
+    private final AuditLogWriter audit;
     private final Clock clock = Clock.systemUTC();
 
     /**
@@ -25,10 +27,12 @@ public class SignInService {
      */
     private final String timingHash;
 
-    public SignInService(UserAccountRepository users, PasswordEncoder passwordEncoder, AuthProperties properties) {
+    public SignInService(UserAccountRepository users, PasswordEncoder passwordEncoder, AuthProperties properties,
+            AuditLogWriter audit) {
         this.users = users;
         this.passwordEncoder = passwordEncoder;
         this.properties = properties;
+        this.audit = audit;
         this.timingHash = passwordEncoder.encode("timing-equaliser-not-a-real-password");
     }
 
@@ -53,6 +57,11 @@ public class SignInService {
 
         if (!passwordEncoder.matches(rawPassword, user.getPasswordHash())) {
             user.recordFailedSignIn(now, properties.maxFailedAttempts(), properties.lockDuration());
+            if (user.isLocked(now)) {
+                // This failure locked the account. Saved in the same transaction as the lock.
+                audit.record("ACCOUNT_LOCKED", "USER", user.getId(),
+                        AuditLogWriter.meta("lockedUntil", user.getLockedUntil().toString()));
+            }
             return Optional.empty();
         }
 

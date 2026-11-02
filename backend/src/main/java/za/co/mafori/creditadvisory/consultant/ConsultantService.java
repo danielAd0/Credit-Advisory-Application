@@ -1,5 +1,7 @@
 package za.co.mafori.creditadvisory.consultant;
 
+import static za.co.mafori.creditadvisory.audit.AuditLogWriter.meta;
+
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -9,6 +11,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import za.co.mafori.creditadvisory.audit.AuditLogWriter;
 import za.co.mafori.creditadvisory.common.web.ApiException;
 import za.co.mafori.creditadvisory.common.web.PageResponse;
 
@@ -22,9 +25,11 @@ public class ConsultantService {
     static final int MAX_PAGE_SIZE = 100;
 
     private final ConsultantRepository consultants;
+    private final AuditLogWriter audit;
 
-    public ConsultantService(ConsultantRepository consultants) {
+    public ConsultantService(ConsultantRepository consultants, AuditLogWriter audit) {
         this.consultants = consultants;
+        this.audit = audit;
     }
 
     @Transactional(readOnly = true)
@@ -54,6 +59,8 @@ public class ConsultantService {
                     "A consultant with code " + code + " already exists.");
         }
         Consultant saved = consultants.save(new Consultant(code, request.fullName()));
+        audit.record("CONSULTANT_CREATED", "CONSULTANT", saved.getId(),
+                meta("consultantCode", saved.getConsultantCode(), "fullName", saved.getFullName()));
         // A brand-new consultant has no clients yet.
         return ConsultantResponse.from(saved, 0);
     }
@@ -62,8 +69,13 @@ public class ConsultantService {
     public ConsultantResponse rename(long id, RenameConsultantRequest request) {
         Consultant consultant = load(id);
         requireVersion(consultant, request.version());
+        String oldName = consultant.getFullName();
         consultant.rename(request.fullName());
         consultants.flush();
+        if (!oldName.equals(consultant.getFullName())) {
+            audit.record("CONSULTANT_RENAMED", "CONSULTANT", consultant.getId(),
+                    meta("from", oldName, "to", consultant.getFullName()));
+        }
         return withClientCount(consultant);
     }
 
@@ -78,10 +90,17 @@ public class ConsultantService {
     public ConsultantResponse changeStatus(long id, ChangeConsultantStatusRequest request) {
         Consultant consultant = load(id);
         requireVersion(consultant, request.version());
+        ConsultantStatus oldStatus = consultant.getStatus();
         consultant.changeStatus(request.status());
-        // TODO: write an audit entry with request.reason() once Sifiso's AuditLogWriter
-        // is on main.
         consultants.flush();
+        if (oldStatus != consultant.getStatus()) {
+            // clientCount: how many clients this consultant still has at the moment of the
+            // change,
+            // so the trail shows what needed handing over.
+            audit.record("CONSULTANT_STATUS_CHANGED", "CONSULTANT", consultant.getId(),
+                    meta("from", oldStatus.name(), "to", consultant.getStatus().name(),
+                            "reason", request.reason(), "clientCount", consultants.countClients(consultant.getId())));
+        }
         return withClientCount(consultant);
     }
 

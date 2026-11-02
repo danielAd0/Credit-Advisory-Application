@@ -1,5 +1,7 @@
 package za.co.mafori.creditadvisory.user;
 
+import static za.co.mafori.creditadvisory.audit.AuditLogWriter.meta;
+
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -11,6 +13,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import za.co.mafori.creditadvisory.audit.AuditLogWriter;
 import za.co.mafori.creditadvisory.common.web.ApiException;
 import za.co.mafori.creditadvisory.common.web.LikePattern;
 import za.co.mafori.creditadvisory.common.web.PageResponse;
@@ -18,7 +21,12 @@ import za.co.mafori.creditadvisory.consultant.Consultant;
 import za.co.mafori.creditadvisory.consultant.ConsultantRepository;
 import za.co.mafori.creditadvisory.consultant.ConsultantStatus;
 
-/** User account management (admin) and changing your own password. */
+/**
+ * User account management (admin) and changing your own password. Every change
+ * writes an audit entry (FR-21). Passwords and password hashes are never
+ * written
+ * to the audit log.
+ */
 @Service
 public class UserService {
 
@@ -28,14 +36,16 @@ public class UserService {
     private final RoleRepository roles;
     private final ConsultantRepository consultants;
     private final PasswordEncoder passwordEncoder;
+    private final AuditLogWriter audit;
     private final Clock clock = Clock.systemUTC();
 
     public UserService(UserAccountRepository users, RoleRepository roles,
-            ConsultantRepository consultants, PasswordEncoder passwordEncoder) {
+            ConsultantRepository consultants, PasswordEncoder passwordEncoder, AuditLogWriter audit) {
         this.users = users;
         this.roles = roles;
         this.consultants = consultants;
         this.passwordEncoder = passwordEncoder;
+        this.audit = audit;
     }
 
     // ---------- queries ----------
@@ -78,6 +88,9 @@ public class UserService {
             user.linkConsultant(consultant);
         }
         UserAccount saved = users.saveAndFlush(user);
+        audit.record("USER_CREATED", "USER", saved.getId(),
+                meta("email", saved.getEmail(), "roles", sortedRoles(saved),
+                        "consultantId", consultant == null ? null : consultant.getId()));
         return UserResponse.from(saved, Instant.now(clock));
     }
 
@@ -87,6 +100,7 @@ public class UserService {
         UserAccount user = load(id);
         requireVersion(user, request.version());
         Set<RoleName> wanted = request.roles();
+        List<String> oldRoles = sortedRoles(user);
 
         requireConsultantLinkForRole(wanted, user.getConsultant());
         if (user.isEnabled() && user.hasRole(RoleName.ADMIN) && !wanted.contains(RoleName.ADMIN)) {
@@ -105,6 +119,10 @@ public class UserService {
             }
         }
         users.flush();
+        List<String> newRoles = sortedRoles(user);
+        if (!oldRoles.equals(newRoles)) {
+            audit.record("USER_ROLES_CHANGED", "USER", user.getId(), meta("from", oldRoles, "to", newRoles));
+        }
         return UserResponse.from(user, Instant.now(clock));
     }
 
@@ -113,6 +131,7 @@ public class UserService {
     public UserResponse changeConsultant(long id, LinkConsultantRequest request) {
         UserAccount user = load(id);
         requireVersion(user, request.version());
+        Long oldConsultantId = consultantIdOf(user);
 
         if (request.consultantId() == null) {
             requireConsultantLinkForRole(user.getRoleNames(), null);
@@ -121,6 +140,11 @@ public class UserService {
             user.linkConsultant(loadLinkableConsultant(request.consultantId(), user.getId()));
         }
         users.flush();
+        Long newConsultantId = consultantIdOf(user);
+        if (!Objects.equals(oldConsultantId, newConsultantId)) {
+            audit.record("USER_CONSULTANT_LINK_CHANGED", "USER", user.getId(),
+                    meta("fromConsultantId", oldConsultantId, "toConsultantId", newConsultantId));
+        }
         return UserResponse.from(user, Instant.now(clock));
     }
 
@@ -132,6 +156,7 @@ public class UserService {
     public UserResponse changeEnabled(long id, ChangeEnabledRequest request) {
         UserAccount user = load(id);
         requireVersion(user, request.version());
+        boolean wasEnabled = user.isEnabled();
 
         if (request.enabled()) {
             user.enable();
@@ -142,6 +167,9 @@ public class UserService {
             user.disable();
         }
         users.flush();
+        if (wasEnabled != user.isEnabled()) {
+            audit.record(user.isEnabled() ? "USER_ENABLED" : "USER_DISABLED", "USER", user.getId(), meta());
+        }
         return UserResponse.from(user, Instant.now(clock));
     }
 
@@ -156,6 +184,8 @@ public class UserService {
         user.changePasswordHash(passwordEncoder.encode(request.temporaryPassword()));
         user.unlock();
         users.flush();
+        // Only THAT it happened - never the password.
+        audit.record("USER_PASSWORD_RESET", "USER", user.getId(), meta());
         return UserResponse.from(user, Instant.now(clock));
     }
 
@@ -164,6 +194,7 @@ public class UserService {
         UserAccount user = load(id);
         user.unlock();
         users.flush();
+        audit.record("USER_UNLOCKED", "USER", user.getId(), meta());
         return UserResponse.from(user, Instant.now(clock));
     }
 
@@ -182,6 +213,8 @@ public class UserService {
                     "Password not allowed", "The new password must be different from the current one.");
         }
         user.changePasswordHash(passwordEncoder.encode(newPassword));
+        users.flush();
+        audit.record("PASSWORD_CHANGED", "USER", user.getId(), meta());
     }
 
     // ---------- rules ----------
@@ -230,6 +263,14 @@ public class UserService {
     private Role role(RoleName name) {
         return roles.findByName(name)
                 .orElseThrow(() -> new IllegalStateException("Role " + name + " missing - has V5 run?"));
+    }
+
+    private static List<String> sortedRoles(UserAccount user) {
+        return user.getRoleNames().stream().sorted().map(RoleName::name).toList();
+    }
+
+    private static Long consultantIdOf(UserAccount user) {
+        return user.getConsultant() == null ? null : user.getConsultant().getId();
     }
 
     private UserAccount load(long id) {
