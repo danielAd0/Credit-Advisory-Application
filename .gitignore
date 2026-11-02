@@ -27,3 +27,47 @@ application-local.properties
 *.xlsx
 *.xls
 *.csv
+
+# More secrets - never commit
+application-*.properties
+!application-test.properties
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+
+# More client data - never commit (POPIA)
+*.xlsm
+*.xlsb
+*.ods
+*.tsv
+*.pdf
+!docs/**/*.pdf
+*.dump
+*.backup
+*.bak
+*.sql.gz
+dump*.sql
+backup*.sql
+uploads/
+
+# Maven wrapper download and JVM crash files
+backend/.mvn/wrapper/maven-wrapper.jar
+hs_err_pid*
+replay_pid*
+
+# Test coverage and logs
+frontend/coverage/
+logs/
+
+# Personal tool settings
+.claude/settings.local.json
+
+# Windows and Office
+Thumbs.db
+desktop.ini
+~$*

@@ -32,11 +32,17 @@ public class ClientAssignmentHistory {
     @JoinColumn(name = "client_id", nullable = false)
     private Client client;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    /**
+     * Null for a first assignment (client created / assigned). optional = true:
+     * the column is nullable, and optional = false would let Hibernate inner-join
+     * and drop history rows that have no "from" consultant.
+     */
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
     @JoinColumn(name = "from_consultant_id")
     private Consultant fromConsultant;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    /** Null when a client is unassigned. */
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
     @JoinColumn(name = "to_consultant_id")
     private Consultant toConsultant;
 
@@ -76,6 +82,17 @@ public class ClientAssignmentHistory {
     /** A new client created already assigned to a consultant */
     public static ClientAssignmentHistory clientCreated(Client client, Consultant to, UserAccount changedBy) {
         return new ClientAssignmentHistory(client, null, to, AssignmentChangeType.MANUAL, "Client created", null,
+                changedBy);
+    }
+
+    /**
+     * An existing, unassigned client given to a consultant by a manager or admin
+     * (POST /api/client-assignments). Pass a batch id when several clients are
+     * assigned together, otherwise null.
+     */
+    public static ClientAssignmentHistory assigned(Client client, Consultant to, String reason, UUID batchId,
+            UserAccount changedBy) {
+        return new ClientAssignmentHistory(client, null, to, AssignmentChangeType.MANUAL, reason, batchId,
                 changedBy);
     }
 

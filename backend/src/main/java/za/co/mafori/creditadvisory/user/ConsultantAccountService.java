@@ -1,0 +1,69 @@
+package za.co.mafori.creditadvisory.user;
+
+import static za.co.mafori.creditadvisory.audit.AuditLogWriter.meta;
+
+import java.util.Set;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import za.co.mafori.creditadvisory.audit.AuditLogWriter;
+import za.co.mafori.creditadvisory.common.web.ApiException;
+import za.co.mafori.creditadvisory.consultant.ConsultantRepository;
+import za.co.mafori.creditadvisory.consultant.ConsultantResponse;
+import za.co.mafori.creditadvisory.consultant.ConsultantService;
+import za.co.mafori.creditadvisory.consultant.CreateConsultantRequest;
+import za.co.mafori.creditadvisory.consultant.Consultant;
+
+/**
+ * Admin onboarding: creates a consultant record AND its CONSULTANT login in one
+ * transaction. Either both exist afterwards or neither does - no orphan
+ * consultant without a login, no login without a consultant.
+ *
+ * <p>
+ * Reuses ConsultantService and UserService so every existing rule still applies
+ * (unique code, unique email, password policy, one login per consultant).
+ */
+@Service
+public class ConsultantAccountService {
+
+        private final ConsultantService consultantService;
+        private final UserService userService;
+        private final ConsultantRepository consultants;
+        private final UserAccountRepository users;
+        private final AuditLogWriter audit;
+
+        public ConsultantAccountService(ConsultantService consultantService, UserService userService,
+                        ConsultantRepository consultants, UserAccountRepository users, AuditLogWriter audit) {
+                this.consultantService = consultantService;
+                this.userService = userService;
+                this.consultants = consultants;
+                this.users = users;
+                this.audit = audit;
+        }
+
+        @Transactional
+        public ConsultantAccountResponse create(CreateConsultantAccountRequest request) {
+                // Check everything that can fail BEFORE writing anything, so the admin gets
+                // the real reason first. The transaction would roll back anyway.
+                String code = Consultant.normalizeCode(request.consultantCode());
+                if (consultants.existsByConsultantCode(code)) {
+                        throw ApiException.conflict("consultant:duplicate-code", "Duplicate consultant code",
+                                        "A consultant with code " + code + " already exists.");
+                }
+                String email = UserAccount.normalizeEmail(request.email());
+                if (users.existsByEmail(email)) {
+                        throw ApiException.conflict("user:duplicate-email", "Email already in use",
+                                        "A user with this email already exists.");
+                }
+                PasswordPolicy.check(request.temporaryPassword(), email);
+
+                ConsultantResponse consultant = consultantService.create(
+                                new CreateConsultantRequest(code, request.fullName().strip()));
+                UserResponse user = userService.create(new CreateUserRequest(email, request.temporaryPassword(),
+                                Set.of(RoleName.CONSULTANT), consultant.id()));
+
+                audit.record("CONSULTANT_ACCOUNT_CREATED", "CONSULTANT", consultant.id(),
+                                meta("consultantCode", consultant.consultantCode(), "userId", user.id(), "email",
+                                                user.email()));
+                return new ConsultantAccountResponse(consultant, user);
+        }
+}

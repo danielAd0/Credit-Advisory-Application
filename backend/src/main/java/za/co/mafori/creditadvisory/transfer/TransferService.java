@@ -7,6 +7,7 @@ import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import za.co.mafori.creditadvisory.audit.AuditLogWriter;
 import za.co.mafori.creditadvisory.client.Client;
 import za.co.mafori.creditadvisory.client.ClientRepository;
 import za.co.mafori.creditadvisory.common.web.ApiException;
@@ -32,13 +33,15 @@ public class TransferService {
     private final ConsultantRepository consultants;
     private final UserAccountRepository users;
     private final ClientAssignmentHistoryRepository history;
+    private final AuditLogWriter audit;
 
     public TransferService(ClientRepository clients, ConsultantRepository consultants,
-            UserAccountRepository users, ClientAssignmentHistoryRepository history) {
+            UserAccountRepository users, ClientAssignmentHistoryRepository history, AuditLogWriter audit) {
         this.clients = clients;
         this.consultants = consultants;
         this.users = users;
         this.history = history;
+        this.audit = audit;
     }
 
     @Transactional
@@ -83,8 +86,11 @@ public class TransferService {
             client.assignTo(to);
             history.save(ClientAssignmentHistory.transfer(client, from, to, request.reason(), batchId, actor));
         }
-        // TODO: audit entry CLIENTS_TRANSFERRED once AuditLogWriter is on main.
         clients.flush();
+        audit.record("CLIENTS_TRANSFERRED", "CONSULTANT", to.getId(),
+                AuditLogWriter.meta("fromConsultantId", from.getId(), "clientIds", List.copyOf(ids),
+                        "count", ids.size(), "batchId", batchId == null ? null : batchId.toString(),
+                        "reason", request.reason()));
 
         return new TransferResponse(batchId, locked.size(),
                 TransferResponse.ConsultantRef.of(from), TransferResponse.ConsultantRef.of(to));
