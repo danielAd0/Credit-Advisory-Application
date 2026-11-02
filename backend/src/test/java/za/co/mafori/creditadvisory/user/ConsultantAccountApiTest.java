@@ -9,7 +9,7 @@ import za.co.mafori.creditadvisory.support.ApiTestBase;
 
 public class ConsultantAccountApiTest extends ApiTestBase {
 
-    private static final String TEMP_PASSWORD = "Temp1234";
+    private static final String TEMP_PASSWORD = "Temp-Password-2026";
 
     private ApiClient admin;
 

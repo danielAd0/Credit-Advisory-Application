@@ -2,6 +2,8 @@ package za.co.mafori.creditadvisory.employer;
 
 import static za.co.mafori.creditadvisory.audit.AuditLogWriter.meta;
 
+import java.util.Locale;
+
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
@@ -30,7 +32,8 @@ public class EmployerService {
             int size) {
         int safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
         PageRequest pageable = PageRequest.of(Math.max(page, 0), safeSize, Sort.by("name").and(Sort.by("id")));
-        String type = employerType == null || employerType.isBlank() ? null : employerType.strip();
+        String type = employerType == null || employerType.isBlank() ? null
+                : employerType.strip().toLowerCase(Locale.ROOT);
         return PageResponse.of(employers.search(LikePattern.contains(search), active, type, pageable),
                 EmployerResponse::from);
     }
