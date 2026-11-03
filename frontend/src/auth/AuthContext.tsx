@@ -37,7 +37,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const value = useMemo(() => ({ session, signIn, signOut }), [session, signIn, signOut]);
+  const refreshSession = useCallback(async () => {
+    setSession(await data.getSession());
+  }, []);
+
+  const value = useMemo(
+    () => ({ session, signIn, signOut, refreshSession }),
+    [session, signIn, signOut, refreshSession],
+  );
 
   if (status === 'error') {
     return <p className="center-msg">We could not reach the server. Please refresh the page.</p>;

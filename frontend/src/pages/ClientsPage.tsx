@@ -1,22 +1,40 @@
-import { useEffect, useState } from 'react';
-import { data, type ClientSummary } from '../api';
+import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { ApiError, data, detailOf, features, type ClientSummary, type PageResponse } from '../api';
+import { clientName } from '../api/names';
+import Pager from '../components/Pager';
+import { hasAnyRole, useSession } from '../auth/useAuth';
+import './clientsactions.css';
 
 export default function ClientsPage() {
+  const session = useSession();
+  const isManager = hasAnyRole(session, ['ADMIN', 'MANAGER']);
   const [query, setQuery] = useState('');
-  // Remember which search the rows belong to, so "loading" can be worked out
-  // instead of being set inside the effect.
-  const [result, setResult] = useState<{ query: string; rows: ClientSummary[] } | null>(null);
+  const [page, setPage] = useState(0);
+  const [version, setVersion] = useState(0); // bumped after a removal so the list reloads
+  const [result, setResult] = useState<{ key: string; data: PageResponse<ClientSummary> } | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
+
+  const [target, setTarget] = useState<ClientSummary | null>(null);
+  const [reason, setReason] = useState('');
+  const [removing, setRemoving] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null);
+
+  const key = `${query}|${page}|${version}`;
 
   // Wait 250 ms after typing stops, and ignore answers that arrive late.
   useEffect(() => {
     let current = true;
     const t = setTimeout(() => {
       data
-        .listClients(query)
-        .then((rows) => {
+        .listClientsPage({ search: query }, page)
+        .then((r) => {
           if (current) {
-            setResult({ query, rows });
+            setResult({ key, data: r });
             setError(null);
           }
         })
@@ -28,25 +46,79 @@ export default function ClientsPage() {
       current = false;
       clearTimeout(t);
     };
-  }, [query]);
+  }, [query, page, key]);
 
-  // null while the results for the current search have not arrived yet
-  const rows = result && result.query === query ? result.rows : null;
+  // Open and close the native dialog to match what is selected for removal.
+  useEffect(() => {
+    const d = dialogRef.current;
+    if (!d) return;
+    if (target && !d.open) d.showModal();
+    if (!target && d.open) d.close();
+  }, [target]);
+
+  const paged = result && result.key === key ? result.data : null;
+  const rows = paged ? paged.items : null;
+
+  function openRemove(c: ClientSummary) {
+    setTarget(c);
+    setReason('');
+    setRemoveError(null);
+  }
+
+  async function confirmRemove() {
+    if (!target || reason.trim().length < 3) return;
+    setRemoving(true);
+    setRemoveError(null);
+    try {
+      await data.removeClient(target.id, reason.trim());
+      setNotice(`${clientName(target)} was removed.`);
+      setTarget(null);
+      setPage(0);
+      setVersion((v) => v + 1);
+    } catch (err) {
+      setRemoveError(
+        detailOf(err) ??
+          (err instanceof ApiError && err.status === 403
+            ? 'You do not have permission to remove clients.'
+            : err instanceof ApiError && err.status === 409
+              ? 'This client has open cases and cannot be removed yet.'
+              : 'Could not remove the client. Nothing was changed.'),
+      );
+    } finally {
+      setRemoving(false);
+    }
+  }
 
   return (
     <>
       <h1>Clients</h1>
-      <div className="toolbar">
+      <div className="toolbar toolbar-actions">
         <input
           type="search"
           placeholder="Search by name"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setPage(0);
+          }}
           aria-label="Search clients"
           autoComplete="off"
         />
+        <Link className="btn primary" to="/clients/new">
+          Add client
+        </Link>
+        {isManager && features.import && (
+          <Link className="btn" to="/import">
+            Import from Excel
+          </Link>
+        )}
       </div>
 
+      {notice && (
+        <p className="alert ok" role="status">
+          {notice}
+        </p>
+      )}
       {error && (
         <p className="alert error" role="alert">
           {error}
@@ -64,21 +136,111 @@ export default function ClientsPage() {
                 <th>ID number</th>
                 <th>Consultant</th>
                 <th>Updated</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((c) => (
                 <tr key={c.id}>
-                  <td>{`${c.firstName} ${c.lastName}`}</td>
+                  <td>
+                    <Link className="row-link" to={`/clients/${c.id}`}>
+                      {clientName(c)}
+                    </Link>
+                  </td>
                   <td className="mono">{c.idNumberMasked}</td>
                   <td>{c.consultant?.fullName ?? <span className="muted">Unassigned</span>}</td>
                   <td>{new Date(c.updatedAt).toLocaleDateString('en-ZA')}</td>
+                  <td className="ca-actions">
+                    <Link
+                      className="ca-link"
+                      to={`/clients/${c.id}/edit`}
+                      aria-label={`Edit ${clientName(c)}`}
+                    >
+                      Edit
+                    </Link>
+                    {isManager && features.removeClient && (
+                      <button
+                        type="button"
+                        className="ca-link danger"
+                        onClick={() => openRemove(c)}
+                        aria-label={`Remove ${clientName(c)}`}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
+      {paged && (
+        <Pager
+          page={paged.page}
+          size={paged.size}
+          totalItems={paged.totalItems}
+          totalPages={paged.totalPages}
+          onPage={setPage}
+        />
+      )}
+
+      <dialog
+        ref={dialogRef}
+        className="ca-dialog"
+        onClose={() => setTarget(null)}
+        aria-labelledby="ca-title"
+      >
+        {target && (
+          <form
+            method="dialog"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void confirmRemove();
+            }}
+          >
+            <h2 id="ca-title">Remove {clientName(target)}?</h2>
+            <p className="muted">
+              ID number <span className="mono">{target.idNumberMasked}</span>. The client is
+              archived, not erased, and a manager can restore them.
+            </p>
+            {removeError && (
+              <p className="alert error" role="alert">
+                {removeError}
+              </p>
+            )}
+            <label htmlFor="ca-reason">Reason</label>
+            <input
+              id="ca-reason"
+              type="text"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              maxLength={200}
+              autoComplete="off"
+            />
+            <p className="ca-hint">
+              For example: captured twice. Do not type ID numbers or other client details.
+            </p>
+            <div className="ca-buttons">
+              <button
+                type="submit"
+                className="btn danger-solid"
+                disabled={removing || reason.trim().length < 3}
+              >
+                {removing ? 'Removing...' : 'Remove client'}
+              </button>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setTarget(null)}
+                disabled={removing}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        )}
+      </dialog>
     </>
   );
 }

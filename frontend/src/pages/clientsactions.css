@@ -1,0 +1,92 @@
+/* Edit / remove on the Clients page. Classes start with "ca-". */
+.ca-actions {
+  white-space: nowrap;
+}
+.ca-link {
+  font: inherit;
+  padding: 0;
+  margin-right: 1rem;
+  color: var(--ink);
+  background: none;
+  border: 0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.ca-link:hover {
+  color: var(--orange);
+}
+.ca-link.danger {
+  color: #a32014;
+}
+.ca-link.danger:hover {
+  color: #7c140b;
+}
+.alert.ok {
+  margin: 0 0 1rem;
+  background: #fff1e8;
+  color: #7a2a00;
+  border-color: var(--orange);
+}
+.ca-dialog {
+  width: min(92vw, 460px);
+  padding: 1.5rem;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.ca-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.55);
+}
+.ca-dialog h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.2rem;
+}
+.ca-dialog label {
+  display: block;
+  margin: 1rem 0 0.35rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.ca-dialog input {
+  width: 100%;
+  height: 2.75rem;
+  padding: 0 0.85rem;
+  font: inherit;
+  font-size: 1rem;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-sizing: border-box;
+}
+.ca-dialog input:focus {
+  outline: none;
+  border-color: var(--orange);
+  box-shadow: 0 0 0 3px rgba(255, 90, 0, 0.25);
+}
+.ca-hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.ca-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+.btn.danger-solid {
+  background: #a32014;
+  border-color: #a32014;
+  color: #ffffff;
+  font-weight: 700;
+}
+.btn.danger-solid:hover:not(:disabled) {
+  background: #7c140b;
+  border-color: #7c140b;
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

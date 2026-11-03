@@ -1,0 +1,271 @@
+/* Import screen. Uses the shared colour tokens from styles.css. Classes start with "imp-". */
+.imp {
+  max-width: 960px;
+}
+
+/* Steps: this really is a sequence, so numbering is information */
+.imp-steps {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  list-style: none;
+  margin: 1.5rem 0 1.25rem;
+  padding: 0;
+}
+.imp-steps li {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+.imp-step-num {
+  display: grid;
+  place-items: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: 50%;
+  border: 1.5px solid var(--line);
+  font-size: 0.82rem;
+  font-weight: 700;
+  background: var(--surface);
+}
+.imp-steps li.is-current {
+  color: var(--ink);
+  font-weight: 700;
+}
+.imp-steps li.is-current .imp-step-num {
+  background: var(--orange);
+  border-color: var(--orange);
+  color: var(--on-orange);
+}
+.imp-steps li.is-done {
+  color: var(--ink);
+}
+.imp-steps li.is-done .imp-step-num {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #ffffff;
+}
+
+.imp-error {
+  margin: 0 0 1rem;
+}
+
+.imp-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 1.25rem;
+}
+.imp-card h2 {
+  margin: 0 0 0.25rem;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 1.4rem;
+}
+.imp-card h2:focus {
+  outline: none;
+}
+.imp-card p {
+  margin: 0 0 1rem;
+}
+.imp-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.imp-head .btn {
+  flex: none;
+}
+
+/* Drop zone */
+.imp-drop {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 0.35rem;
+  padding: 2.5rem 1rem;
+  text-align: center;
+  color: var(--muted);
+  background: #fafafa;
+  border: 2px dashed #c9c9c9;
+  border-radius: 12px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+.imp-drop:hover,
+.imp-drop.is-dragging {
+  border-color: var(--orange);
+  background: #fff7f2;
+  color: var(--ink);
+}
+.imp-drop:focus-within {
+  outline: 3px solid var(--orange);
+  outline-offset: 2px;
+}
+.imp-drop svg {
+  color: var(--orange);
+}
+.imp-file {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+}
+.imp-drop-title {
+  font-weight: 600;
+  color: var(--ink);
+}
+.imp-drop-note {
+  font-size: 0.85rem;
+}
+
+.imp-busy {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1.5rem 0;
+  color: var(--ink);
+}
+.imp-spinner {
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 2.5px solid #e2e2e2;
+  border-top-color: var(--orange);
+  border-radius: 50%;
+  animation: imp-spin 0.8s linear infinite;
+}
+@keyframes imp-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.imp-columns {
+  margin-top: 1.25rem;
+  font-size: 0.92rem;
+}
+.imp-columns summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.imp-columns ul {
+  margin: 0.75rem 0;
+  padding-left: 1.25rem;
+}
+.imp-columns li {
+  margin-bottom: 0.3rem;
+}
+
+/* Stats */
+.imp-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 0.75rem;
+  list-style: none;
+  margin: 1.25rem 0;
+  padding: 0;
+}
+.imp-stat {
+  display: grid;
+  gap: 0.1rem;
+  padding: 0.85rem 1rem;
+  background: var(--paper);
+  border-radius: 10px;
+  border-top: 3px solid;
+}
+.imp-stat.good {
+  border-color: var(--ink);
+}
+.imp-stat.neutral {
+  border-color: #bdbdbd;
+}
+.imp-stat.bad {
+  border-color: var(--err-line);
+}
+.imp-stat.warn {
+  border-color: var(--orange);
+}
+.imp-stat-value {
+  font-family: var(--serif);
+  font-size: 1.9rem;
+  line-height: 1.1;
+}
+.imp-stat-label {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.imp-summary {
+  max-width: 46rem;
+}
+.imp-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.imp-actions .btn {
+  height: 2.75rem;
+  padding: 0 1.25rem;
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Filters and table */
+.imp-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.75rem 0 1rem;
+}
+.imp-chip {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.35rem 0.8rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+.imp-chip:hover {
+  border-color: var(--ink);
+}
+.imp-chip.is-on {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #ffffff;
+}
+.imp-wrap {
+  white-space: normal;
+  min-width: 14rem;
+}
+.imp-note {
+  margin: 0.75rem 0 0;
+  font-size: 0.85rem;
+}
+
+@media (max-width: 800px) {
+  .imp-card {
+    padding: 1.1rem;
+  }
+  .imp-steps {
+    gap: 1rem;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .imp-spinner {
+    animation-duration: 2s;
+  }
+  .imp-drop {
+    transition: none;
+  }
+}

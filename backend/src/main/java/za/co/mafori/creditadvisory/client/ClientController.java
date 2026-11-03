@@ -2,6 +2,7 @@ package za.co.mafori.creditadvisory.client;
 
 import jakarta.validation.Valid;
 import java.net.URI;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -47,10 +48,18 @@ public class ClientController {
         return queries.search(caller, search, consultantId, consultantStatus, unassigned, page, size);
     }
 
-    /** Full ID number - audited. */
+    /**
+     * One client. The full ID number only with ?include=idNumber - and only that
+     * is audited (contract section 4).
+     */
     @GetMapping("/{id}")
-    public ClientDetail get(@AuthenticationPrincipal AppUserPrincipal caller, @PathVariable long id) {
-        return service.view(caller, id).orElseThrow(() -> notFound(id));
+    public ClientDetail get(@AuthenticationPrincipal AppUserPrincipal caller, @PathVariable long id,
+            @RequestParam(required = false) String include) {
+        if (include != null && !include.equals("idNumber")) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "validation:invalid-parameter", "Invalid parameter",
+                    "include only accepts the value idNumber.");
+        }
+        return service.view(caller, id, include != null).orElseThrow(() -> notFound(id));
     }
 
     /** Find by ID number. POST so the number is never in a URL or a server log. */

@@ -1,0 +1,69 @@
+/* Client detail. Classes start with "cd-". */
+.cd {
+  max-width: 960px;
+}
+.cd-back {
+  display: inline-block;
+  margin-bottom: 1rem;
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 0.95rem;
+}
+.cd-back:hover {
+  color: var(--orange);
+}
+.cd h1 {
+  margin: 0 0 0.25rem;
+}
+.cd-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+.cd-card {
+  padding: 1.25rem 1.5rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--orange);
+  border-radius: 12px;
+  min-width: 0;
+}
+.cd-card h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.1rem;
+}
+.cd-card dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.5rem 1.25rem;
+}
+.cd-card dt {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.cd-card dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.cd-history {
+  margin-top: 1rem;
+}
+.row-link {
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: none;
+}
+.row-link:hover {
+  color: var(--orange);
+  text-decoration: underline;
+}
+@media (max-width: 700px) {
+  .cd-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cd-card {
+    padding: 1rem;
+  }
+}
