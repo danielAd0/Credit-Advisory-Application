@@ -25,7 +25,7 @@ public class Employer {
     @Column(name = "company", nullable = false, length = 100)
     private String company;
 
-    @Column(name = "employer_type", nullable = false, length = 50)
+    @Column(name = "employer_type", nullable = false, length = 40)
     private String employerType;
 
     @Column(name = "active", nullable = false)
