@@ -90,12 +90,23 @@ public class ClientService {
         return ClientDetail.from(client, idNumber);
     }
 
-    // ---------- view (full ID number) ----------
+    // ---------- view ----------
 
-    /** Empty if the client does not exist or the caller may not see it. */
+    /**
+     * Empty if the client does not exist or the caller may not see it.
+     *
+     * @param includeIdNumber true only when the user asked to see the full ID
+     *                        number: then it is decrypted and the view is
+     *                        audited (CLIENT_VIEWED). Otherwise the ID number is
+     *                        left out and nothing is audited, because nothing
+     *                        sensitive was shown.
+     */
     @Transactional
-    public Optional<ClientDetail> view(AppUserPrincipal caller, long id) {
+    public Optional<ClientDetail> view(AppUserPrincipal caller, long id, boolean includeIdNumber) {
         Optional<Client> visible = findVisible(caller, id);
+        if (!includeIdNumber) {
+            return visible.map(client -> ClientDetail.from(client, null));
+        }
         visible.ifPresent(client -> audit.record("CLIENT_VIEWED", "CLIENT", client.getId(), meta()));
         return visible.map(client -> ClientDetail.from(client, protector.decrypt(client.getIdNumberEncrypted())));
     }
@@ -164,7 +175,8 @@ public class ClientService {
         if (!changed.isEmpty()) {
             audit.record("CLIENT_UPDATED", "CLIENT", client.getId(), meta("fields", changed));
         }
-        return Optional.of(ClientDetail.from(client, protector.decrypt(client.getIdNumberEncrypted())));
+        // Without the full ID number: an edit is not a request to see it.
+        return Optional.of(ClientDetail.from(client, null));
     }
 
     // ---------- rules ----------

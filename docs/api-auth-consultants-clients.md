@@ -103,7 +103,7 @@ List endpoints accept `?page=0&size=20` (page is 0-based, size max 100) and retu
 ### ID numbers
 
 - Lists and broad views show only the masked form: `"idNumberMasked": "*********5082"`.
-- The full number (`"idNumber"`) appears only in a single-client response to an authorised user. Every such response is recorded in the audit log.
+- The full number (`"idNumber"`) is only returned when an authorised user explicitly asks for it with `GET /api/clients/{id}?include=idNumber`, and every such response is recorded in the audit log. The one exception is the response to `POST /api/clients`, which echoes the number the user just typed in.
 - **Full ID numbers are never put in URLs or query strings** (they would end up in server logs and browser history). Searching by ID number uses a POST body.
 
 ### Audit trail (FR-21)
@@ -126,7 +126,7 @@ Every successful change below writes one row to `audit_logs` in the **same trans
 | `FIRST_ADMIN_CREATED` | user | `email` (no actor: created at start-up on a new server, see README "Running in production") |
 | `SIGN_IN_RATE_LIMITED` | - | `address`, `failures`, `window` (never the emails tried) |
 | `CLIENT_CREATED` | client | `consultantId` (or `null` if unassigned) |
-| `CLIENT_VIEWED` | client | - (every time the full ID number is returned by `GET /api/clients/{id}`) |
+| `CLIENT_VIEWED` | client | - (every time the full ID number is returned by `GET /api/clients/{id}?include=idNumber`; opening a client without it is not audited) |
 | `CLIENT_LOOKUP` | client, or none if not found | `result`: `found`, `not-found`, or `not-visible` (exists, but the caller may not see it) |
 | `CLIENT_UPDATED` | client | `fields`: the names of the fields that changed, never their values |
 | `CLIENTS_TRANSFERRED` | destination consultant | `fromConsultantId`, `clientIds`, `count`, `batchId`, `reason` |
@@ -371,7 +371,16 @@ Used by `GET /api/clients` and `POST /api/clients/lookup`. Never contains the fu
 
 ### The Client object - single client
 
-Used by `GET /api/clients/{id}`, `POST /api/clients` and `PATCH /api/clients/{id}`. Same as the list item, plus the full ID number.
+Used by `GET /api/clients/{id}`, `POST /api/clients` and `PATCH /api/clients/{id}`. Same as the list item, plus `idNumber`, which is **`null` unless it was asked for**:
+
+| Response | `idNumber` |
+|---|---|
+| `GET /api/clients/{id}` | `null` |
+| `GET /api/clients/{id}?include=idNumber` | the full number (audited) |
+| `POST /api/clients` | the full number (the one the user just typed) |
+| `PATCH /api/clients/{id}` | `null` |
+
+Example with the number included:
 
 ```json
 {
@@ -440,14 +449,21 @@ Sorted by `lastName`, then `firstName`.
 
 **Who:** everyone signed in (scoped)
 
-**200 OK** - the **single client** object, including the full `idNumber`.
+**Query parameters**
+
+| Name | Example | Meaning |
+|---|---|---|
+| `include` | `idNumber` | also return the full ID number. The only accepted value |
+
+**200 OK** - the **single client** object. Without `include`, `idNumber` is `null`.
 
 **Rules**
 
-- Every successful call writes an audit entry: action `CLIENT_VIEWED`, the actor's user id, target `CLIENT` / `<client id>`, and the time. The ID number is **never** written to the audit log.
-- The frontend should only call this when the user opens a client's detail page - not to fill lists.
+- Open the detail page **without** `include`: that is not audited, because nothing sensitive is shown.
+- Ask for the full number only when the user explicitly wants to see it (e.g. a "Show ID number" button), with `?include=idNumber`. Each such call writes an audit entry: action `CLIENT_VIEWED`, the actor's user id, target `CLIENT` / `<client id>`, and the time. The ID number is **never** written to the audit log.
+- Do not keep the full number in the page longer than needed (no storage, no logging), and never use it to fill lists.
 
-**Errors:** `404` not found, or not visible to the caller.
+**Errors:** `400` `include` has any other value, `404` not found or not visible to the caller.
 
 ### POST /api/clients/lookup
 
@@ -547,7 +563,7 @@ The `409` does **not** say which consultant has the existing client or show any 
 | `email`, `phone`        | same as create; `null`, blank or left out clears the value    |
 | `version`               | required                                                      |
 
-**200 OK** - the updated **single client** object.
+**200 OK** - the updated **single client** object, with `idNumber` `null` (an edit does not reveal the number).
 
 **Rules**
 

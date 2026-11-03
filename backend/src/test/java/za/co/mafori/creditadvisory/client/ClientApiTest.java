@@ -169,25 +169,42 @@ class ClientApiTest extends ApiTestBase {
     // ---------- view ----------
 
     @Test
-    void viewingShowsTheFullIdNumberAndIsAudited() {
+    void viewingWithoutAskingLeavesTheIdNumberOutAndIsNotAudited() {
         long clientId = createdBy(thandi);
 
         ApiClient.Response mine = thandi.get("/api/clients/" + clientId);
+
+        assertThat(mine.status()).isEqualTo(200);
+        assertThat(mine.value("$.idNumber")).isNull();
+        assertThat(mine.text("$.idNumberMasked")).isEqualTo("*********" + ID_NUMBER.substring(9));
+        assertThat(mine.text("$.firstName")).isEqualTo("Lerato");
+        assertThat(mine.body()).doesNotContain(ID_NUMBER);
+        assertThat(auditCount("CLIENT_VIEWED")).isZero();
+    }
+
+    @Test
+    void askingForTheIdNumberShowsItAndIsAudited() {
+        long clientId = createdBy(thandi);
+
+        ApiClient.Response mine = thandi.get("/api/clients/" + clientId + "?include=idNumber");
         assertThat(mine.status()).isEqualTo(200);
         assertThat(mine.text("$.idNumber")).isEqualTo(ID_NUMBER);
-        assertThat(manager.get("/api/clients/" + clientId).text("$.idNumber")).isEqualTo(ID_NUMBER);
+        assertThat(manager.get("/api/clients/" + clientId + "?include=idNumber").text("$.idNumber"))
+                .isEqualTo(ID_NUMBER);
 
         assertThat(auditCount("CLIENT_VIEWED")).isEqualTo(2);
+        assertThat(thandi.get("/api/clients/" + clientId + "?include=everything").status()).isEqualTo(400);
     }
 
     @Test
     void someoneElsesClientLooksLikeItDoesNotExist() {
         long clientId = createdBy(thandi);
 
-        ApiClient.Response response = sipho.get("/api/clients/" + clientId);
+        ApiClient.Response response = sipho.get("/api/clients/" + clientId + "?include=idNumber");
 
         assertThat(response.status()).isEqualTo(404);
         assertThat(response.body()).doesNotContain(ID_NUMBER).doesNotContain("Lerato");
+        assertThat(sipho.get("/api/clients/" + clientId).status()).isEqualTo(404);
         assertThat(sipho.get("/api/clients/999999").status()).isEqualTo(404);
         assertThat(auditCount("CLIENT_VIEWED")).isZero();
     }
@@ -241,6 +258,10 @@ class ClientApiTest extends ApiTestBase {
         assertThat(updated.text("$.lastName")).isEqualTo("Mokoena");
         assertThat(updated.text("$.email")).isEqualTo("lerato@example.com");
         assertThat(updated.value("$.phone")).isNull();
+        // An edit does not reveal the full ID number (only ?include=idNumber does,
+        // audited).
+        assertThat(updated.value("$.idNumber")).isNull();
+        assertThat(updated.body()).doesNotContain(ID_NUMBER);
         String fields = jdbc.queryForObject("""
                 select metadata ->> 'fields' from audit_logs where action = 'CLIENT_UPDATED'
                 """, String.class);
