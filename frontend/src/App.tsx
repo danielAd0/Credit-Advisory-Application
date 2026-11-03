@@ -1,19 +1,20 @@
-import { BrowserRouter , Route , Routes } from "react-router-dom";
-import { AuthProvider } from "./auth/AuthContext";
-import { useAuth } from "./auth/useAuth";
-import RequireAuth  from "./auth/RequireAuth";
-import LoginPage from "./pages/LoginPage";
+import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import { features, type Role } from './api';
+import { AuthProvider } from './auth/AuthContext';
+import RequireAuth from './auth/RequireAuth';
+import { RequireRole } from './auth/RequireRole';
+import Layout from './components/Layout';
+import AddClientPage from './pages/AddClientPage';
+import ClientDetailPage from './pages/ClientDetailPage';
+import ClientsPage from './pages/ClientsPage';
+import ConsultantsPage from './pages/ConsultantsPage';
+import Dashboard from './pages/Dashboard';
+import EditClientPage from './pages/EditClientPage';
+import ImportPage from './pages/ImportPage';
+import LoginPage from './pages/LoginPage';
+import ReassignPage from './pages/ReassignPage';
 
-function Home(){
-  const {session , signOut} = useAuth();
-  return (
-      <main className="center-msg">
-          <h1>You are signed in</h1>
-          <p>Welcome, {session?.email}</p>
-          <button className="btn" onClick={() => void signOut()}>Sign out</button>
-      </main>
-  );
-}
+const managers: Role[] = ['ADMIN', 'MANAGER'];
 
 export default function App() {
   return (
@@ -22,15 +23,50 @@ export default function App() {
         <Routes>
           <Route path="login" element={<LoginPage />} />
           <Route element={<RequireAuth />}>
-            <Route index element={<Home />} />
-            <Route path="*" element={<p className="center-msg">Page not found</p>} />
+            <Route element={<Layout />}>
+              <Route index element={<Dashboard />} />
+              <Route path="clients" element={<ClientsPage />} />
+              <Route path="clients/new" element={<AddClientPage />} />
+              <Route path="clients/:id" element={<ClientDetailPage />} />
+              <Route path="clients/:id/edit" element={<EditClientPage />} />
+              <Route
+                path="consultants"
+                element={
+                  <RequireRole roles={managers}>
+                    <ConsultantsPage />
+                  </RequireRole>
+                }
+              />
+              <Route
+                path="reassign"
+                element={
+                  <RequireRole roles={managers}>
+                    <ReassignPage />
+                  </RequireRole>
+                }
+              />
+              {features.import && (
+                <Route
+                  path="import"
+                  element={
+                    <RequireRole roles={managers}>
+                      <ImportPage />
+                    </RequireRole>
+                  }
+                />
+              )}
+              <Route
+                path="*"
+                element={
+                  <div className="panel">
+                    <h1>Page not found</h1>
+                  </div>
+                }
+              />
+            </Route>
           </Route>
         </Routes>
       </AuthProvider>
     </BrowserRouter>
   );
 }
-
-
-
-

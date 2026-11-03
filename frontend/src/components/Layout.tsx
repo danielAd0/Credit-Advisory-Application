@@ -1,13 +1,13 @@
 import { NavLink, Outlet } from 'react-router-dom';
-import type { Role } from '../api';
+import { features, type Role } from '../api';
 import { hasAnyRole, useAuth, useSession } from '../auth/useAuth';
 
-const nav: { to: string; label: string; roles: Role[] }[] = [
+const nav: { to: string; label: string; roles: Role[]; enabled?: boolean }[] = [
   { to: '/', label: 'Dashboard', roles: ['ADMIN', 'MANAGER', 'CONSULTANT'] },
   { to: '/clients', label: 'Clients', roles: ['ADMIN', 'MANAGER', 'CONSULTANT'] },
   { to: '/consultants', label: 'Consultants', roles: ['ADMIN', 'MANAGER'] },
   { to: '/reassign', label: 'Reassign clients', roles: ['ADMIN', 'MANAGER'] },
-  { to: '/import', label: 'Import', roles: ['ADMIN', 'MANAGER'] },
+  { to: '/import', label: 'Import', roles: ['ADMIN', 'MANAGER'], enabled: features.import },
 ];
 
 export default function Layout() {
@@ -22,9 +22,14 @@ export default function Layout() {
         </div>
         <nav aria-label="Main">
           {nav
-            .filter((n) => hasAnyRole(session, n.roles))
+            .filter((n) => n.enabled !== false && hasAnyRole(session, n.roles))
             .map((n) => (
-              <NavLink key={n.to} to={n.to} end={n.to === '/'} className={({ isActive }) => (isActive ? 'active' : '')}>
+              <NavLink
+                key={n.to}
+                to={n.to}
+                end={n.to === '/'}
+                className={({ isActive }) => (isActive ? 'active' : '')}
+              >
                 {n.label}
               </NavLink>
             ))}

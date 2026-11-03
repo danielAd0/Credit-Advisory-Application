@@ -1,0 +1,84 @@
+/* Add client form. Classes start with "ac-". Uses the shared tokens from styles.css. */
+.ac {
+  max-width: 720px;
+}
+.ac h1 {
+  margin-bottom: 0.25rem;
+}
+.ac-card {
+  margin-top: 1.25rem;
+  padding: 1.5rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.ac-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 1rem;
+}
+.ac-field {
+  margin-bottom: 1rem;
+  min-width: 0;
+}
+.ac-field label {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.ac-field input,
+.ac-field select {
+  width: 100%;
+  height: 2.75rem;
+  padding: 0 0.85rem;
+  font: inherit;
+  font-size: 1rem;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-sizing: border-box;
+}
+.ac-field input:focus,
+.ac-field select:focus {
+  outline: none;
+  border-color: var(--orange);
+  box-shadow: 0 0 0 3px rgba(255, 90, 0, 0.25);
+}
+.ac-field input[aria-invalid='true'] {
+  border-color: #c0392b;
+}
+.ac-hint,
+.ac-err {
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+}
+.ac-hint {
+  color: var(--muted);
+}
+.ac-err {
+  color: #a32014;
+}
+.ac-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+.ac-actions .btn {
+  text-decoration: none;
+  display: inline-block;
+}
+.ac-actions .btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+@media (max-width: 600px) {
+  .ac-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ac-card {
+    padding: 1.1rem;
+  }
+}

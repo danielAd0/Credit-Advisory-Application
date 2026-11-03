@@ -1,0 +1,128 @@
+/* Reassign clients. Classes start with "ra-". */
+.ra {
+  max-width: 900px;
+}
+.ra h1 {
+  margin-bottom: 0.25rem;
+}
+.ra .alert {
+  margin: 1rem 0 0;
+}
+.ra .alert.ok {
+  background: #fff1e8;
+  color: #7a2a00;
+  border-color: var(--orange);
+}
+.ra-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  align-items: center;
+  margin: 1.25rem 0 1rem;
+}
+.ra-tools input[type='search'] {
+  width: min(100%, 360px);
+  height: 2.75rem;
+  padding: 0 0.9rem;
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.ra-tools input[type='search']:focus,
+.ra-field input:focus,
+.ra-field select:focus {
+  outline: none;
+  border-color: var(--orange);
+  box-shadow: 0 0 0 3px rgba(255, 90, 0, 0.25);
+}
+.ra-check {
+  display: inline-flex;
+  gap: 0.5rem;
+  align-items: center;
+  cursor: pointer;
+}
+.ra-box {
+  width: 2.5rem;
+  text-align: center;
+}
+.ra input[type='checkbox'] {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: var(--orange);
+  cursor: pointer;
+}
+.ra-picked {
+  background: #fff6f0;
+}
+.ra-form {
+  margin-top: 1.5rem;
+  padding: 1.5rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  max-width: 560px;
+}
+.ra-form h2 {
+  margin: 0 0 1rem;
+  font-size: 1.15rem;
+}
+.ra-field {
+  margin-bottom: 1rem;
+}
+.ra-field label {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.ra-field input,
+.ra-field select {
+  width: 100%;
+  height: 2.75rem;
+  padding: 0 0.85rem;
+  font: inherit;
+  font-size: 1rem;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-sizing: border-box;
+}
+.ra-hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.ra-form .btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+@media (max-width: 600px) {
+  .ra-form {
+    padding: 1.1rem;
+  }
+}
+.ra-from {
+  min-width: 15rem;
+}
+.ra-from label {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.ra-from select {
+  width: 100%;
+  height: 2.75rem;
+  padding: 0 0.85rem;
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.ra-tools {
+  align-items: flex-end;
+}
