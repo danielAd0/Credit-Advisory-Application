@@ -68,7 +68,7 @@ public class ClientQueryService {
                 ClientListItem::from);
     }
 
-    static boolean seesAllClients(AppUserPrincipal caller) {
+    public static boolean seesAllClients(AppUserPrincipal caller) {
         return caller.hasRole(RoleName.MANAGER) || caller.hasRole(RoleName.ADMIN);
     }
 }

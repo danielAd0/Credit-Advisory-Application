@@ -1,6 +1,6 @@
-# API contract - auth, consultants, clients, transfers, users, dashboard, audit log
+# API contract - auth, consultants, clients, transfers, users, dashboard, audit log, credit cases
 
-Owner: Ntiyiso. Consumers: Jack (frontend). Status: DRAFT - sections 2 to 8 are implemented.
+Owner: Ntiyiso. Consumers: Jack (frontend). Status: DRAFT - sections 2 to 9 are implemented.
 
 Any change to a request or response shape must be agreed with Jack before it is coded.
 
@@ -131,6 +131,10 @@ Every successful change below writes one row to `audit_logs` in the **same trans
 | `CLIENTS_TRANSFERRED` | destination consultant | `fromConsultantId`, `clientIds`, `count`, `batchId`, `reason` |
 | `CLIENTS_ASSIGNED` | consultant | `clientIds`, `count`, `batchId`, `reason` (see `docs/api-admin.md`) |
 | `CONSULTANT_ACCOUNT_CREATED` | consultant | `consultantCode`, `userId`, `email` (see `docs/api-admin.md`) |
+| `CASE_CREATED` | case | `clientId` |
+| `CASE_VIEWED` | case | - (every time `GET /api/cases/{id}` returns the case and its notes) |
+| `CASE_UPDATED` | case | `fields`: the names of the fields that changed; `fromStatus`, `toStatus` when the status changed. Never the title |
+| `CASE_NOTE_ADDED` | case | `noteId`. Never the note text |
 
 Entries only record that something changed when it really changed (renaming to the same name, or setting the status it already has, writes nothing). Audit rows cannot be updated or deleted - the database refuses. Admins read them with `GET /api/audit-logs` (section 8).
 
@@ -951,7 +955,184 @@ Sorted newest first.
 
 ---
 
-## 9. Open questions
+## 9. Credit cases
+
+A credit case is a piece of advisory work for one client (FR-19), with notes added as the work goes on.
+
+- A case belongs to a **client**, not to a consultant. Whoever the client is assigned to sees all of its cases, so a transfer keeps every case and note (FR-15).
+- Notes are **append-only**: they cannot be edited or deleted. A correction is a new note. Every note keeps its original author, also after a transfer.
+- Cases are **never deleted**. They are closed instead.
+
+### Statuses
+
+| Status        | Meaning                    |
+| ------------- | -------------------------- |
+| `OPEN`        | new, not started           |
+| `IN_PROGRESS` | being worked on            |
+| `CLOSED`      | finished; no new notes     |
+
+This is a first set until the business defines the real stages (section 10). Values may be added later, never renamed, so the frontend should show an unknown status as plain text rather than fail.
+
+### Who can see which cases (applies to every case endpoint)
+
+The same rule as clients (section 4): a CONSULTANT sees the cases of the clients **currently** assigned to them; MANAGER and ADMIN see all cases. A case the caller may not see is answered `404`, never `403`.
+
+### The Case object - list item
+
+Used by `GET /api/cases`. No notes and never the full ID number.
+
+```json
+{
+  "id": 31,
+  "client": {
+    "id": 101,
+    "idNumberMasked": "*********0089",
+    "firstName": "Lerato",
+    "lastName": "Mokoena",
+    "consultant": { "id": 4, "consultantCode": "C004", "fullName": "Thandi Xundu", "status": "ACTIVE" }
+  },
+  "title": "Debt review application",
+  "status": "IN_PROGRESS",
+  "openedAt": "2026-11-02T08:15:00Z",
+  "closedAt": null,
+  "createdBy": { "id": 7, "email": "thandi@example.com", "consultantName": "Thandi Xundu" },
+  "version": 1,
+  "createdAt": "2026-11-02T08:15:00Z",
+  "updatedAt": "2026-11-02T10:02:00Z"
+}
+```
+
+- `client.consultant` is who the client is assigned to **now** (`null` if unassigned) - not who opened the case.
+- `createdBy.consultantName` is `null` for users without a consultant record (e.g. a manager).
+- `closedAt` is set exactly while the status is `CLOSED`.
+
+### The Case object - single case
+
+Used by `GET /api/cases/{id}`, `POST /api/cases` and `PATCH /api/cases/{id}`. The list item plus all notes, **newest first**:
+
+```json
+{
+  "id": 31,
+  "client": { "...": "as in the list item" },
+  "title": "Debt review application",
+  "status": "IN_PROGRESS",
+  "openedAt": "2026-11-02T08:15:00Z",
+  "closedAt": null,
+  "createdBy": { "id": 7, "email": "thandi@example.com", "consultantName": "Thandi Xundu" },
+  "version": 1,
+  "createdAt": "2026-11-02T08:15:00Z",
+  "updatedAt": "2026-11-02T10:02:00Z",
+  "notes": [
+    {
+      "id": 88,
+      "note": "Payslip received.",
+      "author": { "id": 7, "email": "thandi@example.com", "consultantName": "Thandi Xundu" },
+      "createdAt": "2026-11-02T10:01:00Z"
+    }
+  ]
+}
+```
+
+### GET /api/cases
+
+**Who:** everyone signed in (scoped)
+
+**Query parameters**
+| Name | Example | Meaning | CONSULTANT may use? |
+|---|---|---|---|
+| `clientId` | `101` | only this client's cases (e.g. the cases tab on a client page) | yes |
+| `consultantId` | `4` | only cases of clients currently assigned to this consultant | no - ignored |
+| `status` | `OPEN` | only cases with this status | yes |
+| `page`, `size` | `0`, `20` | paging | yes |
+
+Sorted by `openedAt`, newest first.
+
+**200 OK** - a page of Case **list items**. A CONSULTANT filtering by a client that is not theirs simply gets an empty page.
+
+**Errors:** `400` invalid parameters (e.g. an unknown `status`).
+
+### GET /api/cases/{id}
+
+**Who:** everyone signed in (scoped)
+
+**200 OK** - the **single case** object with all notes.
+
+Every successful call writes an audit entry `CASE_VIEWED` (who and when - never the content).
+
+**Errors:** `404` not found, or not visible to the caller.
+
+### POST /api/cases
+
+**Who:** everyone signed in, for a client they may see
+
+**Request**
+
+```json
+{ "clientId": 101, "title": "Debt review application" }
+```
+
+| Field      | Rules                          |
+| ---------- | ------------------------------ |
+| `clientId` | required                       |
+| `title`    | required, max 200, trimmed     |
+
+**201 Created** - the new **single case** object (status `OPEN`, no notes), with a `Location: /api/cases/{id}` header.
+
+**Errors:** `400` invalid fields, `404` (type `client:not-found`) client not found or not visible.
+
+### PATCH /api/cases/{id}
+
+**Who:** everyone signed in (scoped)
+
+**Request** - send **both** editable fields as they should be afterwards, plus `version`:
+
+```json
+{ "title": "Debt review application", "status": "CLOSED", "version": 1 }
+```
+
+| Field     | Rules                                |
+| --------- | ------------------------------------ |
+| `title`   | required, max 200, trimmed           |
+| `status`  | required, one of the statuses above  |
+| `version` | required                             |
+
+**200 OK** - the updated **single case** object.
+
+**Rules**
+
+- Any status can be changed to any other. Closing sets `closedAt`; reopening (`CLOSED` to `OPEN` or `IN_PROGRESS`) clears it.
+- The client cannot be changed. To move a case to another consultant, transfer the client.
+- An audit entry `CASE_UPDATED` is written with the names of the fields that changed and, for a status change, the old and new status. Nothing changed, no entry.
+
+**Errors:** `400` invalid fields or unknown status, `404` not found or not visible, `409` stale version.
+
+### POST /api/cases/{id}/notes
+
+**Who:** everyone signed in (scoped)
+
+**Request**
+
+```json
+{ "note": "Called the client, documents to follow." }
+```
+
+| Field  | Rules                        |
+| ------ | ---------------------------- |
+| `note` | required, max 4000, trimmed  |
+
+**201 Created** - the new **Note** object (as in `notes` above). The author is the signed-in user.
+
+**Rules**
+
+- A `CLOSED` case takes no new notes: reopen it first.
+- Notes cannot be edited or deleted - there is no endpoint, and the database refuses.
+- An audit entry `CASE_NOTE_ADDED` is written with the note's id, never its text.
+
+**Errors:** `400` invalid fields, `404` case not found or not visible, `409` (type `case:closed`) the case is closed.
+
+---
+
+## 10. Open questions
 
 - **Correcting ID numbers:** can consultants correct a client's ID number, or only managers/admins? (SRS 15) - not editable for now.
 - **Bulk transfer limit:** draft says 500 clients per transfer (SRS 2) - to confirm.
@@ -959,3 +1140,5 @@ Sorted newest first.
 - **Manager scope:** all clients for now; department-level scope if departments are confirmed (SRS 4).
 - **Password reset (FR-01):** needs email sending (future). Until then an admin resets passwords.
 - **Unassigning clients:** `UNASSIGN` exists in the history table, but there is no endpoint to unassign a client yet. Needed?
+- **Case stages and fields (SRS 63):** cases have `OPEN` / `IN_PROGRESS` / `CLOSED` and a title for now. The business must define the real workflow stages, extra case fields, what a "credit record" holds, and any SLA targets.
+- **Reopening cases:** anyone who can see a case may reopen it for now. Should only managers be allowed to?

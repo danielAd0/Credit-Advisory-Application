@@ -174,7 +174,7 @@ public class ClientService {
     }
 
     /** MANAGER / ADMIN see every client; a CONSULTANT only their own. */
-    static boolean isVisibleTo(Client client, AppUserPrincipal caller) {
+    public static boolean isVisibleTo(Client client, AppUserPrincipal caller) {
         return ClientQueryService.seesAllClients(caller)
                 || (caller.consultantId() != null && client.isAssignedTo(caller.consultantId()));
     }
