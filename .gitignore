@@ -31,6 +31,7 @@ application-local.properties
 # More secrets - never commit
 application-*.properties
 !application-test.properties
+!application-prod.properties
 .env.*
 !.env.example
 *.pem
