@@ -123,6 +123,7 @@ Every successful change below writes one row to `audit_logs` in the **same trans
 | `USER_UNLOCKED` | user | - |
 | `PASSWORD_CHANGED` | user (the user themselves) | - |
 | `ACCOUNT_LOCKED` | user | `lockedUntil` (no actor: nobody is signed in) |
+| `FIRST_ADMIN_CREATED` | user | `email` (no actor: created at start-up on a new server, see README "Running in production") |
 | `SIGN_IN_RATE_LIMITED` | - | `address`, `failures`, `window` (never the emails tried) |
 | `CLIENT_CREATED` | client | `consultantId` (or `null` if unassigned) |
 | `CLIENT_VIEWED` | client | - (every time the full ID number is returned by `GET /api/clients/{id}`) |

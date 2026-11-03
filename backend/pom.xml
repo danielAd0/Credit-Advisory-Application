@@ -84,6 +84,23 @@
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
+				<configuration>
+					<!-- .\mvnw.cmd spring-boot:run uses the local profile. The packaged jar has
+					     NO default profile: a server must set SPRING_PROFILES_ACTIVE=prod. -->
+					<profiles>
+						<profile>local</profile>
+					</profiles>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-jar-plugin</artifactId>
+				<configuration>
+					<!-- Your own passwords and ID-number keys must never end up inside a built jar. -->
+					<excludes>
+						<exclude>**/application-local.properties</exclude>
+					</excludes>
+				</configuration>
 			</plugin>
 		</plugins>
 	</build>
