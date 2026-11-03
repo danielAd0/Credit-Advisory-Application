@@ -86,6 +86,41 @@ class DashboardApiTest extends ApiTestBase {
 
         assertThat(summary.text("$.scope")).isEqualTo("OWN");
         assertThat(summary.number("$.totalClients")).isZero();
+        assertThat(summary.number("$.cases.open")).isZero();
+    }
+
+    /**
+     * A case on the client with this last name, inserted directly (clients come
+     * from createData).
+     */
+    private void insertCase(String clientLastName, String status) {
+        long clientId = jdbc.queryForObject("select id from clients where last_name = ?", Long.class,
+                clientLastName);
+        // now() is the same for opened_at and closed_at in one statement, so closed_at
+        // >= opened_at.
+        jdbc.update("""
+                insert into credit_cases (client_id, title, status, closed_at, created_by_user_id)
+                values (?, 'Test case', ?, case when ?::text = 'CLOSED' then now() end, ?)
+                """, clientId, status, status, adminId);
+    }
+
+    @Test
+    void casesAreCountedPerStatusAndScopedLikeClients() {
+        insertCase("Alpha", "OPEN"); // Thandi
+        insertCase("Bravo", "IN_PROGRESS"); // Thandi
+        insertCase("Charlie", "CLOSED"); // Thandi
+        insertCase("Delta", "OPEN"); // Sipho
+        insertCase("Golf", "OPEN"); // unassigned
+
+        ApiClient.Response all = signIn("manager@test.local").get("/api/dashboard/summary");
+        assertThat(all.number("$.cases.open")).isEqualTo(3);
+        assertThat(all.number("$.cases.inProgress")).isEqualTo(1);
+        assertThat(all.number("$.cases.closed")).isEqualTo(1);
+
+        ApiClient.Response own = signIn("thandi@test.local").get("/api/dashboard/summary");
+        assertThat(own.number("$.cases.open")).isEqualTo(1);
+        assertThat(own.number("$.cases.inProgress")).isEqualTo(1);
+        assertThat(own.number("$.cases.closed")).isEqualTo(1);
     }
 
     @Test

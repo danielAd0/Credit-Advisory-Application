@@ -869,7 +869,8 @@ No body. Clears the failed sign-in count and any lockout.
   "totalClients": 1250,
   "unassignedClients": 12,
   "clientsNeedingHandover": 42,
-  "consultants": { "active": 18, "inactive": 3, "suspended": 1 }
+  "consultants": { "active": 18, "inactive": 3, "suspended": 1 },
+  "cases": { "open": 64, "inProgress": 31, "closed": 410 }
 }
 ```
 
@@ -881,7 +882,8 @@ No body. Clears the failed sign-in count and any lockout.
   "totalClients": 87,
   "unassignedClients": null,
   "clientsNeedingHandover": null,
-  "consultants": null
+  "consultants": null,
+  "cases": { "open": 5, "inProgress": 3, "closed": 22 }
 }
 ```
 
@@ -892,8 +894,9 @@ No body. Clears the failed sign-in count and any lockout.
 | `unassignedClients` | clients with no consultant. List them with `GET /api/clients?unassigned=true` |
 | `clientsNeedingHandover` | clients still assigned to an INACTIVE or SUSPENDED consultant - the manager follow-up queue (SRS 7). List them with `GET /api/clients?consultantStatus=INACTIVE` and `...=SUSPENDED` |
 | `consultants` | how many consultants have each status |
+| `cases` | credit cases per status (section 9): all cases, or for a CONSULTANT the cases of their own clients (all `0` if their login is not linked to a consultant). List them with `GET /api/cases?status=OPEN` |
 
-Counts only - no names or ID numbers.
+Counts only - no names, ID numbers or case content. A case counts for the consultant the client is assigned to **now**, so after a transfer it moves with the client.
 
 **Errors:** `401` if not signed in.
 

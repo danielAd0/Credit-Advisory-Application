@@ -1,6 +1,7 @@
 package za.co.mafori.creditadvisory.creditcase;
 
 import java.util.Optional;
+import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -39,4 +40,15 @@ public interface CreditCaseRepository extends JpaRepository<CreditCase, Long> {
             @Param("clientId") Long clientId,
             @Param("status") CaseStatus status,
             Pageable pageable);
+
+    /**
+     * Dashboard: [status, count] pairs. consultantId null = every case; otherwise
+     * only cases of clients currently assigned to that consultant.
+     */
+    @Query("""
+            select cc.status, count(cc) from CreditCase cc join cc.client c left join c.currentConsultant con
+            where (:consultantId is null or con.id = :consultantId)
+            group by cc.status
+            """)
+    List<Object[]> countByStatus(@Param("consultantId") Long consultantId);
 }
