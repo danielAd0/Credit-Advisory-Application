@@ -23,7 +23,12 @@ export interface UserAccount {
   email: string;
   enabled: boolean;
   roles: Role[];
-  consultant: { id: number; consultantCode: string; fullName: string; status: ConsultantStatus } | null;
+  consultant: {
+    id: number;
+    consultantCode: string;
+    fullName: string;
+    status: ConsultantStatus;
+  } | null;
   locked: boolean;
   lockedUntil: string | null;
   lastLoginAt: string | null;
@@ -95,12 +100,17 @@ export const createConsultantAccount = (input: {
 }) => api<ConsultantAccount>('/api/consultant-accounts', json('POST', input));
 
 /** GET /api/consultants (MANAGER, ADMIN). */
-export const listConsultants = (params: { search?: string; status?: ConsultantStatus; page?: number; size?: number } = {}) =>
-  api<PageResponse<Consultant>>(`/api/consultants${query(params)}`);
+export const listConsultants = (
+  params: { search?: string; status?: ConsultantStatus; page?: number; size?: number } = {},
+) => api<PageResponse<Consultant>>(`/api/consultants${query(params)}`);
 
 /** PATCH /api/consultants/{id}/status (ADMIN). */
-export const changeConsultantStatus = (id: number, status: ConsultantStatus, reason: string, version: number) =>
-  api<Consultant>(`/api/consultants/${id}/status`, json('PATCH', { status, reason, version }));
+export const changeConsultantStatus = (
+  id: number,
+  status: ConsultantStatus,
+  reason: string,
+  version: number,
+) => api<Consultant>(`/api/consultants/${id}/status`, json('PATCH', { status, reason, version }));
 
 /** GET /api/users (ADMIN) - find a consultant's login, e.g. to reset the password. */
 export const listUsers = (params: { search?: string; page?: number; size?: number } = {}) =>
@@ -112,8 +122,9 @@ export const resetPassword = (userId: number, temporaryPassword: string) =>
 
 // ---------- products ----------
 
-export const listProducts = (params: { search?: string; active?: boolean; page?: number; size?: number } = {}) =>
-  api<PageResponse<Product>>(`/api/products${query(params)}`);
+export const listProducts = (
+  params: { search?: string; active?: boolean; page?: number; size?: number } = {},
+) => api<PageResponse<Product>>(`/api/products${query(params)}`);
 
 export const createProduct = (input: {
   code: string;
@@ -142,11 +153,20 @@ export const setProductActive = (id: number, active: boolean, version: number) =
 // ---------- employers ----------
 
 export const listEmployers = (
-  params: { search?: string; active?: boolean; employerType?: string; page?: number; size?: number } = {},
+  params: {
+    search?: string;
+    active?: boolean;
+    employerType?: string;
+    page?: number;
+    size?: number;
+  } = {},
 ) => api<PageResponse<Employer>>(`/api/employers${query(params)}`);
 
-export const createEmployer = (input: { name: string; company?: string | null; employerType?: string | null }) =>
-  api<Employer>('/api/employers', json('POST', input));
+export const createEmployer = (input: {
+  name: string;
+  company?: string | null;
+  employerType?: string | null;
+}) => api<Employer>('/api/employers', json('POST', input));
 
 export const updateEmployer = (
   id: number,
@@ -159,15 +179,24 @@ export const setEmployerActive = (id: number, active: boolean, version: number) 
 // ---------- client assignment ----------
 
 /** GET /api/clients?unassigned=true (MANAGER, ADMIN). */
-export const listUnassignedClients = (params: { search?: string; page?: number; size?: number } = {}) =>
-  api<PageResponse<ClientSummary>>(`/api/clients${query({ ...params, unassigned: true })}`);
+export const listUnassignedClients = (
+  params: { search?: string; page?: number; size?: number } = {},
+) => api<PageResponse<ClientSummary>>(`/api/clients${query({ ...params, unassigned: true })}`);
 
 /** POST /api/client-assignments - give unassigned clients to an ACTIVE consultant (MANAGER, ADMIN). */
 export const assignClients = (consultantId: number, clientIds: number[], reason: string) =>
-  api<AssignClientsResult>('/api/client-assignments', json('POST', { consultantId, clientIds, reason }));
+  api<AssignClientsResult>(
+    '/api/client-assignments',
+    json('POST', { consultantId, clientIds, reason }),
+  );
 
 /** POST /api/client-transfers - move clients that already have a consultant (MANAGER, ADMIN). */
-export const transferClients = (fromConsultantId: number, toConsultantId: number, clientIds: number[], reason: string) =>
+export const transferClients = (
+  fromConsultantId: number,
+  toConsultantId: number,
+  clientIds: number[],
+  reason: string,
+) =>
   api<{ batchId: string | null; transferredCount: number }>(
     '/api/client-transfers',
     json('POST', { fromConsultantId, toConsultantId, clientIds, reason }),

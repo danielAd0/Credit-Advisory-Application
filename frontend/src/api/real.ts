@@ -2,6 +2,10 @@ import { assignClients, transferClients } from './admin';
 import { api, fetchSession, signIn, signOut } from './http';
 import type {
   AssignmentEntry,
+  CaseDetail,
+  CaseListItem,
+  ChangePasswordRequest,
+  DashboardSummary,
   ClientDetail,
   ClientFilter,
   ClientSummary,
@@ -19,18 +23,18 @@ export const getSession = fetchSession;
 export const login = signIn;
 export const logout = signOut;
 
-/** GET /api/clients (contract section 4). Returns the first page's items. */
-export function listClientsBy(filter: ClientFilter): Promise<ClientSummary[]> {
-  const q = new URLSearchParams({ size: '100' });
+/** GET /api/clients (contract section 4): one page, 0-based. */
+export function listClientsPage(
+  filter: ClientFilter,
+  page: number,
+  size = 25,
+): Promise<PageResponse<ClientSummary>> {
+  const q = new URLSearchParams({ page: String(page), size: String(size) });
   if (filter.search) q.set('search', filter.search);
   if (filter.consultantId !== undefined) q.set('consultantId', String(filter.consultantId));
   if (filter.unassigned) q.set('unassigned', 'true');
-  return api<PageResponse<ClientSummary>>(`/api/clients?${q.toString()}`).then(
-    (page) => page.items,
-  );
+  return api<PageResponse<ClientSummary>>(`/api/clients?${q.toString()}`);
 }
-
-export const listClients = (search: string) => listClientsBy({ search });
 
 /** GET /api/consultants (contract section 3). Returns the first page's items. */
 export const listConsultants = () =>
@@ -111,3 +115,30 @@ export function previewImport(file: File): Promise<ImportPreview> {
 
 export const confirmImport = (id: string) =>
   api<ImportResult>(`/api/imports/${encodeURIComponent(id)}/confirm`, { method: 'POST' });
+
+/** GET /api/dashboard/summary (contract section 7). */
+export const getDashboardSummary = () => api<DashboardSummary>('/api/dashboard/summary');
+
+/** POST /api/auth/change-password (contract section 2). 204 on success. */
+export const changePassword = (r: ChangePasswordRequest) =>
+  api<void>('/api/auth/change-password', { method: 'POST', body: JSON.stringify(r) });
+
+// ---------- Credit cases (contract section 9) ----------
+
+/** GET /api/cases?clientId= : the cases tab on a client page. */
+export const listCases = (clientId: number) =>
+  api<PageResponse<CaseListItem>>(`/api/cases?clientId=${clientId}&size=100`).then((p) => p.items);
+
+export const getCase = (id: number) => api<CaseDetail>(`/api/cases/${id}`);
+
+export const createCase = (clientId: number, title: string) =>
+  api<CaseDetail>('/api/cases', { method: 'POST', body: JSON.stringify({ clientId, title }) });
+
+export const updateCase = (id: number, u: { title: string; status: string; version: number }) =>
+  api<CaseDetail>(`/api/cases/${id}`, { method: 'PATCH', body: JSON.stringify(u) });
+
+export const addCaseNote = (id: number, note: string) =>
+  api<CaseDetail['notes'][number]>(`/api/cases/${id}/notes`, {
+    method: 'POST',
+    body: JSON.stringify({ note }),
+  });

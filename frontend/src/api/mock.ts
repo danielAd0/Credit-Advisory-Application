@@ -1,6 +1,12 @@
-import { ApiError } from './http';
+import { ApiError, STALE_VERSION } from './http';
 import type {
   AssignmentEntry,
+  CaseDetail,
+  CaseListItem,
+  CaseNote,
+  ChangePasswordRequest,
+  DashboardSummary,
+  PageResponse,
   ClientDetail,
   ClientFilter,
   ClientSummary,
@@ -86,10 +92,19 @@ const assignments = new Map<number, AssignmentEntry[]>();
 const KEY = 'mockUser';
 const who = () => sessionStorage.getItem(KEY) ?? 'unknown';
 
+/** Sign in with an email that starts with "new" to see the forced "choose your password" screen. */
+const MUST_CHANGE = 'mockMustChange';
+
 function mockSession(email: string): Session {
   const role = (import.meta.env.VITE_MOCK_ROLE as Role | undefined) ?? 'MANAGER';
   const mine = role === 'CONSULTANT' ? ref(consultants[0]) : null;
-  return { id: 1, email, roles: [role], consultant: mine };
+  return {
+    id: 1,
+    email,
+    roles: [role],
+    consultant: mine,
+    mustChangePassword: sessionStorage.getItem(MUST_CHANGE) === 'yes',
+  };
 }
 
 export async function getSession(): Promise<Session | null> {
@@ -102,25 +117,47 @@ export async function login(email: string, password: string): Promise<Session> {
   await delay(600);
   if (!email || !password || password === 'wrong') throw new ApiError(401, 'Sign-in failed.');
   sessionStorage.setItem(KEY, email);
+  if (email.toLowerCase().startsWith('new')) sessionStorage.setItem(MUST_CHANGE, 'yes');
   return mockSession(email);
+}
+
+export async function changePassword(r: ChangePasswordRequest): Promise<void> {
+  await delay(600);
+  if (r.currentPassword === 'wrong') {
+    throw new ApiError(400, 'Your current password is not correct.', {
+      type: 'urn:credit-advisory:auth:wrong-current-password',
+      detail: 'Your current password is not correct.',
+    });
+  }
+  sessionStorage.removeItem(MUST_CHANGE);
 }
 
 export async function logout(): Promise<void> {
   sessionStorage.removeItem(KEY);
+  sessionStorage.removeItem(MUST_CHANGE);
 }
 
-export async function listClientsBy(filter: ClientFilter): Promise<ClientSummary[]> {
+export async function listClientsPage(
+  filter: ClientFilter,
+  page: number,
+  size = 25,
+): Promise<PageResponse<ClientSummary>> {
   await delay();
   const q = (filter.search ?? '').trim().toLowerCase();
-  return clients.filter((c) => {
+  const all = clients.filter((c) => {
     if (q && !`${c.firstName} ${c.lastName}`.toLowerCase().includes(q)) return false;
     if (filter.unassigned && c.consultant) return false;
     if (filter.consultantId !== undefined && c.consultant?.id !== filter.consultantId) return false;
     return true;
   });
+  return {
+    items: all.slice(page * size, page * size + size),
+    page,
+    size,
+    totalItems: all.length,
+    totalPages: Math.max(1, Math.ceil(all.length / size)),
+  };
 }
-
-export const listClients = (search: string) => listClientsBy({ search });
 
 export async function listConsultants(): Promise<ConsultantSummary[]> {
   await delay();
@@ -173,7 +210,7 @@ export async function updateClient(id: number, u: ClientUpdate): Promise<ClientS
   await delay(500);
   const c = clients.find((k) => k.id === id);
   if (!c) throw new ApiError(404, 'Client not found.');
-  if (u.version !== c.version) throw new ApiError(409, 'Stale version.');
+  if (u.version !== c.version) throw new ApiError(409, 'Stale version.', { type: STALE_VERSION });
   if (u.idNumber) {
     const masked = `*********${u.idNumber.slice(-4)}`;
     if (clients.some((k) => k.id !== id && k.idNumberMasked === masked)) {
@@ -316,4 +353,171 @@ export async function confirmImport(id: string): Promise<ImportResult> {
   await delay(1200);
   if (id !== DEMO_IMPORT_ID) throw new ApiError(404, 'Unknown import.');
   return { imported: 102, unchanged: 9, skipped: 9 };
+}
+
+export async function getDashboardSummary(): Promise<DashboardSummary> {
+  await delay(300);
+  const role = (import.meta.env.VITE_MOCK_ROLE as Role | undefined) ?? 'MANAGER';
+  const count = (status: string) => cases.filter((c) => c.status === status).length;
+  const caseCounts = {
+    open: count('OPEN'),
+    inProgress: count('IN_PROGRESS'),
+    closed: count('CLOSED'),
+  };
+  if (role === 'CONSULTANT') {
+    return {
+      scope: 'OWN',
+      totalClients: clients.filter((c) => c.consultant?.id === 1).length,
+      unassignedClients: null,
+      clientsNeedingHandover: null,
+      consultants: null,
+      cases: caseCounts,
+    };
+  }
+  const by = (status: string) => consultants.filter((c) => c.status === status).length;
+  return {
+    scope: 'ALL',
+    totalClients: clients.length,
+    unassignedClients: clients.filter((c) => !c.consultant).length,
+    clientsNeedingHandover: clients.filter((c) => c.consultant && c.consultant.status !== 'ACTIVE')
+      .length,
+    consultants: { active: by('ACTIVE'), inactive: by('INACTIVE'), suspended: by('SUSPENDED') },
+    cases: caseCounts,
+  };
+}
+
+// ---------- Credit cases (invented) ----------
+const caseUser = () => ({ id: 1, email: who(), consultantName: null });
+
+const cases: CaseDetail[] = [
+  {
+    id: 1,
+    client: {
+      id: 1,
+      idNumberMasked: clients[0].idNumberMasked,
+      firstName: clients[0].firstName,
+      lastName: clients[0].lastName,
+      consultant: clients[0].consultant,
+    },
+    title: 'Debt review application',
+    status: 'IN_PROGRESS',
+    openedAt: when(21),
+    closedAt: null,
+    createdBy: { id: 1, email: 'consultant@example.com', consultantName: 'Boitumelo Khumalo' },
+    version: 1,
+    createdAt: when(21),
+    updatedAt: when(22),
+    notes: [
+      {
+        id: 1,
+        note: 'Payslip received.',
+        author: { id: 1, email: 'consultant@example.com', consultantName: 'Boitumelo Khumalo' },
+        createdAt: when(22),
+      },
+    ],
+  },
+  {
+    id: 2,
+    client: {
+      id: 1,
+      idNumberMasked: clients[0].idNumberMasked,
+      firstName: clients[0].firstName,
+      lastName: clients[0].lastName,
+      consultant: clients[0].consultant,
+    },
+    title: 'Credit report query',
+    status: 'CLOSED',
+    openedAt: when(5),
+    closedAt: when(9),
+    createdBy: { id: 1, email: 'consultant@example.com', consultantName: 'Boitumelo Khumalo' },
+    version: 2,
+    createdAt: when(5),
+    updatedAt: when(9),
+    notes: [],
+  },
+];
+
+let nextCaseId = 3;
+let nextNoteId = 2;
+
+const asItem = (c: CaseDetail): CaseListItem => {
+  const { notes: _notes, ...item } = c;
+  return item;
+};
+
+export async function listCases(clientId: number): Promise<CaseListItem[]> {
+  await delay(300);
+  return cases.filter((c) => c.client.id === clientId).map(asItem);
+}
+
+export async function getCase(id: number): Promise<CaseDetail> {
+  await delay(250);
+  const c = cases.find((k) => k.id === id);
+  if (!c) throw new ApiError(404, 'Case not found.');
+  return { ...c, notes: [...c.notes] };
+}
+
+export async function createCase(clientId: number, title: string): Promise<CaseDetail> {
+  await delay(400);
+  const client = clients.find((k) => k.id === clientId);
+  if (!client) throw new ApiError(404, 'Client not found.');
+  if (!title.trim()) throw new ApiError(400, 'Title required.');
+  const now = new Date().toISOString();
+  const created: CaseDetail = {
+    id: nextCaseId++,
+    client: {
+      id: client.id,
+      idNumberMasked: client.idNumberMasked,
+      firstName: client.firstName,
+      lastName: client.lastName,
+      consultant: client.consultant,
+    },
+    title: title.trim(),
+    status: 'OPEN',
+    openedAt: now,
+    closedAt: null,
+    createdBy: caseUser(),
+    version: 0,
+    createdAt: now,
+    updatedAt: now,
+    notes: [],
+  };
+  cases.unshift(created);
+  return { ...created };
+}
+
+export async function updateCase(
+  id: number,
+  u: { title: string; status: string; version: number },
+): Promise<CaseDetail> {
+  await delay(400);
+  const c = cases.find((k) => k.id === id);
+  if (!c) throw new ApiError(404, 'Case not found.');
+  if (u.version !== c.version) throw new ApiError(409, 'Stale version.', { type: STALE_VERSION });
+  c.title = u.title.trim();
+  c.status = u.status;
+  c.closedAt = u.status === 'CLOSED' ? new Date().toISOString() : null;
+  c.version += 1;
+  c.updatedAt = new Date().toISOString();
+  return { ...c, notes: [...c.notes] };
+}
+
+export async function addCaseNote(id: number, note: string): Promise<CaseNote> {
+  await delay(400);
+  const c = cases.find((k) => k.id === id);
+  if (!c) throw new ApiError(404, 'Case not found.');
+  if (c.status === 'CLOSED') {
+    throw new ApiError(409, 'This case is closed. Reopen it to add a note.', {
+      type: 'urn:credit-advisory:case:closed',
+      detail: 'This case is closed. Reopen it to add a note.',
+    });
+  }
+  const created: CaseNote = {
+    id: nextNoteId++,
+    note: note.trim(),
+    author: caseUser(),
+    createdAt: new Date().toISOString(),
+  };
+  c.notes.unshift(created);
+  return created;
 }

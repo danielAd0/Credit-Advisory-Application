@@ -5,6 +5,7 @@ const useMock = import.meta.env.VITE_USE_MOCK === 'true';
 
 export const data = useMock ? mock : real;
 export { ApiError } from './http';
+export { detailOf, isStale } from './errors';
 
 /**
  * Screens the backend does not support yet. They work against the mock data so the design can be
@@ -21,6 +22,12 @@ export const features = {
 
 export type {
   AssignmentChangeType,
+  CaseDetail,
+  CaseListItem,
+  CaseNote,
+  CaseStatus,
+  ChangePasswordRequest,
+  DashboardSummary,
   AssignmentEntry,
   ClientDetail,
   ClientFilter,

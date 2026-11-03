@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ApiError, data, type AssignmentEntry, type ClientDetail } from '../api';
 import { clientName } from '../api/names';
+import ClientCases from '../components/ClientCases';
 import { hasAnyRole, useSession } from '../auth/useAuth';
 import './clientdetail.css';
 
@@ -157,6 +158,8 @@ export default function ClientDetailPage() {
           </dl>
         </section>
       </div>
+
+      <ClientCases clientId={c.id} />
 
       {isManager && (
         <section className="cd-card cd-history" aria-labelledby="cd-hist">

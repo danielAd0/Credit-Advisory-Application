@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ApiError, data, features, type ClientSummary } from '../api';
+import { ApiError, data, detailOf, features, type ClientSummary, type PageResponse } from '../api';
 import { clientName } from '../api/names';
+import Pager from '../components/Pager';
 import { hasAnyRole, useSession } from '../auth/useAuth';
 import './clientsactions.css';
 
@@ -9,12 +10,11 @@ export default function ClientsPage() {
   const session = useSession();
   const isManager = hasAnyRole(session, ['ADMIN', 'MANAGER']);
   const [query, setQuery] = useState('');
+  const [page, setPage] = useState(0);
   const [version, setVersion] = useState(0); // bumped after a removal so the list reloads
-  const [result, setResult] = useState<{
-    query: string;
-    version: number;
-    rows: ClientSummary[];
-  } | null>(null);
+  const [result, setResult] = useState<{ key: string; data: PageResponse<ClientSummary> } | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
 
   const [target, setTarget] = useState<ClientSummary | null>(null);
@@ -24,15 +24,17 @@ export default function ClientsPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
 
+  const key = `${query}|${page}|${version}`;
+
   // Wait 250 ms after typing stops, and ignore answers that arrive late.
   useEffect(() => {
     let current = true;
     const t = setTimeout(() => {
       data
-        .listClients(query)
+        .listClientsPage({ search: query }, page)
         .then((r) => {
           if (current) {
-            setResult({ query, version, rows: r });
+            setResult({ key, data: r });
             setError(null);
           }
         })
@@ -44,7 +46,7 @@ export default function ClientsPage() {
       current = false;
       clearTimeout(t);
     };
-  }, [query, version]);
+  }, [query, page, key]);
 
   // Open and close the native dialog to match what is selected for removal.
   useEffect(() => {
@@ -54,7 +56,8 @@ export default function ClientsPage() {
     if (!target && d.open) d.close();
   }, [target]);
 
-  const rows = result && result.query === query && result.version === version ? result.rows : null;
+  const paged = result && result.key === key ? result.data : null;
+  const rows = paged ? paged.items : null;
 
   function openRemove(c: ClientSummary) {
     setTarget(c);
@@ -70,14 +73,16 @@ export default function ClientsPage() {
       await data.removeClient(target.id, reason.trim());
       setNotice(`${clientName(target)} was removed.`);
       setTarget(null);
+      setPage(0);
       setVersion((v) => v + 1);
     } catch (err) {
       setRemoveError(
-        err instanceof ApiError && err.status === 403
-          ? 'You do not have permission to remove clients.'
-          : err instanceof ApiError && err.status === 409
-            ? 'This client has open cases and cannot be removed yet.'
-            : 'Could not remove the client. Nothing was changed.',
+        detailOf(err) ??
+          (err instanceof ApiError && err.status === 403
+            ? 'You do not have permission to remove clients.'
+            : err instanceof ApiError && err.status === 409
+              ? 'This client has open cases and cannot be removed yet.'
+              : 'Could not remove the client. Nothing was changed.'),
       );
     } finally {
       setRemoving(false);
@@ -92,7 +97,10 @@ export default function ClientsPage() {
           type="search"
           placeholder="Search by name"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setPage(0);
+          }}
           aria-label="Search clients"
           autoComplete="off"
         />
@@ -166,6 +174,15 @@ export default function ClientsPage() {
             </tbody>
           </table>
         </div>
+      )}
+      {paged && (
+        <Pager
+          page={paged.page}
+          size={paged.size}
+          totalItems={paged.totalItems}
+          totalPages={paged.totalPages}
+          onPage={setPage}
+        />
       )}
 
       <dialog

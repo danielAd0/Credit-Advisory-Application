@@ -1,0 +1,136 @@
+/* Cases tab on the client page. Classes start with "cs-". */
+.cs {
+  margin-top: 1rem;
+}
+.cs-new {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+.cs-new input {
+  flex: 1 1 18rem;
+  height: 2.75rem;
+  padding: 0 0.85rem;
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.cs-new input:focus,
+.cs-panel textarea:focus,
+.cs-status select:focus {
+  outline: none;
+  border-color: var(--orange);
+  box-shadow: 0 0 0 3px rgba(255, 90, 0, 0.25);
+}
+.cs-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.cs-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.cs-list > li + li {
+  border-top: 1px solid var(--line);
+}
+.cs-row {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: center;
+  padding: 0.85rem 1rem;
+  font: inherit;
+  text-align: left;
+  color: var(--ink);
+  background: var(--surface);
+  border: 0;
+  cursor: pointer;
+}
+.cs-row:hover {
+  background: #fff6f0;
+}
+.cs-title {
+  flex: 1 1 14rem;
+  font-weight: 600;
+}
+.badge.closed {
+  background: #e8e8e8;
+  color: #444;
+}
+.cs-panel {
+  padding: 1rem;
+  background: #fafafa;
+  border-top: 1px solid var(--line);
+}
+.cs-panel h4 {
+  margin: 1rem 0 0.25rem;
+}
+.cs-hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+}
+.cs-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+.cs-status label {
+  font-weight: 600;
+}
+.cs-status select {
+  height: 2.5rem;
+  padding: 0 0.75rem;
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.cs-note-form {
+  display: grid;
+  gap: 0.5rem;
+  justify-items: start;
+  margin-bottom: 1rem;
+}
+.cs-panel textarea {
+  width: 100%;
+  padding: 0.65rem 0.85rem;
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-sizing: border-box;
+  resize: vertical;
+}
+.cs-notes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+.cs-notes li {
+  padding: 0.75rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.cs-notes p {
+  margin: 0 0 0.25rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

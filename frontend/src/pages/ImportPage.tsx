@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'r
 import {
   ApiError,
   data,
+  detailOf,
   type ImportIssueKind,
   type ImportPreview,
   type ImportResult,
@@ -40,6 +41,8 @@ function checkFile(file: File): string | null {
 }
 
 function explain(err: unknown): string {
+  const detail = detailOf(err);
+  if (detail) return detail;
   if (err instanceof ApiError) {
     if (err.status === 413) return 'That file is too large for the server.';
     if (err.status === 400 || err.status === 415 || err.status === 422)

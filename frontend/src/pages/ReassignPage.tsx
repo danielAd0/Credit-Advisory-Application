@@ -2,11 +2,14 @@ import { useEffect, useState, type FormEvent } from 'react';
 import {
   ApiError,
   data,
+  detailOf,
   type ClientSummary,
   type ConsultantSummary,
   type MoveResult,
+  type PageResponse,
 } from '../api';
 import { clientName } from '../api/names';
+import Pager from '../components/Pager';
 import './reassign.css';
 
 /** "none" = the clients nobody has yet. Otherwise the id of the consultant who has them today. */
@@ -14,6 +17,11 @@ const NONE = 'none';
 
 function explain(err: unknown): string {
   if (err instanceof ApiError) {
+    // A moved client (409) needs our own advice: the list is reloaded and they choose again.
+    if (err.status !== 409) {
+      const d = detailOf(err);
+      if (d) return d;
+    }
     if (err.status === 403) return 'You do not have permission to reassign clients.';
     if (err.status === 400)
       return 'Check the details. The reason is required and the two consultants must differ.';
@@ -30,7 +38,10 @@ export default function ReassignPage() {
   const [from, setFrom] = useState(NONE);
   const [query, setQuery] = useState('');
   const [version, setVersion] = useState(0); // bumped after a save so the list reloads
-  const [result, setResult] = useState<{ key: string; rows: ClientSummary[] } | null>(null);
+  const [page, setPage] = useState(0);
+  const [result, setResult] = useState<{ key: string; data: PageResponse<ClientSummary> } | null>(
+    null,
+  );
   const [loadError, setLoadError] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [toId, setToId] = useState('');
@@ -50,20 +61,23 @@ export default function ReassignPage() {
     };
   }, []);
 
-  const key = `${from}|${query}|${version}`;
+  const key = `${from}|${query}|${page}|${version}`;
 
   useEffect(() => {
     let current = true;
     const t = setTimeout(() => {
       data
-        .listClientsBy({
-          search: query,
-          unassigned: from === NONE ? true : undefined,
-          consultantId: from === NONE ? undefined : Number(from),
-        })
-        .then((rows) => {
+        .listClientsPage(
+          {
+            search: query,
+            unassigned: from === NONE ? true : undefined,
+            consultantId: from === NONE ? undefined : Number(from),
+          },
+          page,
+        )
+        .then((r) => {
           if (current) {
-            setResult({ key, rows });
+            setResult({ key, data: r });
             setLoadError(false);
           }
         })
@@ -73,15 +87,17 @@ export default function ReassignPage() {
       current = false;
       clearTimeout(t);
     };
-  }, [from, query, key]);
+  }, [from, query, page, key]);
 
-  const rows = result && result.key === key ? result.rows : null;
+  const paged = result && result.key === key ? result.data : null;
+  const rows = paged ? paged.items : null;
   const allShown = !!rows && rows.length > 0 && rows.every((c) => selected.has(c.id));
   const targets = consultants.filter((c) => c.status === 'ACTIVE' && String(c.id) !== from);
   const target = targets.find((c) => String(c.id) === toId);
 
   function changeFrom(value: string) {
     setFrom(value);
+    setPage(0);
     setSelected(new Set()); // a handover is always from one consultant, so start again
     setToId('');
     setDone(null);
@@ -173,7 +189,10 @@ export default function ReassignPage() {
           type="search"
           placeholder="Search by name"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setPage(0);
+          }}
           aria-label="Search clients"
           autoComplete="off"
         />
@@ -219,6 +238,15 @@ export default function ReassignPage() {
             </tbody>
           </table>
         </div>
+      )}
+      {paged && (
+        <Pager
+          page={paged.page}
+          size={paged.size}
+          totalItems={paged.totalItems}
+          totalPages={paged.totalPages}
+          onPage={setPage}
+        />
       )}
 
       <form className="ra-form" onSubmit={submit}>

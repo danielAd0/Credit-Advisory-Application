@@ -1,6 +1,6 @@
 import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ApiError, data, features } from '../api';
+import { ApiError, data, detailOf, features, isStale } from '../api';
 import { hasAnyRole, useSession } from '../auth/useAuth';
 import './addclient.css';
 
@@ -132,15 +132,18 @@ export default function EditClientPage() {
       navigate(`/clients/${id}`);
     } catch (err) {
       setFailure(
-        err instanceof ApiError && err.status === 403
-          ? 'You do not have permission to edit this client.'
-          : err instanceof ApiError && err.status === 404
-            ? 'This client no longer exists, or you do not have access to them.'
-            : err instanceof ApiError && err.status === 409
-              ? 'This client was changed by someone else, or that ID number belongs to another client. Go back, reopen the client and try again.'
-              : err instanceof ApiError && err.status === 400
-                ? 'The server rejected some of the details. Check the email and phone number.'
-                : 'Could not save the changes. Nothing was changed. Try again.',
+        isStale(err)
+          ? 'This client was changed by someone else. Go back, reopen the client and try again.'
+          : (detailOf(err) ??
+              (err instanceof ApiError && err.status === 403
+                ? 'You do not have permission to edit this client.'
+                : err instanceof ApiError && err.status === 404
+                  ? 'This client no longer exists, or you do not have access to them.'
+                  : err instanceof ApiError && err.status === 409
+                    ? 'This client was changed by someone else, or that ID number belongs to another client. Go back, reopen the client and try again.'
+                    : err instanceof ApiError && err.status === 400
+                      ? 'The server rejected some of the details. Check the email and phone number.'
+                      : 'Could not save the changes. Nothing was changed. Try again.')),
       );
       setSaving(false);
     }

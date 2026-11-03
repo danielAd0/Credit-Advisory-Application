@@ -1,6 +1,6 @@
 import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { ApiError, data, type ClientSummary, type ConsultantSummary } from '../api';
+import { ApiError, data, detailOf, type ClientSummary, type ConsultantSummary } from '../api';
 import { clientName } from '../api/names';
 import { hasAnyRole, useSession } from '../auth/useAuth';
 import './addclient.css';
@@ -39,6 +39,9 @@ function validate(v: Form): Errors {
 }
 
 function explain(err: unknown): string {
+  // The server says exactly what is wrong (invalid ID number, duplicate, ...) and its text is safe to show.
+  const detail = detailOf(err);
+  if (detail) return detail;
   if (err instanceof ApiError) {
     if (err.status === 409)
       return 'A client with that ID number already exists. Search for them on the Clients page instead.';

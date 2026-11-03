@@ -4,6 +4,7 @@ import { AuthProvider } from './auth/AuthContext';
 import RequireAuth from './auth/RequireAuth';
 import { RequireRole } from './auth/RequireRole';
 import Layout from './components/Layout';
+import ChangePasswordPage from './pages/ChangePasswordPage';
 import AddClientPage from './pages/AddClientPage';
 import ClientDetailPage from './pages/ClientDetailPage';
 import ClientsPage from './pages/ClientsPage';
@@ -23,6 +24,7 @@ export default function App() {
         <Routes>
           <Route path="login" element={<LoginPage />} />
           <Route element={<RequireAuth />}>
+            <Route path="change-password" element={<ChangePasswordPage />} />
             <Route element={<Layout />}>
               <Route index element={<Dashboard />} />
               <Route path="clients" element={<ClientsPage />} />

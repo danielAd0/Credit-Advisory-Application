@@ -305,3 +305,38 @@ tbody tr:hover {
   text-decoration: none;
   display: inline-block;
 }
+
+.topbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+.topbar-actions .btn {
+  text-decoration: none;
+  display: inline-block;
+}
+.card-note {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 1rem;
+}
+.pager-buttons {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

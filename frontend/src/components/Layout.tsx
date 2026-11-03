@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { Link, NavLink, Outlet } from 'react-router-dom';
 import { features, type Role } from '../api';
 import { hasAnyRole, useAuth, useSession } from '../auth/useAuth';
 
@@ -42,9 +42,14 @@ export default function Layout() {
             <strong>{session.email}</strong>
             <span className="role">{session.roles.map((r) => r.toLowerCase()).join(', ')}</span>
           </div>
-          <button className="btn ghost" onClick={() => void signOut()}>
-            Sign out
-          </button>
+          <div className="topbar-actions">
+            <Link className="btn ghost" to="/change-password">
+              Change password
+            </Link>
+            <button className="btn ghost" onClick={() => void signOut()}>
+              Sign out
+            </button>
+          </div>
         </header>
         <main className="content">
           <Outlet />

@@ -9,6 +9,8 @@ export interface Session {
   email: string;
   roles: Role[];
   consultant: { id: number; consultantCode: string; fullName: string } | null;
+  /** True after an admin set the password. Only the change-password screen works until it is false. */
+  mustChangePassword: boolean;
 }
 
 /** Every list endpoint returns one page (contract section 1). */
@@ -151,4 +153,62 @@ export interface ImportResult {
   imported: number;
   unchanged: number;
   skipped: number;
+}
+
+/** GET /api/dashboard/summary (contract section 7). Counts only. */
+export interface DashboardSummary {
+  /** ALL for managers and admins, OWN for a consultant. */
+  scope: 'ALL' | 'OWN';
+  totalClients: number;
+  unassignedClients: number | null;
+  clientsNeedingHandover: number | null;
+  consultants: { active: number; inactive: number; suspended: number } | null;
+  cases: { open: number; inProgress: number; closed: number };
+}
+
+// ---------- Credit cases (contract section 9) ----------
+
+/** OPEN, IN_PROGRESS or CLOSED today. More may be added later, so an unknown value is shown as plain text. */
+export type CaseStatus = string;
+
+export interface CaseUser {
+  id: number;
+  email: string;
+  consultantName: string | null;
+}
+
+export interface CaseListItem {
+  id: number;
+  client: {
+    id: number;
+    idNumberMasked: string;
+    firstName: string;
+    lastName: string;
+    consultant: ClientSummary['consultant'];
+  };
+  title: string;
+  status: CaseStatus;
+  openedAt: string;
+  closedAt: string | null;
+  createdBy: CaseUser;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CaseNote {
+  id: number;
+  note: string;
+  author: CaseUser;
+  createdAt: string;
+}
+
+/** Notes are newest first and can never be edited or deleted. */
+export interface CaseDetail extends CaseListItem {
+  notes: CaseNote[];
+}
+
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
 }
