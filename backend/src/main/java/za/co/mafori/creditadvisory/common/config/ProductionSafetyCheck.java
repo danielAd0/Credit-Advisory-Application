@@ -3,6 +3,7 @@ package za.co.mafori.creditadvisory.common.config;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import org.springframework.beans.factory.config.BeanFactoryPostProcessor;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.context.EnvironmentAware;
@@ -37,6 +38,8 @@ public class ProductionSafetyCheck implements BeanFactoryPostProcessor, Environm
             List.of("app.idnumber.lookup-key", "ID_NUMBER_LOOKUP_KEY"),
             List.of("app.idnumber.encryption-key", "ID_NUMBER_ENCRYPTION_KEY"));
 
+    private static final String POSTGRES_PREFIX = "jdbc:postgresql://";
+
     private Environment environment;
 
     @Override
@@ -69,8 +72,31 @@ public class ProductionSafetyCheck implements BeanFactoryPostProcessor, Environm
         }
 
         for (List<String> required : REQUIRED) {
-            if (read(environment, required.get(0)).isEmpty()) {
+            String value = read(environment, required.get(0));
+            if (value.isEmpty()) {
                 problems.add(required.get(0) + " is not set (environment variable " + required.get(1) + ")");
+            } else if (value.equalsIgnoreCase(required.get(1))) {
+                // e.g. spring.datasource.username=DB_USERNAME - the ${...} was left out.
+                problems.add(required.get(0) + " is the text " + required.get(1)
+                        + " instead of its value: write ${" + required.get(1) + "}");
+            }
+        }
+
+        String url = read(environment, "spring.datasource.url");
+        if (!url.isEmpty() && !url.equalsIgnoreCase("DB_URL")) {
+            // Never print the URL itself: it can contain a password.
+            if (!url.startsWith(POSTGRES_PREFIX)) {
+                problems.add("DB_URL must start with " + POSTGRES_PREFIX);
+            } else {
+                if (databaseName(url).endsWith("_test")) {
+                    problems.add("DB_URL points at a database whose name ends in _test: the automated tests"
+                            + " wipe those databases");
+                }
+                if (pointsAtThisMachine(url)
+                        && !"true".equalsIgnoreCase(read(environment, "app.safety.allow-local-database"))) {
+                    problems.add("DB_URL points at this machine (localhost). If the database really runs on"
+                            + " the same server, set ALLOW_LOCAL_DATABASE=true");
+                }
             }
         }
 
@@ -95,6 +121,43 @@ public class ProductionSafetyCheck implements BeanFactoryPostProcessor, Environm
             }
         }
         return problems;
+    }
+
+    /**
+     * "jdbc:postgresql://host:5432/credit_advisory?ssl=true" -> "credit_advisory".
+     */
+    static String databaseName(String url) {
+        String rest = url.substring(POSTGRES_PREFIX.length());
+        int slash = rest.indexOf('/');
+        if (slash < 0) {
+            return "";
+        }
+        String name = rest.substring(slash + 1);
+        int query = name.indexOf('?');
+        return (query < 0 ? name : name.substring(0, query)).toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * True if any host in the URL is this machine ("db1:5432,localhost:5432"
+     * counts).
+     */
+    static boolean pointsAtThisMachine(String url) {
+        String rest = url.substring(POSTGRES_PREFIX.length());
+        int slash = rest.indexOf('/');
+        String hosts = slash < 0 ? rest : rest.substring(0, slash);
+        for (String entry : hosts.split(",")) {
+            String host = entry.strip().toLowerCase(Locale.ROOT);
+            if (host.startsWith("[")) {
+                int end = host.indexOf(']');
+                host = end < 0 ? host : host.substring(1, end); // [::1]:5432 -> ::1
+            } else if (host.contains(":")) {
+                host = host.substring(0, host.indexOf(':')); // localhost:5432 -> localhost
+            }
+            if (host.isEmpty() || host.equals("localhost") || host.equals("::1") || host.startsWith("127.")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
