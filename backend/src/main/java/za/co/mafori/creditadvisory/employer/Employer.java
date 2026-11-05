@@ -22,10 +22,10 @@ public class Employer {
     @Column(name = "name", nullable = false, length = 200)
     private String name;
 
-    @Column(name = "company", nullable = false, length = 100)
+    @Column(name = "company", nullable = true, length = 100)
     private String company;
 
-    @Column(name = "employer_type", nullable = false, length = 40)
+    @Column(name = "employer_type", nullable = true, length = 40)
     private String employerType;
 
     @Column(name = "active", nullable = false)

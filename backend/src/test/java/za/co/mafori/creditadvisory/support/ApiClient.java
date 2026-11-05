@@ -91,9 +91,33 @@ public final class ApiClient {
         HttpRequest.BodyPublisher body = json == null
                 ? HttpRequest.BodyPublishers.noBody()
                 : HttpRequest.BodyPublishers.ofString(json);
+        return send(method, path, body, json == null ? null : "application/json");
+    }
+
+    /**
+     * POSTs one file as multipart/form-data (field "file"), e.g. an Excel upload.
+     * Extra
+     * form fields, such as weekStarting, go in the query string of {@code path}.
+     */
+    public Response upload(String path, String fileName, byte[] content) {
+        String boundary = "----credit-advisory-test-" + System.nanoTime();
+        byte[] head = ("--" + boundary + "\r\n"
+                + "Content-Disposition: form-data; name=\"file\"; filename=\"" + fileName + "\"\r\n"
+                + "Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\r\n\r\n")
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] tail = ("\r\n--" + boundary + "--\r\n").getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] body = new byte[head.length + content.length + tail.length];
+        System.arraycopy(head, 0, body, 0, head.length);
+        System.arraycopy(content, 0, body, head.length, content.length);
+        System.arraycopy(tail, 0, body, head.length + content.length, tail.length);
+        return send("POST", path, HttpRequest.BodyPublishers.ofByteArray(body),
+                "multipart/form-data; boundary=" + boundary);
+    }
+
+    private Response send(String method, String path, HttpRequest.BodyPublisher body, String contentType) {
         HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(baseUrl + path)).method(method, body);
-        if (json != null) {
-            request.header("Content-Type", "application/json");
+        if (contentType != null) {
+            request.header("Content-Type", contentType);
         }
         if (!cookies.isEmpty()) {
             request.header("Cookie", cookies.entrySet().stream()

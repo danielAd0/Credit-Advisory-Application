@@ -27,9 +27,10 @@ import za.co.mafori.creditadvisory.imports.excel.RawCell;
 import za.co.mafori.creditadvisory.imports.excel.RawSheet;
 import za.co.mafori.creditadvisory.imports.excel.RawWorkbook;
 
+@Component
 public class WeeklyRegisterParser {
 
-    private static final Set<String> REPORT_SHEETS = Set.of("REPORT", "BREAKDOWN","DASHBOARD");
+    private static final Set<String> REPORT_SHEETS = Set.of("REPORT", "BREAKDOWN", "DASHBOARD");
 
     private static final int HEADER_SEARCH_ROWS = 10;
 
@@ -84,7 +85,8 @@ public class WeeklyRegisterParser {
             RawSheet sheet = daySheets.get(day);
             if (sheet == null) {
                 issues.add(new ParseIssue(WARNING, IssueCodes.SHEET_MISSING_DAY, null, null, null,
-                        "There is no " + dayName(day) + " sheet. " + dayName(day) + " is imported as having no sales."));
+                        "There is no " + dayName(day) + " sheet. " + dayName(day)
+                                + " is imported as having no sales."));
                 continue;
             }
             new DayParser(sheet, day, date, dictionary, issues, rows, days).parse();
@@ -232,7 +234,10 @@ public class WeeklyRegisterParser {
             return null;
         }
 
-        /** @return false if the header has a duplicate field column (ambiguous: the sheet is not read) */
+        /**
+         * @return false if the header has a duplicate field column (ambiguous: the
+         *         sheet is not read)
+         */
         private boolean mapHeaders(int headerRow) {
             boolean ok = true;
             for (var entry : sheet.rows().get(headerRow).entrySet()) {
@@ -267,7 +272,8 @@ public class WeeklyRegisterParser {
                                         + ", which is deactivated. Its amounts are imported anyway."));
                     }
                 }
-                // Anything else is an unknown column: kept as extras if it has data (reportUnknownColumns).
+                // Anything else is an unknown column: kept as extras if it has data
+                // (reportUnknownColumns).
             }
             return ok;
         }
@@ -484,7 +490,6 @@ public class WeeklyRegisterParser {
             return amount(cells.get(column), columnLabels.get(column), essential, issues);
         }
 
-        
         private BigDecimal amount(RawCell cell, String header, boolean essential, RowIssues issues) {
             if (cell == null || cell.isBlankText()) {
                 return null;
@@ -500,7 +505,8 @@ public class WeeklyRegisterParser {
                     }
                     if (value.signum() != 0) {
                         issues.add(WARNING, IssueCodes.ROW_AMOUNT_WAS_TEXT, header,
-                                header + " was typed as text; read as " + value.setScale(2, RoundingMode.HALF_UP) + ".");
+                                header + " was typed as text; read as " + value.setScale(2, RoundingMode.HALF_UP)
+                                        + ".");
                     }
                 }
                 case ERROR -> {
@@ -591,7 +597,10 @@ public class WeeklyRegisterParser {
             }
         }
 
-        /** Design 2.2 / D3: one warning per day when the sheet's own formula differs from the product rule. */
+        /**
+         * Design 2.2 / D3: one warning per day when the sheet's own formula differs
+         * from the product rule.
+         */
         private void reportRuleDifferences(List<ParsedRow> rows) {
             long q = rows.stream().filter(ParsedRow::quotationDiffersFromRule).count();
             long b = rows.stream().filter(ParsedRow::bankedDiffersFromRule).count();
