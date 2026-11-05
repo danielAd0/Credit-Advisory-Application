@@ -23,6 +23,12 @@ class WeeklyImportApiTest extends ApiTestBase {
     private static final String PREVIEW = "/api/imports/weekly-register/preview";
 
     private final FakeWeeklyRegisterWorkbook.Expected expected = FakeWeeklyRegisterWorkbook.expected();
+
+    /**
+     * Built ONCE: POI writes the current time into every .xlsx, so two builds a
+     * second apart have different bytes (and a different digest).
+     */
+    private static final byte[] WORKBOOK = FakeWeeklyRegisterWorkbook.build();
     private long consultantOne;
     private ApiClient manager;
 
@@ -38,7 +44,7 @@ class WeeklyImportApiTest extends ApiTestBase {
     }
 
     private ApiClient.Response preview(ApiClient as) {
-        return as.upload(PREVIEW, FILE_NAME, FakeWeeklyRegisterWorkbook.build());
+        return as.upload(PREVIEW, FILE_NAME, WORKBOOK);
     }
 
     private ApiClient.Response confirm(ApiClient as, long id, String digest, String reason) {
