@@ -105,4 +105,60 @@ class ProductionSafetyCheckTest {
         // Without prod the check does not exist at all.
         runner.run(context -> assertThat(context).hasNotFailed().doesNotHaveBean(ProductionSafetyCheck.class));
     }
+
+    @Test
+    void placeholderNamesInsteadOfValuesAreRefused() {
+        MockEnvironment environment = goodProduction();
+        // What a file without the ${...} gives: the variable NAME as the value.
+        environment.setProperty("spring.datasource.url", "DB_URL");
+        environment.setProperty("spring.datasource.username", "DB_USERNAME");
+        environment.setProperty("spring.datasource.password", "DB_PASSWORD");
+
+        List<String> problems = ProductionSafetyCheck.problems(environment);
+
+        assertThat(problems).hasSize(3);
+        assertThat(problems).allMatch(p -> p.contains("instead of its value"));
+        assertThat(String.join(" ", problems)).contains("${DB_URL}", "${DB_USERNAME}", "${DB_PASSWORD}");
+    }
+
+    @Test
+    void theTestingCommitFromTuesdayCouldNotStartAServer() {
+        MockEnvironment environment = goodProduction();
+        // Exactly what commit 1cc8025 put in application-prod.properties.
+        environment.setProperty("spring.datasource.url", "jdbc:postgresql://localhost:5432/credit_advisory");
+        environment.setProperty("spring.datasource.username", "DB_USERNAME");
+        environment.setProperty("spring.datasource.password", "DB_PASSWORD");
+
+        assertThatThrownBy(() -> ProductionSafetyCheck.verify(environment))
+                .hasMessageContaining("localhost")
+                .hasMessageContaining("${DB_USERNAME}")
+                .hasMessageContaining("${DB_PASSWORD}");
+    }
+
+    @Test
+    void theDatabaseUrlMustBeARealPostgresServerThatIsNotATestDatabase() {
+        assertThat(problemsWithUrl("jdbc:mysql://db.internal:3306/credit_advisory"))
+                .containsExactly("DB_URL must start with jdbc:postgresql://");
+        assertThat(problemsWithUrl("jdbc:postgresql://db.internal:5432/credit_advisory_test?sslmode=require"))
+                .singleElement().asString().contains("_test");
+
+        for (String local : List.of("jdbc:postgresql://localhost/credit_advisory",
+                "jdbc:postgresql://127.0.0.1:5432/credit_advisory",
+                "jdbc:postgresql://[::1]:5432/credit_advisory",
+                "jdbc:postgresql://db1.internal:5432,localhost:5432/credit_advisory")) {
+            assertThat(problemsWithUrl(local)).as(local).singleElement().asString().contains("localhost");
+        }
+
+        // A database on the same server is allowed when IT says so explicitly.
+        MockEnvironment allowed = goodProduction();
+        allowed.setProperty("spring.datasource.url", "jdbc:postgresql://localhost:5432/credit_advisory");
+        allowed.setProperty("app.safety.allow-local-database", "true");
+        assertThat(ProductionSafetyCheck.problems(allowed)).isEmpty();
+    }
+
+    private static List<String> problemsWithUrl(String url) {
+        MockEnvironment environment = goodProduction();
+        environment.setProperty("spring.datasource.url", url);
+        return ProductionSafetyCheck.problems(environment);
+    }
 }

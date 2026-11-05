@@ -64,6 +64,10 @@ public class ClientAssignmentHistory {
     @Column(name = "changed_at", nullable = false)
     private Instant changedAt;
 
+    /** Set only for IMPORT rows (ck_assignment_history_import_has_job, V3). */
+    @Column(name = "import_job_id", updatable = false)
+    private Long importJobId;
+
     /** Required by JPA */
     protected ClientAssignmentHistory() {
     }
@@ -83,6 +87,18 @@ public class ClientAssignmentHistory {
     public static ClientAssignmentHistory clientCreated(Client client, Consultant to, UserAccount changedBy) {
         return new ClientAssignmentHistory(client, null, to, AssignmentChangeType.MANUAL, "Client created", null,
                 changedBy);
+    }
+
+    /**
+     * A new client created by an import, already assigned to the row's consultant.
+     * The reason names the import job (import_jobs.id) - never anything personal.
+     */
+    public static ClientAssignmentHistory imported(Client client, Consultant to, long importJobId,
+            UserAccount changedBy) {
+        ClientAssignmentHistory row = new ClientAssignmentHistory(client, null, to, AssignmentChangeType.IMPORT,
+                "Imported from workbook (import job " + importJobId + ")", null, changedBy);
+        row.importJobId = importJobId;
+        return row;
     }
 
     /**
@@ -149,5 +165,10 @@ public class ClientAssignmentHistory {
 
     public Instant getChangedAt() {
         return changedAt;
+    }
+
+    /** Null unless this is an IMPORT row. */
+    public Long getImportJobId() {
+        return importJobId;
     }
 }
