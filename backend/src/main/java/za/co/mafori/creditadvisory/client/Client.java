@@ -67,12 +67,6 @@ public class Client {
     @JoinColumn(name = "current_consultant_id")
     private Consultant currentConsultant;
 
-    /**
-     * The import that created this client (V3); null for clients created by hand.
-     */
-    @Column(name = "created_by_import_job_id", updatable = false)
-    private Long createdByImportJobId;
-
     @Version
     @Column(name = "version", nullable = false)
     private long version;
@@ -139,17 +133,6 @@ public class Client {
         this.idNumberEncrypted = newCiphertext.clone();
     }
 
-    /**
-     * Records which import created this client. Only for a client that has not
-     * been saved yet - only ClientImportSupport calls it.
-     */
-    public void markCreatedByImport(long importJobId) {
-        if (id != null) {
-            throw new IllegalStateException("Only a new client can be marked as created by an import");
-        }
-        this.createdByImportJobId = importJobId;
-    }
-
     /** Masked for lists and broad views: ********1234 */
     public String getIdNumberMasked() {
         return "*********" + idNumberLast4;
@@ -205,11 +188,6 @@ public class Client {
     /** May be null. Lazy: only call inside a transaction. */
     public Consultant getCurrentConsultant() {
         return currentConsultant;
-    }
-
-    /** Null unless an import created this client. */
-    public Long getCreatedByImportJobId() {
-        return createdByImportJobId;
     }
 
     public long getVersion() {
