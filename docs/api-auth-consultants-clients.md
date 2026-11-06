@@ -129,6 +129,7 @@ Every successful change below writes one row to `audit_logs` in the **same trans
 | `CLIENT_VIEWED`                  | client                       | - (every time the full ID number is returned by `GET /api/clients/{id}?include=idNumber`; opening a client without it is not audited) |
 | `CLIENT_LOOKUP`                  | client, or none if not found | `result`: `found`, `not-found`, or `not-visible` (exists, but the caller may not see it)                                              |
 | `CLIENT_UPDATED`                 | client                       | `fields`: the names of the fields that changed, never their values                                                                    |
+| `CLIENT_ID_NUMBER_CORRECTED` | client | `fromLast4`, `toLast4` (last four digits only), `reason` |
 | `CLIENTS_TRANSFERRED`            | destination consultant       | `fromConsultantId`, `clientIds`, `count`, `batchId`, `reason`                                                                         |
 | `CLIENTS_ASSIGNED`               | consultant                   | `clientIds`, `count`, `batchId`, `reason` (see `docs/api-admin.md`)                                                                   |
 | `CLIENT_UNASSIGNED`              | client                       | `fromConsultantId`, `reason`                                                                                                          |
@@ -574,11 +575,46 @@ The `409` does **not** say which consultant has the existing client or show any 
 
 **Rules**
 
-- The ID number cannot be changed here. Who may correct an ID number is still to be decided by the business (SRS 15).
+- The ID number cannot be changed here. A manager or admin corrects it with `POST /api/clients/{id}/id-number-correction` (below).
 - The consultant cannot be changed here - use `POST /api/client-transfers`.
 - An audit entry `CLIENT_UPDATED` is written, listing which field names changed (not their values). Nothing changed, no entry.
 
 **Errors:** `400` invalid fields, `404` not found or not visible, `409` stale version.
+
+### POST /api/clients/{id}/id-number-correction
+
+**Who:** MANAGER, ADMIN (a CONSULTANT gets `403`, even for their own client - SRS 15)
+
+**Purpose:** fix an ID number that was captured wrongly. POST, so the number is in the body and never in a URL or a log.
+
+**Request**
+
+```json
+{ "idNumber": "9001014800089", "reason": "Two digits swapped when captured", "version": 3 }
+```
+
+| Field      | Rules                                                                                                         |
+| ---------- | ------------------------------------------------------------------------------------------------------------- |
+| `idNumber` | required; a valid 13-digit SA ID number                                                                       |
+| `reason`   | required; trimmed, not blank, max 500. Stored in the audit log; any 13-digit number in it becomes `[redacted]` |
+| `version`  | required; the client's current `version`                                                                      |
+
+**200 OK** - the updated **single client** object, with `idNumber` `null` (like an edit) and the new `idNumberMasked`. Its `version` has gone up.
+
+**Rules**
+
+- The new number replaces the old one everywhere: the full view (`?include=idNumber`), lookup by number, and the duplicate check. Looking up the old number finds nothing any more.
+- An audit entry `CLIENT_ID_NUMBER_CORRECTED` is written with the **last four digits** of the old and the new number and the reason - never a full number.
+- The edit screen should send this **before** `PATCH /api/clients/{id}` if both change, and use the `version` this returns for the PATCH.
+
+**Errors**
+| Status | When |
+|---|---|
+| 400 | invalid fields; not a valid SA ID number (`urn:credit-advisory:validation:invalid-id-number` - the number is never echoed back) |
+| 403 | caller is a CONSULTANT |
+| 404 | client does not exist |
+| 409 | another client already has this number (`urn:credit-advisory:client:duplicate-id-number` - says nothing about that client); stale `version` |
+| 422 | the number is the one the client already has (`urn:credit-advisory:client:id-number-unchanged`) |
 
 ---
 
@@ -1232,11 +1268,9 @@ Every successful call writes an audit entry `CASE_VIEWED` (who and when - never 
 
 ## 10. Open questions
 
-- **Correcting ID numbers:** can consultants correct a client's ID number, or only managers/admins? (SRS 15) - not editable for now.
 - **Bulk transfer limit:** draft says 500 clients per transfer (SRS 2) - to confirm.
 - **Session idle timeout:** draft says 30 minutes - to confirm.
 - **Manager scope:** all clients for now; department-level scope if departments are confirmed (SRS 4).
 - **Password reset (FR-01):** needs email sending (future). Until then an admin resets passwords.
-- **Unassigning clients:** `UNASSIGN` exists in the history table, but there is no endpoint to unassign a client yet. Needed?
 - **Case stages and fields (SRS 63):** cases have `OPEN` / `IN_PROGRESS` / `CLOSED` and a title for now. The business must define the real workflow stages, extra case fields, what a "credit record" holds, and any SLA targets.
 - **Reopening cases:** anyone who can see a case may reopen it for now. Should only managers be allowed to?

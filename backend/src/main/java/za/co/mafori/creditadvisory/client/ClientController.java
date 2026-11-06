@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import java.net.URI;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -81,6 +82,17 @@ public class ClientController {
     public ClientDetail update(@AuthenticationPrincipal AppUserPrincipal caller, @PathVariable long id,
             @Valid @RequestBody UpdateClientRequest request) {
         return service.update(caller, id, request).orElseThrow(() -> notFound(id));
+    }
+
+    /**
+     * Correct a wrongly captured ID number (contract section 4). MANAGER / ADMIN
+     * only. POST, so the number is in the body and never in a URL or a log.
+     */
+    @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
+    @PostMapping("/{id}/id-number-correction")
+    public ClientDetail correctIdNumber(@AuthenticationPrincipal AppUserPrincipal caller, @PathVariable long id,
+            @Valid @RequestBody CorrectIdNumberRequest request) {
+        return service.correctIdNumber(caller, id, request).orElseThrow(() -> notFound(id));
     }
 
     /**
