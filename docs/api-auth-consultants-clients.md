@@ -110,32 +110,33 @@ List endpoints accept `?page=0&size=20` (page is 0-based, size max 100) and retu
 
 Every successful change below writes one row to `audit_logs` in the **same transaction** as the change, so a refused or failed change leaves no entry. The actor is the signed-in user (or nobody, for sign-in events). Metadata never contains a password, a password hash or a full ID number - any 13-digit number in free text such as a reason is stored as `[redacted]`.
 
-| Action | Target | Metadata |
-|---|---|---|
-| `CONSULTANT_CREATED` | consultant | `consultantCode`, `fullName` |
-| `CONSULTANT_RENAMED` | consultant | `from`, `to` |
-| `CONSULTANT_STATUS_CHANGED` | consultant | `from`, `to`, `reason`, `clientCount` (clients still assigned at that moment) |
-| `USER_CREATED` | user | `email`, `roles`, `consultantId` |
-| `USER_ROLES_CHANGED` | user | `from`, `to` (role lists) |
-| `USER_CONSULTANT_LINK_CHANGED` | user | `fromConsultantId`, `toConsultantId` |
-| `USER_ENABLED` / `USER_DISABLED` | user | - |
-| `USER_PASSWORD_RESET` | user | - (never the password) |
-| `USER_UNLOCKED` | user | - |
-| `PASSWORD_CHANGED` | user (the user themselves) | - |
-| `ACCOUNT_LOCKED` | user | `lockedUntil` (no actor: nobody is signed in) |
-| `FIRST_ADMIN_CREATED` | user | `email` (no actor: created at start-up on a new server, see README "Running in production") |
-| `SIGN_IN_RATE_LIMITED` | - | `address`, `failures`, `window` (never the emails tried) |
-| `CLIENT_CREATED` | client | `consultantId` (or `null` if unassigned) |
-| `CLIENT_VIEWED` | client | - (every time the full ID number is returned by `GET /api/clients/{id}?include=idNumber`; opening a client without it is not audited) |
-| `CLIENT_LOOKUP` | client, or none if not found | `result`: `found`, `not-found`, or `not-visible` (exists, but the caller may not see it) |
-| `CLIENT_UPDATED` | client | `fields`: the names of the fields that changed, never their values |
-| `CLIENTS_TRANSFERRED` | destination consultant | `fromConsultantId`, `clientIds`, `count`, `batchId`, `reason` |
-| `CLIENTS_ASSIGNED` | consultant | `clientIds`, `count`, `batchId`, `reason` (see `docs/api-admin.md`) |
-| `CONSULTANT_ACCOUNT_CREATED` | consultant | `consultantCode`, `userId`, `email` (see `docs/api-admin.md`) |
-| `CASE_CREATED` | case | `clientId` |
-| `CASE_VIEWED` | case | - (every time `GET /api/cases/{id}` returns the case and its notes) |
-| `CASE_UPDATED` | case | `fields`: the names of the fields that changed; `fromStatus`, `toStatus` when the status changed. Never the title |
-| `CASE_NOTE_ADDED` | case | `noteId`. Never the note text |
+| Action                           | Target                       | Metadata                                                                                                                              |
+| -------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `CONSULTANT_CREATED`             | consultant                   | `consultantCode`, `fullName`                                                                                                          |
+| `CONSULTANT_RENAMED`             | consultant                   | `from`, `to`                                                                                                                          |
+| `CONSULTANT_STATUS_CHANGED`      | consultant                   | `from`, `to`, `reason`, `clientCount` (clients still assigned at that moment)                                                         |
+| `USER_CREATED`                   | user                         | `email`, `roles`, `consultantId`                                                                                                      |
+| `USER_ROLES_CHANGED`             | user                         | `from`, `to` (role lists)                                                                                                             |
+| `USER_CONSULTANT_LINK_CHANGED`   | user                         | `fromConsultantId`, `toConsultantId`                                                                                                  |
+| `USER_ENABLED` / `USER_DISABLED` | user                         | -                                                                                                                                     |
+| `USER_PASSWORD_RESET`            | user                         | - (never the password)                                                                                                                |
+| `USER_UNLOCKED`                  | user                         | -                                                                                                                                     |
+| `PASSWORD_CHANGED`               | user (the user themselves)   | -                                                                                                                                     |
+| `ACCOUNT_LOCKED`                 | user                         | `lockedUntil` (no actor: nobody is signed in)                                                                                         |
+| `FIRST_ADMIN_CREATED`            | user                         | `email` (no actor: created at start-up on a new server, see README "Running in production")                                           |
+| `SIGN_IN_RATE_LIMITED`           | -                            | `address`, `failures`, `window` (never the emails tried)                                                                              |
+| `CLIENT_CREATED`                 | client                       | `consultantId` (or `null` if unassigned)                                                                                              |
+| `CLIENT_VIEWED`                  | client                       | - (every time the full ID number is returned by `GET /api/clients/{id}?include=idNumber`; opening a client without it is not audited) |
+| `CLIENT_LOOKUP`                  | client, or none if not found | `result`: `found`, `not-found`, or `not-visible` (exists, but the caller may not see it)                                              |
+| `CLIENT_UPDATED`                 | client                       | `fields`: the names of the fields that changed, never their values                                                                    |
+| `CLIENTS_TRANSFERRED`            | destination consultant       | `fromConsultantId`, `clientIds`, `count`, `batchId`, `reason`                                                                         |
+| `CLIENTS_ASSIGNED`               | consultant                   | `clientIds`, `count`, `batchId`, `reason` (see `docs/api-admin.md`)                                                                   |
+| `CLIENT_UNASSIGNED`              | client                       | `fromConsultantId`, `reason`                                                                                                          |
+| `CONSULTANT_ACCOUNT_CREATED`     | consultant                   | `consultantCode`, `userId`, `email` (see `docs/api-admin.md`)                                                                         |
+| `CASE_CREATED`                   | case                         | `clientId`                                                                                                                            |
+| `CASE_VIEWED`                    | case                         | - (every time `GET /api/cases/{id}` returns the case and its notes)                                                                   |
+| `CASE_UPDATED`                   | case                         | `fields`: the names of the fields that changed; `fromStatus`, `toStatus` when the status changed. Never the title                     |
+| `CASE_NOTE_ADDED`                | case                         | `noteId`. Never the note text                                                                                                         |
 
 Entries only record that something changed when it really changed (renaming to the same name, or setting the status it already has, writes nothing). Audit rows cannot be updated or deleted - the database refuses. Admins read them with `GET /api/audit-logs` (section 8).
 
@@ -232,9 +233,9 @@ Every other request returns `403` with type `urn:credit-advisory:auth:password-c
 }
 ```
 
-| Field             | Rules                                                                                                                      |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `currentPassword` | required                                                                                                                   |
+| Field             | Rules                                                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `currentPassword` | required                                                                                                                  |
 | `newPassword`     | required; 12 characters minimum; 72 bytes maximum; not the same as the email address; different from the current password |
 
 **204 No Content** - this session stays signed in (with a new session id) and `mustChangePassword` becomes `false`. The user's other sessions - other browsers or devices - are signed out on their next request.
@@ -373,12 +374,12 @@ Used by `GET /api/clients` and `POST /api/clients/lookup`. Never contains the fu
 
 Used by `GET /api/clients/{id}`, `POST /api/clients` and `PATCH /api/clients/{id}`. Same as the list item, plus `idNumber`, which is **`null` unless it was asked for**:
 
-| Response | `idNumber` |
-|---|---|
-| `GET /api/clients/{id}` | `null` |
-| `GET /api/clients/{id}?include=idNumber` | the full number (audited) |
-| `POST /api/clients` | the full number (the one the user just typed) |
-| `PATCH /api/clients/{id}` | `null` |
+| Response                                 | `idNumber`                                    |
+| ---------------------------------------- | --------------------------------------------- |
+| `GET /api/clients/{id}`                  | `null`                                        |
+| `GET /api/clients/{id}?include=idNumber` | the full number (audited)                     |
+| `POST /api/clients`                      | the full number (the one the user just typed) |
+| `PATCH /api/clients/{id}`                | `null`                                        |
 
 Example with the number included:
 
@@ -451,8 +452,8 @@ Sorted by `lastName`, then `firstName`.
 
 **Query parameters**
 
-| Name | Example | Meaning |
-|---|---|---|
+| Name      | Example    | Meaning                                                 |
+| --------- | ---------- | ------------------------------------------------------- |
 | `include` | `idNumber` | also return the full ID number. The only accepted value |
 
 **200 OK** - the **single client** object. Without `include`, `idNumber` is `null`.
@@ -509,14 +510,14 @@ Spaces and hyphens in `idNumber` are ignored.
 }
 ```
 
-| Field          | Required | Rules                                                                                       |
-| -------------- | -------- | ------------------------------------------------------------------------------------------- |
-| `idNumber`     | yes      | valid SA ID number (see lookup); spaces and hyphens ignored                                 |
-| `firstName`    | yes      | trimmed, not blank, max 100                                                                 |
-| `lastName`     | yes      | trimmed, not blank, max 100                                                                 |
-| `email`        | no       | valid email, max 254                                                                        |
+| Field          | Required | Rules                                                                                                                                                                                                                                                                                                                             |
+| -------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `idNumber`     | yes      | valid SA ID number (see lookup); spaces and hyphens ignored                                                                                                                                                                                                                                                                       |
+| `firstName`    | yes      | trimmed, not blank, max 100                                                                                                                                                                                                                                                                                                       |
+| `lastName`     | yes      | trimmed, not blank, max 100                                                                                                                                                                                                                                                                                                       |
+| `email`        | no       | valid email, max 254                                                                                                                                                                                                                                                                                                              |
 | `phone`        | no       | SA or international number, normalised to international format (same rules as the Excel import): `082 123 4567`, `0821234567` and `27821234567` all become `+27821234567`; `+` or `00` numbers are kept. Spaces, hyphens, dots and brackets are ignored. Anything else is `400` (`urn:credit-advisory:validation:invalid-phone`). |
-| `consultantId` | no       | see assignment rules below                                                                  |
+| `consultantId` | no       | see assignment rules below                                                                                                                                                                                                                                                                                                        |
 
 **201 Created** - the **single client** object, with `Location: /api/clients/101`.
 
@@ -554,14 +555,20 @@ The `409` does **not** say which consultant has the existing client or show any 
 **Request** - send **all four** editable fields as they should be afterwards (the edit form has them all), plus `version`:
 
 ```json
-{ "firstName": "Lerato", "lastName": "Mokoena", "email": "lerato.m@example.com", "phone": null, "version": 2 }
+{
+  "firstName": "Lerato",
+  "lastName": "Mokoena",
+  "email": "lerato.m@example.com",
+  "phone": null,
+  "version": 2
+}
 ```
 
-| Field                   | Rules                                                         |
-| ----------------------- | ------------------------------------------------------------- |
-| `firstName`, `lastName` | required; same as create                                      |
-| `email`, `phone`        | same as create; `null`, blank or left out clears the value    |
-| `version`               | required                                                      |
+| Field                   | Rules                                                      |
+| ----------------------- | ---------------------------------------------------------- |
+| `firstName`, `lastName` | required; same as create                                   |
+| `email`, `phone`        | same as create; `null`, blank or left out clears the value |
+| `version`               | required                                                   |
 
 **200 OK** - the updated **single client** object, with `idNumber` `null` (an edit does not reveal the number).
 
@@ -577,14 +584,15 @@ The `409` does **not** say which consultant has the existing client or show any 
 
 ## 5. Transfers
 
-Two endpoints change who a client belongs to; the "Reassign clients" screen uses both:
+Three endpoints change who a client belongs to:
 
-| Situation | Endpoint |
-|---|---|
+| Situation                                                             | Endpoint                                                           |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | Client has **no** consultant yet (`GET /api/clients?unassigned=true`) | `POST /api/client-assignments` - see `docs/api-admin.md` section 4 |
-| Client already has a consultant and must move | `POST /api/client-transfers` - below |
+| Client already has a consultant and must move                         | `POST /api/client-transfers` - below                               |
+| Client must no longer have **any** consultant                         | `POST /api/clients/{id}/unassign` - below                          |
 
-Both are all-or-nothing, lock the client rows, write one history row per client and an audit entry.
+All three are all-or-nothing, lock the client rows, write one history row per client and an audit entry. A client is **never deleted**: there is no endpoint for that, because their cases, notes, history and audit trail must be kept.
 
 ### POST /api/client-transfers
 
@@ -646,6 +654,51 @@ Both are all-or-nothing, lock the client rows, write one history row per client 
 | 404 | a consultant or a client does not exist |
 | 409 | one or more clients do not currently belong to `fromConsultantId` (`urn:credit-advisory:transfer:ownership-changed`); `detail` lists the affected client ids |
 | 422 | destination consultant is not ACTIVE (`urn:credit-advisory:transfer:destination-not-active`) |
+
+### POST /api/clients/{id}/unassign
+
+**Who:** MANAGER, ADMIN (a CONSULTANT gets `403`, even for their own client)
+
+**Purpose:** take a client away from their consultant without giving them a new one. This is what the "Remove" button on the clients screen does. The client stays in the system with all their data and shows up under `GET /api/clients?unassigned=true`, from where `POST /api/client-assignments` can give them to someone again.
+
+**Request**
+
+```json
+{ "reason": "Client asked to stop the service" }
+```
+
+| Field    | Rules                                 |
+| -------- | ------------------------------------- |
+| `reason` | required; trimmed, not blank, max 500 |
+
+**200 OK**
+
+```json
+{
+  "clientId": 101,
+  "fromConsultant": {
+    "id": 4,
+    "consultantCode": "C004",
+    "fullName": "Thandi Xundu"
+  }
+}
+```
+
+**Rules**
+
+- Refused while the client has a case that is not `CLOSED` (`OPEN` or `IN_PROGRESS`): with nobody assigned, no consultant could see that case any more. Close the cases first, or transfer the client instead.
+- The consultant's status does not matter (unassigning a suspended consultant's clients is allowed).
+- One history row is written with change type `UNASSIGN`, `toConsultant` `null` and the reason.
+- An audit entry `CLIENT_UNASSIGNED` is written.
+- From that moment the former consultant gets `404` for this client, like any other client that is not theirs.
+
+**Errors**
+| Status | When |
+|---|---|
+| 400 | `reason` missing, blank or too long |
+| 403 | caller is a CONSULTANT |
+| 404 | client does not exist |
+| 409 | the client has no consultant (`urn:credit-advisory:unassign:not-assigned`); the client has a case that is not closed (`urn:credit-advisory:unassign:open-cases`, `detail` says how many) |
 
 ### GET /api/clients/{id}/assignments
 
@@ -903,14 +956,14 @@ No body. Clears the failed sign-in count and any lockout.
 }
 ```
 
-| Field | Meaning |
-|---|---|
-| `scope` | `ALL` (whole organisation) or `OWN` (the consultant's own clients) |
-| `totalClients` | all clients, or for a CONSULTANT only their own (`0` if their login is not linked to a consultant) |
-| `unassignedClients` | clients with no consultant. List them with `GET /api/clients?unassigned=true` |
-| `clientsNeedingHandover` | clients still assigned to an INACTIVE or SUSPENDED consultant - the manager follow-up queue (SRS 7). List them with `GET /api/clients?consultantStatus=INACTIVE` and `...=SUSPENDED` |
-| `consultants` | how many consultants have each status |
-| `cases` | credit cases per status (section 9): all cases, or for a CONSULTANT the cases of their own clients (all `0` if their login is not linked to a consultant). List them with `GET /api/cases?status=OPEN` |
+| Field                    | Meaning                                                                                                                                                                                                |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `scope`                  | `ALL` (whole organisation) or `OWN` (the consultant's own clients)                                                                                                                                     |
+| `totalClients`           | all clients, or for a CONSULTANT only their own (`0` if their login is not linked to a consultant)                                                                                                     |
+| `unassignedClients`      | clients with no consultant. List them with `GET /api/clients?unassigned=true`                                                                                                                          |
+| `clientsNeedingHandover` | clients still assigned to an INACTIVE or SUSPENDED consultant - the manager follow-up queue (SRS 7). List them with `GET /api/clients?consultantStatus=INACTIVE` and `...=SUSPENDED`                   |
+| `consultants`            | how many consultants have each status                                                                                                                                                                  |
+| `cases`                  | credit cases per status (section 9): all cases, or for a CONSULTANT the cases of their own clients (all `0` if their login is not linked to a consultant). List them with `GET /api/cases?status=OPEN` |
 
 Counts only - no names, ID numbers or case content. A case counts for the consultant the client is assigned to **now**, so after a transfer it moves with the client.
 
@@ -951,7 +1004,12 @@ Sorted newest first.
       "actor": { "id": 1, "email": "admin@mafori.co.za" },
       "targetType": "CONSULTANT",
       "targetId": "4",
-      "metadata": { "from": "ACTIVE", "to": "INACTIVE", "reason": "Left the company", "clientCount": 42 }
+      "metadata": {
+        "from": "ACTIVE",
+        "to": "INACTIVE",
+        "reason": "Left the company",
+        "clientCount": 42
+      }
     },
     {
       "id": 811,
@@ -963,7 +1021,10 @@ Sorted newest first.
       "metadata": { "lockedUntil": "2026-11-02T09:17:40.115Z" }
     }
   ],
-  "page": 0, "size": 50, "totalItems": 2, "totalPages": 1
+  "page": 0,
+  "size": 50,
+  "totalItems": 2,
+  "totalPages": 1
 }
 ```
 
@@ -985,11 +1046,11 @@ A credit case is a piece of advisory work for one client (FR-19), with notes add
 
 ### Statuses
 
-| Status        | Meaning                    |
-| ------------- | -------------------------- |
-| `OPEN`        | new, not started           |
-| `IN_PROGRESS` | being worked on            |
-| `CLOSED`      | finished; no new notes     |
+| Status        | Meaning                |
+| ------------- | ---------------------- |
+| `OPEN`        | new, not started       |
+| `IN_PROGRESS` | being worked on        |
+| `CLOSED`      | finished; no new notes |
 
 This is a first set until the business defines the real stages (section 10). Values may be added later, never renamed, so the frontend should show an unknown status as plain text rather than fail.
 
@@ -1009,13 +1070,22 @@ Used by `GET /api/cases`. No notes and never the full ID number.
     "idNumberMasked": "*********0089",
     "firstName": "Lerato",
     "lastName": "Mokoena",
-    "consultant": { "id": 4, "consultantCode": "C004", "fullName": "Thandi Xundu", "status": "ACTIVE" }
+    "consultant": {
+      "id": 4,
+      "consultantCode": "C004",
+      "fullName": "Thandi Xundu",
+      "status": "ACTIVE"
+    }
   },
   "title": "Debt review application",
   "status": "IN_PROGRESS",
   "openedAt": "2026-11-02T08:15:00Z",
   "closedAt": null,
-  "createdBy": { "id": 7, "email": "thandi@example.com", "consultantName": "Thandi Xundu" },
+  "createdBy": {
+    "id": 7,
+    "email": "thandi@example.com",
+    "consultantName": "Thandi Xundu"
+  },
   "version": 1,
   "createdAt": "2026-11-02T08:15:00Z",
   "updatedAt": "2026-11-02T10:02:00Z"
@@ -1038,7 +1108,11 @@ Used by `GET /api/cases/{id}`, `POST /api/cases` and `PATCH /api/cases/{id}`. Th
   "status": "IN_PROGRESS",
   "openedAt": "2026-11-02T08:15:00Z",
   "closedAt": null,
-  "createdBy": { "id": 7, "email": "thandi@example.com", "consultantName": "Thandi Xundu" },
+  "createdBy": {
+    "id": 7,
+    "email": "thandi@example.com",
+    "consultantName": "Thandi Xundu"
+  },
   "version": 1,
   "createdAt": "2026-11-02T08:15:00Z",
   "updatedAt": "2026-11-02T10:02:00Z",
@@ -1046,7 +1120,11 @@ Used by `GET /api/cases/{id}`, `POST /api/cases` and `PATCH /api/cases/{id}`. Th
     {
       "id": 88,
       "note": "Payslip received.",
-      "author": { "id": 7, "email": "thandi@example.com", "consultantName": "Thandi Xundu" },
+      "author": {
+        "id": 7,
+        "email": "thandi@example.com",
+        "consultantName": "Thandi Xundu"
+      },
       "createdAt": "2026-11-02T10:01:00Z"
     }
   ]
@@ -1091,10 +1169,10 @@ Every successful call writes an audit entry `CASE_VIEWED` (who and when - never 
 { "clientId": 101, "title": "Debt review application" }
 ```
 
-| Field      | Rules                          |
-| ---------- | ------------------------------ |
-| `clientId` | required                       |
-| `title`    | required, max 200, trimmed     |
+| Field      | Rules                      |
+| ---------- | -------------------------- |
+| `clientId` | required                   |
+| `title`    | required, max 200, trimmed |
 
 **201 Created** - the new **single case** object (status `OPEN`, no notes), with a `Location: /api/cases/{id}` header.
 
@@ -1110,11 +1188,11 @@ Every successful call writes an audit entry `CASE_VIEWED` (who and when - never 
 { "title": "Debt review application", "status": "CLOSED", "version": 1 }
 ```
 
-| Field     | Rules                                |
-| --------- | ------------------------------------ |
-| `title`   | required, max 200, trimmed           |
-| `status`  | required, one of the statuses above  |
-| `version` | required                             |
+| Field     | Rules                               |
+| --------- | ----------------------------------- |
+| `title`   | required, max 200, trimmed          |
+| `status`  | required, one of the statuses above |
+| `version` | required                            |
 
 **200 OK** - the updated **single case** object.
 
@@ -1136,9 +1214,9 @@ Every successful call writes an audit entry `CASE_VIEWED` (who and when - never 
 { "note": "Called the client, documents to follow." }
 ```
 
-| Field  | Rules                        |
-| ------ | ---------------------------- |
-| `note` | required, max 4000, trimmed  |
+| Field  | Rules                       |
+| ------ | --------------------------- |
+| `note` | required, max 4000, trimmed |
 
 **201 Created** - the new **Note** object (as in `notes` above). The author is the signed-in user.
 

@@ -3,15 +3,16 @@ package za.co.mafori.creditadvisory.transfer;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import za.co.mafori.creditadvisory.auth.AppUserPrincipal;
 
 /**
- * Assigning unassigned clients to a consultant - MANAGER and ADMIN (SRS section
- * 4: "Reassign clients"). Find unassigned clients with GET
- * /api/clients?unassigned=true.
+ * Assigning unassigned clients to a consultant, and unassigning a client -
+ * MANAGER and ADMIN (SRS section 4: "Reassign clients"). Find unassigned
+ * clients with GET /api/clients?unassigned=true.
  */
 @RestController
 @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
@@ -27,5 +28,15 @@ public class ClientAssignmentController {
     public AssignClientsResponse assign(@AuthenticationPrincipal AppUserPrincipal caller,
             @Valid @RequestBody AssignClientsRequest request) {
         return service.assign(caller.userId(), request);
+    }
+
+    /**
+     * One client keeps all their data but no longer has a consultant (contract
+     * section 5).
+     */
+    @PostMapping("/api/clients/{id}/unassign")
+    public UnassignClientResponse unassign(@AuthenticationPrincipal AppUserPrincipal caller,
+            @PathVariable long id, @Valid @RequestBody UnassignClientRequest request) {
+        return service.unassign(caller.userId(), id, request);
     }
 }
