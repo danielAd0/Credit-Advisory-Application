@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.URI;
 import java.net.http.HttpClient;
+import java.net.http.HttpHeaders;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.LinkedHashMap;
@@ -22,10 +23,15 @@ import java.util.stream.Collectors;
 public final class ApiClient {
 
     /**
-     * Status code and body of one response, with JsonPath helpers for reading the
-     * body.
+     * Status code, body and headers of one response, with JsonPath helpers for
+     * reading the body.
      */
-    public record Response(int status, String body) {
+    public record Response(int status, String body, HttpHeaders headers) {
+
+        /** First value of a response header (names are case-insensitive), or null. */
+        public String header(String name) {
+            return headers.firstValue(name).orElse(null);
+        }
 
         public String text(String path) {
             return JsonPath.read(body, path);
@@ -131,7 +137,7 @@ public final class ApiClient {
         try {
             HttpResponse<String> response = http.send(request.build(), HttpResponse.BodyHandlers.ofString());
             response.headers().allValues("Set-Cookie").forEach(this::remember);
-            return new Response(response.statusCode(), response.body());
+            return new Response(response.statusCode(), response.body(), response.headers());
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         } catch (InterruptedException e) {

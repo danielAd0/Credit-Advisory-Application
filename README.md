@@ -160,6 +160,11 @@ Rules:
 - Serve the application over **HTTPS only**, behind a reverse proxy or load balancer on the private network
   that sends `X-Forwarded-For` and `X-Forwarded-Proto`. The session cookie is `Secure`, so plain HTTP sign-in
   will not work.
+- The backend sets its own security headers (CSP, Referrer-Policy, Permissions-Policy, no framing, no caching).
+  Whatever serves the **built frontend** (`frontend/dist`) must send these on `index.html` and its files:
+  `Content-Security-Policy: default-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'`,
+  `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff` and
+  `Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()`.
 - On the first start-up Flyway creates the tables. With `FIRST_ADMIN_EMAIL` / `FIRST_ADMIN_PASSWORD` set,
   the first administrator is created; it is skipped as soon as an enabled administrator exists.
   **Remove both variables** once that administrator has signed in and chosen their own password.
