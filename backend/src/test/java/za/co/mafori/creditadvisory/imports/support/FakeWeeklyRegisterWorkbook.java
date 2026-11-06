@@ -22,13 +22,15 @@ import org.apache.poi.ss.util.CellReference;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
-
 public final class FakeWeeklyRegisterWorkbook {
 
     public static final List<String> DAYS = List.of(
             "Monday", "Tuesday", "Wednsday", "Thursday", "Friday", "Saturday", "Sunday");
 
-    /** Data rows per day. Saturday is empty like the real file; Sunday has rows so its defect shows. */
+    /**
+     * Data rows per day. Saturday is empty like the real file; Sunday has rows so
+     * its defect shows.
+     */
     public static final int[] ROWS = { 12, 10, 8, 6, 7, 0, 3 };
 
     public static final int FORMULA_ONLY_ROWS = 40;
@@ -37,7 +39,10 @@ public final class FakeWeeklyRegisterWorkbook {
             "TEST CONSULTANT ONE", "TEST CONSULTANT TWO", "TEST CONSULTANT THREE", "TEST CONSULTANT FOUR",
             "TESTLABEL");
 
-    /** Appears once (Thursday, 3rd row) and is in no consultant list: must block confirm until mapped. */
+    /**
+     * Appears once (Thursday, 3rd row) and is in no consultant list: must block
+     * confirm until mapped.
+     */
     public static final String UNMAPPED_CONSULTANT = "UNMAPPED PERSON";
 
     private static final List<String> FIRST = List.of(
@@ -95,7 +100,9 @@ public final class FakeWeeklyRegisterWorkbook {
             "Monday", MON_TUE, "Tuesday", MON_TUE, "Wednsday", WED_FRI, "Thursday", THU, "Friday", WED_FRI,
             "Saturday", SAT, "Sunday", SUN);
 
-    /** Day -> (0-based column -> formula template without "="; {r} = row number). */
+    /**
+     * Day -> (0-based column -> formula template without "="; {r} = row number).
+     */
     private static final Map<String, Map<Integer, String>> FORMULAS = Map.of(
             "Monday", Map.of(4, "SUM(F{r}:N{r})+R{r}+Q{r}+S{r}+T{r}",
                     23, "F{r}+G{r}+J{r}+K{r}+N{r}+Q{r}+R{r}+S{r}+T{r}+H{r}+I{r}"),
@@ -119,10 +126,6 @@ public final class FakeWeeklyRegisterWorkbook {
     private static final Map<String, String> CONSULTANT_COL = Map.of(
             "Monday", "AB", "Tuesday", "AB", "Wednsday", "Z", "Thursday", "Y", "Friday", "Z", "Saturday", "X",
             "Sunday", "W");
-
-    private static final Map<String, String> CREDIT_RESCUE_COL = Map.of(
-            "Monday", "K", "Tuesday", "K", "Wednsday", "K", "Thursday", "K", "Friday", "K", "Saturday", "I",
-            "Sunday", "I");
 
     private static final Pattern RANGE = Pattern.compile("SUM\\(([A-Z]+)\\{r}:([A-Z]+)\\{r}\\)");
 
@@ -245,7 +248,8 @@ public final class FakeWeeklyRegisterWorkbook {
     // ---------- what the workbook shows (cached values) ----------
 
     /**
-     * Figures as the workbook itself shows them, and the true figures. Tests assert the
+     * Figures as the workbook itself shows them, and the true figures. Tests assert
+     * the
      * import stores the sheet values AND recalculates the true ones.
      */
     public record Expected(Map<String, Long> rows, Map<String, Long> sheetQuotation, Map<String, Long> sheetBanked,
@@ -255,12 +259,16 @@ public final class FakeWeeklyRegisterWorkbook {
             return rows.values().stream().mapToLong(Long::longValue).sum();
         }
 
-        /** Report!J10: COUNT() skips IDs stored as text (defect TEXT_ID_NOT_COUNTED). */
+        /**
+         * Report!J10: COUNT() skips IDs stored as text (defect TEXT_ID_NOT_COUNTED).
+         */
         public long sheetClientTotal() {
             return numericIdCount.values().stream().mapToLong(Long::longValue).sum();
         }
 
-        /** Report!C9: Sunday's banked cell sums Saturday's column (defect WRONG_SHEET). */
+        /**
+         * Report!C9: Sunday's banked cell sums Saturday's column (defect WRONG_SHEET).
+         */
         public long sheetSundayBanked() {
             return sheetBanked.get("Saturday");
         }
@@ -314,7 +322,10 @@ public final class FakeWeeklyRegisterWorkbook {
         out.write(build());
     }
 
-    /** Writes a copy for manual testing: {@code FakeWeeklyRegisterWorkbook <path.xlsx>}. */
+    /**
+     * Writes a copy for manual testing:
+     * {@code FakeWeeklyRegisterWorkbook <path.xlsx>}.
+     */
     public static void main(String[] args) throws IOException {
         Path path = Path.of(args.length > 0 ? args[0] : "fake-weekly-register.xlsx");
         Files.write(path, build());
@@ -389,7 +400,8 @@ public final class FakeWeeklyRegisterWorkbook {
                 Cell cell = row.createCell(f.getKey());
                 cell.setCellFormula(f.getValue().replace("{r}", String.valueOf(r)));
                 // Cached result, as Excel would have saved it (0 on filler rows). The junk
-                // loan-amount formulas on Saturday / Sunday add text cells: #VALUE! on data rows.
+                // loan-amount formulas on Saturday / Sunday add text cells: #VALUE! on data
+                // rows.
                 Long result = dataRow ? evaluate(f.getValue(), cells) : Long.valueOf(0);
                 if (result == null) {
                     cell.setCellErrorValue(FormulaError.VALUE.getCode());
@@ -439,7 +451,8 @@ public final class FakeWeeklyRegisterWorkbook {
             for (int c : new int[] { 1, 3, 6, 8 }) {
                 row.createCell(c).setCellValue(day);
             }
-            // Copied defect: Sunday's banked sums Saturday's column T (Sunday's banked is S).
+            // Copied defect: Sunday's banked sums Saturday's column T (Sunday's banked is
+            // S).
             String bankSheet = "Sunday".equals(day) ? "Saturday" : day;
             String col = "Sunday".equals(day) ? "T" : bankCol.get(day);
             long banked = "Sunday".equals(day) ? exp.sheetSundayBanked() : exp.sheetBanked().get(day);
@@ -465,13 +478,172 @@ public final class FakeWeeklyRegisterWorkbook {
         wt.setCellFormula("IF(E10>600000,\"Weekly Target Reached\",\"Weekly Target Not Reached\")");
         wt.setCellValue(qTotal > 600000 ? "Weekly Target Reached" : "Weekly Target Not Reached");
         formula(total, 9, "SUM(J3:J9)", cTotal);
+
+        writeGroceries(rep);
+        writeClientCounts(rep);
+        writeFinance(rep, exp);
+        writeBudget(rep);
+        writeDifference(rep, cTotal);
     }
 
-    /** COMBO block (correct), CREDIT RESCUE block (Monday ROW_OFFSET defect) and a summary with #REF!. */
+    // ---------- Report blocks below the day summary (stage 4) ----------
+
+    private static final String[] DAY_HEADERS = { "MONDAY", "TUESDAY", "WEDNSDAY", "THURSDAY", "FRIDAY",
+            "SATURDAY", "SUNDAY" };
+
+    /**
+     * Rows 12-26: "Groceries" like the real sheet (Mon-Wed | Thu-Sat, then Sunday |
+     * TOTAL).
+     */
+    private static void writeGroceries(XSSFSheet rep) {
+        row(rep, 12).createCell(1).setCellValue("Groceries");
+        row(rep, 12).createCell(6).setCellValue("Groceries");
+        text(row(rep, 13), 1, "Consultant", "MONDAY", "TUESDAY", "WEDNSDAY");
+        text(row(rep, 13), 6, "Consultant", "THURSDAY", "FRIDAY", "SATURDAY");
+        text(row(rep, 20), 1, "Consultant", "SUNDAY");
+        text(row(rep, 20), 6, "Consultant", "TOTAL GROCERIES");
+        long all = 0;
+        for (int n = 0; n < CONSULTANTS.size(); n++) {
+            String who = CONSULTANTS.get(n);
+            int r = 14 + n;
+            int s = 21 + n;
+            row(rep, r).createCell(1).setCellValue(who);
+            row(rep, r).createCell(6).setCellValue(who);
+            row(rep, s).createCell(1).setCellValue(who);
+            row(rep, s).createCell(6).setCellValue(who);
+            long total = 0;
+            for (int d = 0; d < DAYS.size(); d++) {
+                String day = DAYS.get(d);
+                // Copied defect: Thursday adds up CASH ADVANCE LITE instead of GROCERY.
+                String grocery = d >= 5 ? "GROECRY" : d == 3 ? "CASH ADVANCE LITE" : "GROCERY";
+                // Copied defect: Wednesday looks for the consultant in the STRUCTURE column.
+                String criteria = d == 2 ? col(day, "STRUCTURE") : CONSULTANT_COL.get(day);
+                long value = d == 2 ? 0 : sumIf(d, who, grocery);
+                int targetRow = d == 6 ? s : r;
+                int column = d < 3 ? 2 + d : d < 6 ? 7 + d - 3 : 2;
+                String label = d < 3 || d == 6 ? "B" : "G";
+                formula(row(rep, targetRow), column, "SUMIF(" + day + "!" + criteria + ":" + criteria + ",Report!"
+                        + label + targetRow + "," + day + "!" + col(day, grocery) + ":" + col(day, grocery) + ")",
+                        value);
+                total += value;
+            }
+            formula(row(rep, s), 7, "C" + r + "+D" + r + "+E" + r + "+H" + r + "+I" + r + "+J" + r + "+C" + s, total);
+            all += total;
+        }
+        row(rep, 26).createCell(6).setCellValue("TOTAL");
+        formula(row(rep, 26), 7, "SUM(H21:H25)", all);
+    }
+
+    /**
+     * Rows 28-35: clients per consultant per day with COUNTIF and the names typed
+     * in.
+     */
+    private static void writeClientCounts(XSSFSheet rep) {
+        row(rep, 28).createCell(1).setCellValue("WEEKLY REPORT (NUMBER OF CLIENTS)");
+        Row header = row(rep, 29);
+        header.createCell(1).setCellValue("CONSULTANTS");
+        for (int d = 0; d < DAYS.size(); d++) {
+            header.createCell(2 + d).setCellValue(DAY_HEADERS[d]);
+        }
+        long[] totals = new long[DAYS.size()];
+        for (int n = 0; n < CONSULTANTS.size(); n++) {
+            String who = CONSULTANTS.get(n);
+            int r = 30 + n;
+            row(rep, r).createCell(1).setCellValue(who);
+            for (int d = 0; d < DAYS.size(); d++) {
+                String day = DAYS.get(d);
+                // Copied defect: Friday counts in the STRUCTURE column.
+                String criteria = d == 4 ? col(day, "STRUCTURE") : CONSULTANT_COL.get(day);
+                long value = d == 4 ? 0 : countIf(d, who);
+                formula(row(rep, r), 2 + d, "COUNTIF(" + day + "!" + criteria + ":" + criteria + ",\"" + who + "\")",
+                        value);
+                totals[d] += value;
+            }
+        }
+        row(rep, 35).createCell(1).setCellValue("TOTAL");
+        for (int d = 0; d < DAYS.size(); d++) {
+            String c = CellReference.convertNumToColString(2 + d);
+            formula(row(rep, 35), 2 + d, "SUM(" + c + "30:" + c + "34)", totals[d]);
+        }
+    }
+
+    /**
+     * Rows 37-39: quotations with VAT, copying the defect that Friday is left out.
+     */
+    private static void writeFinance(XSSFSheet rep, Expected exp) {
+        row(rep, 37).createCell(1).setCellValue("FINANCE");
+        text(row(rep, 38), 1, "Quotations With VAT", "VAT", "EXCL VAT");
+        long withVat = 0;
+        for (String day : DAYS) {
+            withVat += "Friday".equals(day) ? 0 : exp.sheetQuotation().get(day);
+        }
+        double vat = withVat * 15.0 / 115.0;
+        formula(row(rep, 39), 1, "SUM(E3:E6)+SUM(E8:E9)", withVat);
+        formulaDouble(row(rep, 39), 2, "B39*15/115", vat);
+        formulaDouble(row(rep, 39), 3, "B39-C39", withVat - vat);
+    }
+
+    /**
+     * Rows 41-45: loan amounts per budget list; the TOTAL leaves out the first row.
+     */
+    private static void writeBudget(XSSFSheet rep) {
+        row(rep, 41).createCell(1).setCellValue("Budget");
+        Row header = row(rep, 42);
+        header.createCell(1).setCellValue("Structures");
+        for (int d = 0; d < DAYS.size(); d++) {
+            header.createCell(2 + d).setCellValue(DAY_HEADERS[d]);
+        }
+        header.createCell(9).setCellValue("TOTAL Budget Per Week");
+        List<String> lists = List.of("Mafori Housing", "Test Budget");
+        for (int n = 0; n < lists.size(); n++) {
+            int r = 43 + n;
+            row(rep, r).createCell(1).setCellValue(lists.get(n));
+            long total = 0;
+            for (int d = 0; d < DAYS.size(); d++) {
+                String day = DAYS.get(d);
+                long value = 0;
+                for (int i = 0; i < ROWS[d]; i++) {
+                    FakeRow fr = row(d, i);
+                    if (lists.get(n).equals(fr.primaryBudgetList())) {
+                        value += fr.primaryLoanAmount();
+                    }
+                }
+                String pl = col(day, "PRIMARY STRUCTURE BUDGET LIST");
+                String pa = col(day, "PRIMARY STRUCTURE LOAN AMOUNT");
+                String sl = col(day, "SECONDARY STRUCTURE BUDGET LIST");
+                String sa = col(day, "SECONDARY STRUCTURE LOAN AMOUNT");
+                formula(row(rep, r), 2 + d, "SUM(SUMIF(" + day + "!" + pl + ":" + pl + ",Report!B" + r + "," + day
+                        + "!" + pa + ":" + pa + "),SUMIF(" + day + "!" + sl + ":" + sl + ",Report!B" + r + "," + day
+                        + "!" + sa + ":" + sa + "))", value);
+                total += value;
+            }
+            formula(row(rep, r), 9, "SUM(C" + r + ":I" + r + ")", total);
+        }
+        row(rep, 45).createCell(1).setCellValue("TOTAL");
+        formula(row(rep, 45), 9, "SUM(J44:J44)", (long) row(rep, 44).getCell(9).getNumericCellValue());
+    }
+
+    /** Rows 47-49: the consultants' client total minus the day summary's. */
+    private static void writeDifference(XSSFSheet rep, long dayCountTotal) {
+        row(rep, 47).createCell(1).setCellValue("Difference");
+        row(rep, 48).createCell(1).setCellValue("Number Of Clients");
+        long consultants = 0;
+        for (int d = 0; d < DAYS.size(); d++) {
+            consultants += (long) row(rep, 35).getCell(2 + d).getNumericCellValue();
+        }
+        formula(row(rep, 49), 1, "SUM(C35:I35)-J10", consultants - dayCountTotal);
+    }
+
+    /**
+     * COMBO block (correct), CREDIT RESCUE block (Monday ROW_OFFSET defect) and a
+     * summary with #REF!.
+     */
     private static void writeBreakdown(XSSFSheet bd) {
         Map<Integer, String> columnA = new HashMap<>(); // 1-based row -> text in column A, to evaluate SUMIF
         int[] combo = block(bd, columnA, "COMBO", 1, "COMBO", 0);
         int[] rescue = block(bd, columnA, "CREDIT RESCUE", 10, "CREDIT RESCUE", 8);
+        // Like the real file: the block titled CARD adds up the IVC column (design Q6).
+        int[] card = block(bd, columnA, "CARD", 19, "IVC", 0);
 
         row(bd, 1).createCell(11).setCellValue("WEEKLY REPORT");
         row(bd, 1).createCell(12).setCellValue("BREAKDOWN");
@@ -483,8 +655,11 @@ public final class FakeWeeklyRegisterWorkbook {
         Cell ref = row(bd, 4).createCell(12);
         ref.setCellFormula("SUM(#REF!)"); // copied defect
         ref.setCellErrorValue(FormulaError.REF.getCode());
+        row(bd, 5).createCell(11).setCellValue("CARD");
+        formula(row(bd, 5), 12, "SUM(I" + card[0] + ":I" + card[1] + ")", sumColumnI(bd, card));
     }
 
+    /** @param product the day-sheet header the block's formulas add up */
     private static int[] block(XSSFSheet bd, Map<Integer, String> columnA, String title, int top, String product,
             int mondayOffset) {
         row(bd, top).createCell(0).setCellValue(title);
@@ -506,7 +681,7 @@ public final class FakeWeeklyRegisterWorkbook {
             for (int d = 0; d < DAYS.size(); d++) {
                 String day = DAYS.get(d);
                 int criteriaRow = d == 0 ? r - mondayOffset : r; // copied defect when offset > 0
-                String pc = "COMBO".equals(product) ? "F" : CREDIT_RESCUE_COL.get(day);
+                String pc = col(day, product);
                 String cc = CONSULTANT_COL.get(day);
                 String who = columnA.get(criteriaRow);
                 long value = sumIf(d, who, product);
@@ -519,7 +694,47 @@ public final class FakeWeeklyRegisterWorkbook {
         return new int[] { top + 2, top + 1 + CONSULTANTS.size() };
     }
 
-    /** SUMIF over one day's rows: product amount where the consultant cell equals who. */
+    /** COUNTIF over one day's rows: rows whose consultant cell equals who. */
+    private static long countIf(int d, String who) {
+        long n = 0;
+        for (int i = 0; i < ROWS[d]; i++) {
+            if (who.equals(row(d, i).consultant())) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    /**
+     * The column letter of a header on a day sheet (the first one, like a lookup in
+     * Excel).
+     */
+    static String col(String day, String header) {
+        List<String> headers = HEADERS.get(day);
+        for (int c = 0; c < headers.size(); c++) {
+            if (headers.get(c) != null && headers.get(c).strip().equals(header)) {
+                return CellReference.convertNumToColString(c);
+            }
+        }
+        throw new IllegalArgumentException(day + " has no " + header + " column");
+    }
+
+    private static void text(Row row, int firstColumn, String... values) {
+        for (int i = 0; i < values.length; i++) {
+            row.createCell(firstColumn + i).setCellValue(values[i]);
+        }
+    }
+
+    private static void formulaDouble(Row row, int col, String formula, double cachedValue) {
+        Cell cell = row.createCell(col);
+        cell.setCellFormula(formula);
+        cell.setCellValue(cachedValue);
+    }
+
+    /**
+     * SUMIF over one day's rows: product amount where the consultant cell equals
+     * who.
+     */
     private static long sumIf(int d, String who, String product) {
         if (who == null) {
             return 0;
@@ -545,7 +760,8 @@ public final class FakeWeeklyRegisterWorkbook {
     // ---------- helpers ----------
 
     /**
-     * Column letter -> value of a data row as the day's formulas see it: a number, 0 for an
+     * Column letter -> value of a data row as the day's formulas see it: a number,
+     * 0 for an
      * empty cell, or null for a cell holding TEXT (adding it with + gives #VALUE!).
      */
     private static Map<String, Integer> numericCells(FakeRow r) {
@@ -577,7 +793,8 @@ public final class FakeWeeklyRegisterWorkbook {
     }
 
     /**
-     * Evaluates "SUM(F{r}:N{r})+R{r}+..." against one row's cells. Null (= #VALUE!) when a
+     * Evaluates "SUM(F{r}:N{r})+R{r}+..." against one row's cells. Null (= #VALUE!)
+     * when a
      * term added with + is text. Text inside SUM(...) is ignored, as in Excel.
      */
     private static Long evaluate(String template, Map<String, Integer> cells) {

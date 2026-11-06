@@ -56,7 +56,7 @@ public class WeeklyImportController {
                     "The uploaded file could not be read. Try again.");
         }
         ImportSummary summary = service.preview(caller.userId(), bytes, file.getOriginalFilename(), weekStarting);
-        return ResponseEntity.created(URI.create("/api/imports" + summary.id())).body(summary);
+        return ResponseEntity.created(URI.create("/api/imports/" + summary.id())).body(summary);
 
     }
 
@@ -89,10 +89,16 @@ public class WeeklyImportController {
         return service.issues(id, severity, page, size);
     }
 
-    /**
-     * Matches a consultant name from the sheet to a consultant; remembered for
-     * later imports.
-     */
+    @GetMapping("/{id}/issues/export")
+    public ResponseEntity<byte[]> exportIssues(@PathVariable long id,
+            @RequestParam(required = false) String severity) {
+        WeeklyImportViews.IssueFile file = service.exportIssues(id, severity);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("text/csv; charset=UTF-8"))
+                .header("Content-Disposition", "attachment; filename=\"" + file.fileName() + "\"")
+                .body(file.content());
+    }
+
     @PostMapping("/{id}/consultant-mappings")
     public ImportSummary mapConsultant(@AuthenticationPrincipal AppUserPrincipal caller, @PathVariable long id,
             @Valid @RequestBody ConsultantMappingRequest request) {
@@ -103,7 +109,7 @@ public class WeeklyImportController {
     public ConfirmResult confirm(@AuthenticationPrincipal AppUserPrincipal caller, @PathVariable long id,
             @Valid @RequestBody ConfirmRequest request) {
         return service.confirm(caller.userId(), caller.hasRole(RoleName.ADMIN), id, request.fileDigest(),
-                request.replaceReason());
+                request.replaceReason(), Boolean.TRUE.equals(request.acceptNameDifferences()));
     }
 
     @PostMapping("/{id}/cancel")

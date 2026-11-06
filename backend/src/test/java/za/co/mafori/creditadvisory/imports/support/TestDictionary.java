@@ -10,7 +10,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import za.co.mafori.creditadvisory.imports.register.ImportDictionary;
 
-
 public final class TestDictionary {
 
     private static final Pattern ALIAS = Pattern.compile("\\('([^']*)',\\s*'([^']*)',\\s*'(PRODUCT|FIELD|SHEET)'\\)");
@@ -44,6 +43,12 @@ public final class TestDictionary {
         if (out.size() < 50) {
             throw new IllegalStateException("Could not read the header aliases from V13");
         }
+        // Stage 4: report block titles ("CARD").
+        Matcher titles = ALIAS.matcher(insertBlock(read("db/migration/V17__report_reconciliation.sql"),
+                "INSERT INTO import_header_aliases"));
+        while (titles.find()) {
+            out.add(new String[] { titles.group(1), titles.group(2), titles.group(3) });
+        }
         return out;
     }
 
@@ -62,7 +67,10 @@ public final class TestDictionary {
         return out;
     }
 
-    /** Only the INSERT statement itself, so CHECK constraints in the same file are not read as rows. */
+    /**
+     * Only the INSERT statement itself, so CHECK constraints in the same file are
+     * not read as rows.
+     */
     private static String insertBlock(String sql, String insert) {
         int start = sql.indexOf(insert);
         if (start < 0) {

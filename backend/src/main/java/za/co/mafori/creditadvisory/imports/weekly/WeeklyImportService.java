@@ -33,6 +33,8 @@ import za.co.mafori.creditadvisory.imports.register.ParseResult;
 import za.co.mafori.creditadvisory.imports.register.ParsedRow;
 import za.co.mafori.creditadvisory.imports.register.WeekStarting;
 import za.co.mafori.creditadvisory.imports.register.WeeklyRegisterParser;
+import za.co.mafori.creditadvisory.imports.report.ReconciliationService;
+import za.co.mafori.creditadvisory.imports.report.ReportReconciler;
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportStore.ConsultantRef;
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportStore.ExistingClient;
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportStore.Job;
@@ -40,6 +42,7 @@ import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.ConfirmResul
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.DaySummary;
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.ImportListItem;
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.ImportSummary;
+import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.IssueFile;
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.IssueView;
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.StagedRowView;
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.UnmappedConsultant;
@@ -56,17 +59,19 @@ public class WeeklyImportService {
     private final IdNumberProtector protector;
     private final WeeklyImportStore store;
     private final AuditLogWriter audit;
+    private final ReconciliationService reconciliation;
     private final Clock clock = Clock.systemUTC();
 
     public WeeklyImportService(PoiWorkbookReader reader, WeeklyRegisterParser parser,
             ImportDictionaryLoader dictionaryLoader, IdNumberProtector protector, WeeklyImportStore store,
-            AuditLogWriter audit) {
+            AuditLogWriter audit, ReconciliationService reconciliation) {
         this.reader = reader;
         this.parser = parser;
         this.dictionaryLoader = dictionaryLoader;
         this.protector = protector;
         this.store = store;
         this.audit = audit;
+        this.reconciliation = reconciliation;
     }
 
     @Transactional
@@ -127,13 +132,20 @@ public class WeeklyImportService {
                 if (!WeeklyImportStore.key(c.firstName()).equals(WeeklyImportStore.key(row.firstName()))
                         || !WeeklyImportStore.key(c.lastName()).equals(WeeklyImportStore.key(row.lastName()))) {
                     extraIssues.add(rowIssue(row, "WARNING", "client:name-differs", "NAME",
-                            "This client already exists under a different name. The stored name is kept."));
+                            "This ID number belongs to a client stored under a different name. The stored name is kept; "
+                                    + "confirm needs a manager's explicit approval (or fix the workbook)."));
                 }
                 if (consultant != null && c.currentConsultantId() != null
                         && c.currentConsultantId() != consultant.id()) {
                     extraIssues.add(rowIssue(row, "WARNING", "client:consultant-differs", "CONSULTANT",
                             "The client is assigned to another consultant. The assignment is not changed; "
                                     + "the sale is recorded for the consultant in the sheet."));
+                }
+                if (consultant != null && c.currentConsultantId() == null
+                        && "UNASSIGN".equals(store.lastAssignmentChange(c.id()).orElse(null))) {
+                    extraIssues.add(rowIssue(row, "WARNING", "client:unassigned-by-manager", "CONSULTANT",
+                            "A manager removed this client's consultant. The import does not assign the client "
+                                    + "again; the sale is recorded for the consultant in the sheet."));
                 }
                 staged.add(new Staged(row, "UNCHANGED", hash, c.id(), c.version(), false, false));
                 unchanged++;
@@ -170,8 +182,11 @@ public class WeeklyImportService {
         for (ParseIssue i : allIssues) {
             store.insertIssue(jobId, i.sheet(), i.row(), i.field(), i.code(), i.severity().name(), i.message());
         }
+        ReportReconciler.Reconciliation report = reconciliation.storeForPreview(jobId, week, workbook, parsed,
+                dictionary);
         audit.record("IMPORT_PREVIEWED", "IMPORT_JOB", jobId, meta("weekStarting", week.toString(), "rows",
-                staged.size(), "rejected", invalid, "newClients", newCount, "fileDigest", digest));
+                staged.size(), "rejected", invalid, "newClients", newCount, "fileDigest", digest,
+                "reportFigures", report.figures().size(), "reportDifferences", report.differences()));
         return summary(jobId);
     }
 
@@ -255,12 +270,18 @@ public class WeeklyImportService {
         if (!unmapped.isEmpty()) {
             blockers.add("UNMAPPED_CONSULTANTS");
         }
+        int nameDifferences = (int) store.nameDifferenceCount(jobId);
+        if (nameDifferences > 0 && "PREVIEWED".equals(state)) {
+            blockers.add("NAME_DIFFERENCES");
+        }
+        var report = reconciliation.jobStatus(jobId);
         return new ImportSummary(job.id(), job.fileName(), job.fileDigest(), state, job.weekStarting(),
                 job.weekStarting().plusDays(6), job.uploadedByEmail(), job.createdAt(), job.expiresAt(),
                 job.committedAt(), job.totalRows(), job.newCount(), job.unchangedCount(), job.duplicateCount(),
                 job.invalidCount(), job.appliedCount(), issues.getOrDefault("ERROR", 0L),
                 issues.getOrDefault("WARNING", 0L), issues.getOrDefault("INFO", 0L), quotation, banked, days, unmapped,
-                weekImportedBy, weekImportedBy != null && "PREVIEWED".equals(state), blockers.isEmpty(), blockers);
+                weekImportedBy, weekImportedBy != null && "PREVIEWED".equals(state), blockers.isEmpty(), blockers,
+                report.status(), report.differences(), nameDifferences);
     }
 
     private List<UnmappedConsultant> unmappedConsultants(long jobId) {
@@ -301,6 +322,35 @@ public class WeeklyImportService {
         return page(items, p, s, store.countIssues(jobId, sev));
     }
 
+    @Transactional
+    public IssueFile exportIssues(long jobId, String severity) {
+        Job job = store.findJob(jobId).orElseThrow(() -> notFound(jobId));
+        String sev = blankToNull(severity) == null ? null : severity.strip().toUpperCase(java.util.Locale.ROOT);
+        List<WeeklyImportStore.IssueLine> lines = store.issueLines(jobId, sev);
+        StringBuilder csv = new StringBuilder("﻿");
+        csv.append(csvLine("Sheet", "Row", "Field", "Severity", "Code", "Message", "ID number (last 4)"));
+        for (WeeklyImportStore.IssueLine l : lines) {
+            csv.append(csvLine(l.sheetName(), l.rowNumber() == null ? "" : l.rowNumber().toString(), l.field(),
+                    l.severity(), l.code(), l.message(),
+                    l.idNumberLast4() == null ? "" : "*********" + l.idNumberLast4()));
+        }
+        audit.record("IMPORT_ISSUES_EXPORTED", "IMPORT_JOB", job.id(), meta("severity", sev, "lines", lines.size()));
+        String fileName = "import-" + job.id() + "-" + job.weekStarting() + "-issues.csv";
+        return new IssueFile(fileName, csv.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    private static String csvLine(String... values) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < values.length; i++) {
+            String v = values[i] == null ? "" : values[i];
+            if (!v.isEmpty() && "=+-@\t\r".indexOf(v.charAt(0)) >= 0) {
+                v = "'" + v;
+            }
+            sb.append(i == 0 ? "" : ",").append('"').append(v.replace("\"", "\"\"")).append('"');
+        }
+        return sb.append("\r\n").toString();
+    }
+
     @Transactional(readOnly = true)
     public PageResponse<ImportListItem> list(int page, int size) {
         int s = clampSize(size);
@@ -336,7 +386,8 @@ public class WeeklyImportService {
     }
 
     @Transactional
-    public ConfirmResult confirm(long userId, boolean admin, long jobId, String fileDigest, String replaceReason) {
+    public ConfirmResult confirm(long userId, boolean admin, long jobId, String fileDigest, String replaceReason,
+            boolean acceptNameDifferences) {
         Job job = store.lockJob(jobId).orElseThrow(() -> notFound(jobId));
         requireOpen(job);
         if (!job.fileDigest().equals(fileDigest)) {
@@ -372,6 +423,15 @@ public class WeeklyImportService {
                 throw ApiException.unprocessable("import:replace-reason-required", "Reason required",
                         "Give a reason for replacing the week that was already imported.");
             }
+        }
+        long nameDifferences = store.nameDifferenceCount(job.id());
+        if (nameDifferences > 0 && !acceptNameDifferences) {
+            throw ApiException.unprocessable("import:name-differences-unconfirmed", "Names differ",
+                    nameDifferences + " row(s) have the ID number of a client stored under another name. Check them "
+                            + "(issues with code client:name-differs) and confirm again with acceptNameDifferences, "
+                            + "or fix the workbook and upload it again.");
+        }
+        if (replaced != null) {
             superseded = store.supersedeTransactions(replaced, job.id());
         }
 
@@ -402,7 +462,9 @@ public class WeeklyImportService {
                     if ("NEW".equals(r.action())) {
                         n.stale++;
                     }
+
                     if (c.currentConsultantId() == null && consultant != null && consultant.active()
+                            && !"UNASSIGN".equals(store.lastAssignmentChange(c.id()).orElse(null))
                             && store.assignIfUnassigned(c.id(), consultant.id())) {
                         store.insertImportHistory(c.id(), consultant.id(), historyReason, userId, job.id());
                         n.assigned++;
@@ -419,6 +481,8 @@ public class WeeklyImportService {
                     clientId = store.insertClient(r.idNumberHash(), r.idNumberEncrypted(), r.idNumberLast4(),
                             r.firstName(), r.lastName(), assignTo, employerId, job.id());
                     n.newClients++;
+                    audit.record("CLIENT_CREATED", "CLIENT", clientId,
+                            meta("consultantId", assignTo, "importJobId", job.id()));
                     if (assignTo != null) {
                         store.insertImportHistory(clientId, assignTo, historyReason, userId, job.id());
                         n.assigned++;
@@ -443,7 +507,7 @@ public class WeeklyImportService {
                 n.newClients));
         audit.record("IMPORT_CONFIRMED", "IMPORT_JOB", job.id(), meta("weekStarting", job.weekStarting().toString(),
                 "transactions", n.transactions, "newClients", n.newClients, "assigned", n.assigned,
-                "replacesImportJobId", replaced));
+                "replacesImportJobId", replaced, "nameDifferencesAccepted", nameDifferences));
         if (replaced != null) {
             audit.record("WEEK_REPLACED", "IMPORT_JOB", replaced, meta("replacedBy", job.id(), "reason", reason,
                     "supersededTransactions", superseded));

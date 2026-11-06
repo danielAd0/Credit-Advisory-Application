@@ -437,6 +437,37 @@ public class WeeklyImportStore {
                 """, Long.class, hash, encrypted, last4, firstName, lastName, consultantId, employerId, jobId);
     }
 
+    public Optional<String> lastAssignmentChange(long clientId) {
+        return jdbc.query("""
+                select change_type from client_assignment_history where client_id = ?
+                order by changed_at desc, id desc limit 1
+                """, (rs, n) -> rs.getString(1), clientId).stream().findFirst();
+    }
+
+    public long nameDifferenceCount(long jobId) {
+        return jdbc.queryForObject("""
+                select count(*) from import_errors where import_job_id = ? and error_code = 'client:name-differs'
+                """, Long.class, jobId);
+    }
+
+    public record IssueLine(String sheetName, Integer rowNumber, String field, String severity, String code,
+            String message, String idNumberLast4) {
+    }
+
+    public List<IssueLine> issueLines(long jobId, String severity) {
+        return jdbc.query("""
+                select e.sheet_name, e.row_number, e.field_name, e.severity, e.error_code, e.safe_message,
+                       r.id_number_last4
+                from import_errors e
+                left join import_rows r on r.import_job_id = e.import_job_id and r.sheet_name = e.sheet_name
+                                        and r.row_number = e.row_number
+                where e.import_job_id = ? and (cast(? as varchar) is null or e.severity = ?)
+                order by case e.severity when 'ERROR' then 0 when 'WARNING' then 1 else 2 end,
+                         e.row_number is not null, e.sheet_name nulls first, e.row_number, e.id
+                """, (rs, n) -> new IssueLine(rs.getString(1), nullableInt(rs, 2), rs.getString(3), rs.getString(4),
+                rs.getString(5), rs.getString(6), rs.getString(7)), jobId, severity, severity);
+    }
+
     public boolean assignIfUnassigned(long clientId, long consultantId) {
         return jdbc.update("""
                 update clients set current_consultant_id = ?, version = version + 1
