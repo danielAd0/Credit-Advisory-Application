@@ -50,7 +50,7 @@ Amounts are numbers in rand with two decimals (`1900.00`). Quotation and Banked 
 | 404    | `urn:credit-advisory:report:week-not-found` | no register imported for that week                                    |
 | 404    | `urn:credit-advisory:consultant:not-found`  | products report, `?consultantId=` of a consultant that does not exist |
 
-Reports contain totals only: no client names, no ID numbers. They are not audited (like the dashboard).
+Reports contain totals only: no client names, no ID numbers. Viewing them is not audited (like the dashboard); downloading one as a file is (section 7).
 
 ---
 
@@ -297,7 +297,57 @@ For scope `OWN` the totals are the consultant's own; a week where they sold noth
 
 ---
 
-## 7. Not built yet
+## 7. Exports (FR-22) - CSV downloads
 
-- **Export (FR-22):** downloading these reports as a file. To be added as extra endpoints with the same scoping.
+The same four reports as files that Excel opens with a double-click. Same scoping, same `{weekStarting}` rules and the same errors as the JSON reports (errors are still JSON ProblemDetail, not a file).
+
+| Endpoint | Who | The file (one line per...) |
+|---|---|---|
+| `GET /api/reports/weeks/{weekStarting}/summary.csv` | any signed-in user | day (Monday to Sunday), then a `Week` line |
+| `GET /api/reports/weeks/{weekStarting}/consultants.csv` | any signed-in user | consultant; `No consultant` last (scope `ALL` only) |
+| `GET /api/reports/weeks/{weekStarting}/products.csv` | any signed-in user | product. `?consultantId=` works exactly like section 5 |
+| `GET /api/reports/weeks/{weekStarting}/budget-structures.csv` | MANAGER, ADMIN | budget structure |
+
+**Response**
+
+```
+200 OK
+Content-Type: text/csv;charset=UTF-8
+Content-Disposition: attachment; filename="report-summary-2026-09-14.csv"
+
+Day,Date,Sales,Clients,Quotation,Banked,Target,Target met
+Monday,2026-09-14,2,2,3100.00,2925.00,120000.00,No
+Tuesday,2026-09-15,1,1,130000.00,100000.00,120000.00,Yes
+...
+Sunday,2026-09-20,0,0,0.00,0.00,120000.00,No
+Week,2026-09-14 to 2026-09-20,4,3,133600.00,103425.00,600000.00,No
+```
+
+**Columns**
+
+| File | Columns |
+|---|---|
+| `summary.csv` | `Day`, `Date`, `Sales`, `Clients`, `Quotation`, `Banked`, `Target`, `Target met`. For scope `OWN` the last two are empty |
+| `consultants.csv` | `Consultant code`, `Consultant`, then `Monday quotation`, `Monday banked` ... `Sunday quotation`, `Sunday banked`, then `Week sales`, `Week clients`, `Week quotation`, `Week banked` |
+| `products.csv` | `Product code`, `Product`, `Monday` ... `Sunday`, `Week sales`, `Week total` |
+| `budget-structures.csv` | `Budget structure`, `Monday` ... `Sunday`, `Week entries`, `Week loan total` |
+
+**File names:** `report-<report>-<weekStarting>.csv`, for example `report-consultants-2026-09-14.csv`. A products export for one consultant ends in `-consultant-<id>.csv` (also a consultant's own export).
+
+**Format**
+
+- UTF-8 with a byte-order mark (so Excel shows names with accents correctly), comma-separated, lines end with CRLF.
+- Amounts are plain numbers with two decimals (`1900.00`), no currency sign and no thousands separator, so Excel can add them up. `Target met` is `Yes` / `No`.
+- **Formula protection:** any text that starts with `=`, `+`, `-` or `@` gets a `'` in front (Excel then shows it as text instead of running it). Names and structures come from the register, so this stops a planted formula from running on a manager's computer.
+- Text with a comma, quote or line break is in double quotes, with quotes doubled.
+- No client names, no ID numbers - totals only, like the JSON reports.
+
+**Audit:** every successful export writes `REPORT_EXPORTED` with `report` (`summary`, `consultants`, `products`, `budget-structures`), `weekStarting`, `scope` and `consultantId` (products only). A refused export (`400`, `403`, `404`) writes nothing. Viewing the JSON reports is not audited.
+
+**Frontend:** a plain link works, because the session cookie is sent with it: `<a href="/api/reports/weeks/2026-09-14/summary.csv">Download</a>`. No CSRF token is needed (it is a GET).
+
+---
+
+## 8. Not built yet
+
 - **Reconciliation with the workbook's own Report sheet** (stage 4 of the import): `weekly_report_figures` holds the workbook's figures; comparing them is part of the import work.

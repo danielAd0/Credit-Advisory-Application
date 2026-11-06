@@ -138,6 +138,7 @@ Every successful change below writes one row to `audit_logs` in the **same trans
 | `CASE_VIEWED`                    | case                         | - (every time `GET /api/cases/{id}` returns the case and its notes)                                                                   |
 | `CASE_UPDATED`                   | case                         | `fields`: the names of the fields that changed; `fromStatus`, `toStatus` when the status changed. Never the title                     |
 | `CASE_NOTE_ADDED`                | case                         | `noteId`. Never the note text                                                                                                         |
+| `REPORT_EXPORTED` | - | `report`, `weekStarting`, `scope`, `consultantId` (see `docs/api-reports.md` section 7) |
 
 Entries only record that something changed when it really changed (renaming to the same name, or setting the status it already has, writes nothing). Audit rows cannot be updated or deleted - the database refuses. Admins read them with `GET /api/audit-logs` (section 8).
 
