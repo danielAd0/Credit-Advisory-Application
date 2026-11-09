@@ -45,7 +45,11 @@ import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.ImportSummar
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.IssueFile;
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.IssueView;
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.StagedRowView;
+import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.NewConsultant;
+import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.NewConsultantsResult;
+import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.SimilarConsultant;
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.UnmappedConsultant;
+import za.co.mafori.creditadvisory.consultant.ConsultantCodeGenerator;
 
 @Service
 public class WeeklyImportService {
@@ -60,11 +64,12 @@ public class WeeklyImportService {
     private final WeeklyImportStore store;
     private final AuditLogWriter audit;
     private final ReconciliationService reconciliation;
+    private final ConsultantCodeGenerator codes;
     private final Clock clock = Clock.systemUTC();
 
     public WeeklyImportService(PoiWorkbookReader reader, WeeklyRegisterParser parser,
             ImportDictionaryLoader dictionaryLoader, IdNumberProtector protector, WeeklyImportStore store,
-            AuditLogWriter audit, ReconciliationService reconciliation) {
+            AuditLogWriter audit, ReconciliationService reconciliation, ConsultantCodeGenerator codes) {
         this.reader = reader;
         this.parser = parser;
         this.dictionaryLoader = dictionaryLoader;
@@ -72,6 +77,7 @@ public class WeeklyImportService {
         this.store = store;
         this.audit = audit;
         this.reconciliation = reconciliation;
+        this.codes = codes;
     }
 
     @Transactional
@@ -289,10 +295,88 @@ public class WeeklyImportService {
         List<UnmappedConsultant> out = new ArrayList<>();
         store.consultantNames(jobId).forEach((name, rows) -> {
             if (!known.containsKey(WeeklyImportStore.key(name))) {
-                out.add(new UnmappedConsultant(name, rows));
+                out.add(new UnmappedConsultant(name, rows, similarConsultants(name, known)));
             }
         });
         return out;
+    }
+
+    /**
+     * Up to 3 existing consultants whose name (or alias) looks like {@code name}:
+     * at most 2
+     * letters different, or one is a word of the other ("AMBITIOUS" and "Ambitious
+     * Mokoena").
+     * Shown next to an unknown name so a typo is mapped instead of becoming a
+     * second consultant.
+     */
+    static List<SimilarConsultant> similarConsultants(String name, Map<String, ConsultantRef> known) {
+        String key = WeeklyImportStore.key(name);
+        Map<Long, int[]> best = new java.util.HashMap<>(); // consultant id -> {score}
+        Map<Long, ConsultantRef> refs = new java.util.HashMap<>();
+        for (var e : known.entrySet()) {
+            int score = similarity(key, e.getKey());
+            if (score >= 0) {
+                ConsultantRef c = e.getValue();
+                refs.put(c.id(), c);
+                best.merge(c.id(), new int[] { score }, (a, b) -> a[0] <= b[0] ? a : b);
+            }
+        }
+        return best.entrySet().stream()
+                .sorted(java.util.Comparator.comparingInt((Map.Entry<Long, int[]> e) -> e.getValue()[0])
+                        .thenComparing(e -> refs.get(e.getKey()).fullName()))
+                .limit(3)
+                .map(e -> refs.get(e.getKey()))
+                .map(c -> new SimilarConsultant(c.id(), c.code(), c.fullName(), c.status()))
+                .toList();
+    }
+
+    /**
+     * 0-2 = letters different; 3 = one name is a word of the other; -1 = not
+     * similar.
+     */
+    private static int similarity(String a, String b) {
+        if (a.length() >= 4 && b.length() >= 4) {
+            int d = distance(a, b, 2);
+            if (d <= 2) {
+                return d;
+            }
+        }
+        List<String> wa = List.of(a.split(" "));
+        List<String> wb = List.of(b.split(" "));
+        boolean word = (wa.size() > 1 || wb.size() > 1)
+                && (wa.stream().anyMatch(w -> w.length() >= 3 && wb.contains(w)));
+        return word ? 3 : -1;
+    }
+
+    /**
+     * Levenshtein distance, giving up (returning max + 1) once it is over
+     * {@code max}.
+     */
+    private static int distance(String a, String b, int max) {
+        if (Math.abs(a.length() - b.length()) > max) {
+            return max + 1;
+        }
+        int[] prev = new int[b.length() + 1];
+        int[] cur = new int[b.length() + 1];
+        for (int j = 0; j <= b.length(); j++) {
+            prev[j] = j;
+        }
+        for (int i = 1; i <= a.length(); i++) {
+            cur[0] = i;
+            int rowMin = cur[0];
+            for (int j = 1; j <= b.length(); j++) {
+                int cost = a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1;
+                cur[j] = Math.min(Math.min(cur[j - 1] + 1, prev[j] + 1), prev[j - 1] + cost);
+                rowMin = Math.min(rowMin, cur[j]);
+            }
+            if (rowMin > max) {
+                return max + 1;
+            }
+            int[] t = prev;
+            prev = cur;
+            cur = t;
+        }
+        return prev[b.length()];
     }
 
     @Transactional(readOnly = true)
@@ -567,6 +651,57 @@ public class WeeklyImportService {
             expired++;
         }
         return expired;
+    }
+
+    /**
+     * Creates new consultants from names in the sheet that match nobody (the
+     * "import the
+     * consultants" option, next to mapping a name). Each gets a generated code
+     * (C0001, ...), the
+     * sheet's spelling as its name and as an alias, so a later rename still matches
+     * next week's
+     * sheet. No login is created: an admin adds one with POST
+     * /api/consultant-accounts or the
+     * users screen. All or nothing.
+     */
+    @Transactional
+    public NewConsultantsResult createConsultantsFromSheet(long userId, long jobId, List<String> namesInSheet) {
+        Job job = requireOpen(store.lockJob(jobId).orElseThrow(() -> notFound(jobId)));
+        if (namesInSheet == null || namesInSheet.isEmpty()) {
+            throw ApiException.unprocessable("import:no-names", "No names", "Choose at least one name to create.");
+        }
+        Map<String, String> unmapped = new java.util.LinkedHashMap<>(); // key -> spelling as written
+        for (UnmappedConsultant u : unmappedConsultants(job.id())) {
+            unmapped.putIfAbsent(WeeklyImportStore.key(u.nameInSheet()), u.nameInSheet());
+        }
+        Map<String, String> chosen = new java.util.LinkedHashMap<>();
+        for (String name : namesInSheet) {
+            String key = name == null ? "" : WeeklyImportStore.key(name);
+            if (key.isEmpty()) {
+                throw ApiException.unprocessable("import:no-names", "Empty name", "A name to create is empty.");
+            }
+            if (!unmapped.containsKey(key)) {
+                boolean inImport = store.consultantNames(job.id()).keySet().stream()
+                        .anyMatch(n -> WeeklyImportStore.key(n).equals(key));
+                throw inImport
+                        ? ApiException.conflict("import:name-already-mapped", "Already mapped",
+                                "\"" + name.strip() + "\" already matches a consultant.")
+                        : ApiException.unprocessable("import:name-not-in-import", "Name not in this import",
+                                "No row of this import has the consultant name \"" + name.strip() + "\".");
+            }
+            chosen.putIfAbsent(key, unmapped.get(key));
+        }
+        List<NewConsultant> created = new ArrayList<>();
+        for (String asWritten : chosen.values()) {
+            String fullName = asWritten.strip().replaceAll("\\s+", " ");
+            String code = codes.next();
+            long id = store.createConsultant(code, fullName);
+            store.insertConsultantAlias(id, fullName, userId);
+            audit.record("CONSULTANT_CREATED", "CONSULTANT", id, meta("consultantCode", code, "fullName", fullName,
+                    "codeGenerated", true, "importJobId", job.id()));
+            created.add(new NewConsultant(id, code, fullName));
+        }
+        return new NewConsultantsResult(created, summary(job.id()));
     }
 
     @Transactional

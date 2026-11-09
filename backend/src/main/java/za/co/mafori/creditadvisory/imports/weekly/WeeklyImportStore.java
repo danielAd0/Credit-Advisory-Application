@@ -349,6 +349,16 @@ public class WeeklyImportStore {
                 """, Boolean.class, key(alias));
     }
 
+    /**
+     * A consultant created from a sheet name
+     * (WeeklyImportService.createConsultantsFromSheet).
+     */
+    public long createConsultant(String code, String fullName) {
+        return jdbc.queryForObject(
+                "insert into consultants (consultant_code, full_name) values (?, ?) returning id", Long.class,
+                code, fullName);
+    }
+
     public void insertConsultantAlias(long consultantId, String alias, long userId) {
         jdbc.update("insert into consultant_aliases (consultant_id, alias, created_by_user_id) values (?, ?, ?)",
                 consultantId, alias.strip().replaceAll("\\s+", " "), userId);

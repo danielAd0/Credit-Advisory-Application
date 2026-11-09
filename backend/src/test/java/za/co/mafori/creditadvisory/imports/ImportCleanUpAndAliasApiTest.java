@@ -20,7 +20,7 @@ class ImportCleanupAndAliasApiTest extends ApiTestBase {
 
     private long one;
     private long two;
-    private ApiClient manager;
+    private ApiClient admin;
 
     @BeforeEach
     void createStaff() {
@@ -30,7 +30,7 @@ class ImportCleanupAndAliasApiTest extends ApiTestBase {
         createConsultant("C004", "TEST CONSULTANT FOUR");
         createConsultant("C005", "TESTLABEL");
         createUser("manager@test.local", null, RoleName.MANAGER);
-        manager = signIn("manager@test.local");
+        admin = signIn(ADMIN_EMAIL);
     }
 
     private long count(String sql, Object... args) {
@@ -38,7 +38,7 @@ class ImportCleanupAndAliasApiTest extends ApiTestBase {
     }
 
     private long preview() {
-        ApiClient.Response r = manager.upload("/api/imports/weekly-register/preview", FILE_NAME,
+        ApiClient.Response r = admin.upload("/api/imports/weekly-register/preview", FILE_NAME,
                 FakeWeeklyRegisterWorkbook.build());
         assertThat(r.status()).as(r.body()).isEqualTo(201);
         return r.number("$.id");
@@ -58,7 +58,7 @@ class ImportCleanupAndAliasApiTest extends ApiTestBase {
                 .isZero();
         assertThat(count("select count(*) from audit_logs where action = 'IMPORT_EXPIRED' and target_id = ?",
                 String.valueOf(old))).isEqualTo(1);
-        assertThat(manager.get("/api/imports/" + old).text("$.state")).isEqualTo("EXPIRED");
+        assertThat(admin.get("/api/imports/" + old).text("$.state")).isEqualTo("EXPIRED");
 
         long fresh = preview(); // not 24 hours old yet: untouched
         cleanup.expireOldPreviews();
@@ -70,35 +70,37 @@ class ImportCleanupAndAliasApiTest extends ApiTestBase {
     @Test
     void aliasesCanBeListedAddedAndRemoved() {
         long id = preview();
-        assertThat(manager
+        assertThat(admin
                 .post("/api/imports/" + id + "/consultant-mappings",
                         """
                                 {"nameInSheet":"%s","consultantId":%d}"""
                                 .formatted(FakeWeeklyRegisterWorkbook.UNMAPPED_CONSULTANT, one))
                 .status()).isEqualTo(200);
 
-        ApiClient.Response list = manager.get("/api/consultant-aliases");
+        ApiClient.Response list = admin.get("/api/consultant-aliases");
         assertThat(list.status()).as(list.body()).isEqualTo(200);
         assertThat(list.texts("$.items[*].alias")).containsExactly(FakeWeeklyRegisterWorkbook.UNMAPPED_CONSULTANT);
-        assertThat(list.text("$.items[0].createdBy")).isEqualTo("manager@test.local");
+        assertThat(list.text("$.items[0].createdBy")).isEqualTo(ADMIN_EMAIL);
         long aliasId = list.number("$.items[0].id");
 
-        ApiClient.Response created = manager.post("/api/consultant-aliases", """
+        ApiClient.Response created = admin.post("/api/consultant-aliases", """
                 {"consultantId":%d,"alias":"  T.  Consultant Two "}""".formatted(two));
         assertThat(created.status()).as(created.body()).isEqualTo(201);
         assertThat(created.text("$.alias")).isEqualTo("T. Consultant Two");
-        assertThat(manager.post("/api/consultant-aliases", """
+        assertThat(admin.post("/api/consultant-aliases", """
                 {"consultantId":%d,"alias":"t. consultant two"}""".formatted(one)).text("$.type"))
                 .isEqualTo("urn:credit-advisory:consultant-alias:taken");
-        assertThat(manager.get("/api/consultant-aliases?consultantId=" + two).number("$.totalItems")).isEqualTo(1);
+        assertThat(admin.get("/api/consultant-aliases?consultantId=" + two).number("$.totalItems")).isEqualTo(1);
 
-        assertThat(manager.send("DELETE", "/api/consultant-aliases/" + aliasId, null).status()).isEqualTo(204);
-        assertThat(manager.get("/api/consultant-aliases?search=unmapped").number("$.totalItems")).isZero();
+        assertThat(admin.send("DELETE", "/api/consultant-aliases/" + aliasId, null).status()).isEqualTo(204);
+        assertThat(admin.get("/api/consultant-aliases?search=unmapped").number("$.totalItems")).isZero();
         // The open preview needs the name mapped again before it can be confirmed.
-        assertThat(manager.get("/api/imports/" + id).texts("$.blockers")).contains("UNMAPPED_CONSULTANTS");
+        assertThat(admin.get("/api/imports/" + id).texts("$.blockers")).contains("UNMAPPED_CONSULTANTS");
 
         long consultantId = createConsultant("C009", "Some Consultant");
         createUser("consultant@test.local", consultantId, RoleName.CONSULTANT);
         assertThat(signIn("consultant@test.local").get("/api/consultant-aliases").status()).isEqualTo(403);
+        assertThat(signIn("manager@test.local").get("/api/consultant-aliases").status()).as("admin only")
+                .isEqualTo(403);
     }
 }

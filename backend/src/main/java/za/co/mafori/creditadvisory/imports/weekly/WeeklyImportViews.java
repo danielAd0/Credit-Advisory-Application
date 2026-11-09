@@ -28,7 +28,29 @@ public final class WeeklyImportViews {
                         BigDecimal quotation, BigDecimal banked) {
         }
 
-        public record UnmappedConsultant(String nameInSheet, int rows) {
+        /**
+         * A consultant name in the sheet that matches nobody.
+         * {@code similarConsultants}: up to 3
+         * existing consultants that look like it (a typo?), to map it to instead of
+         * creating one.
+         */
+        public record UnmappedConsultant(String nameInSheet, int rows, List<SimilarConsultant> similarConsultants) {
+        }
+
+        public record SimilarConsultant(long consultantId, String consultantCode, String fullName, String status) {
+        }
+
+        /** POST /api/imports/{id}/new-consultants. */
+        public record NewConsultantsRequest(
+                        // 1-100 names; each is checked by the service (blank, not in the import,
+                        // already mapped)
+                        @jakarta.validation.constraints.NotEmpty @jakarta.validation.constraints.Size(max = 100) List<String> namesInSheet) {
+        }
+
+        public record NewConsultant(long consultantId, String consultantCode, String fullName) {
+        }
+
+        public record NewConsultantsResult(List<NewConsultant> created, ImportSummary summary) {
         }
 
         public record StagedRowView(long id, String sheetName, int rowNumber, LocalDate date, String action,

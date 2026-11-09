@@ -7,85 +7,71 @@ import org.junit.jupiter.api.Test;
 import za.co.mafori.creditadvisory.support.ApiClient;
 import za.co.mafori.creditadvisory.support.ApiTestBase;
 
-/** /api/consultants: clientCount, used by the frontend to plan handovers. */
-class ConsultantApiTest extends ApiTestBase {
+/**
+ * Consultant codes are generated (C0001, C0002, ...) when the admin leaves the
+ * code out.
+ */
+class ConsultantCodeApiTest extends ApiTestBase {
 
-    private long thandiId;
-    private long siphoId;
-    private long leratoId;
-    private long clientA;
-    private long clientB;
+    private ApiClient admin;
 
     @BeforeEach
-    void createData() {
-        thandiId = createConsultant("C001", "Thandi Test");
-        siphoId = createConsultant("C002", "Sipho Test");
-        leratoId = createConsultant("C003", "Lerato Test");
-
-        clientA = createClient("Test", "Alpha", thandiId);
-        clientB = createClient("Test", "Bravo", thandiId);
-        createClient("Test", "Charlie", thandiId);
-        createClient("Test", "Delta", siphoId);
-        createClient("Test", "Echo", null);
+    void signInAsAdmin() {
+        admin = signIn(ADMIN_EMAIL);
     }
 
-    private long clientCountOf(ApiClient api, long consultantId) {
-        return api.get("/api/consultants/" + consultantId).number("$.clientCount");
+    private ApiClient.Response add(String body) {
+        return admin.post("/api/consultants", body);
     }
 
     @Test
-    void listShowsHowManyClientsEachConsultantHas() {
-        ApiClient.Response page = signIn(ADMIN_EMAIL).get("/api/consultants");
+    void aCodeIsGeneratedWhenLeftOut() {
+        ApiClient.Response first = add("""
+                {"fullName":"First Generated"}""");
+        assertThat(first.status()).as(first.body()).isEqualTo(201);
+        assertThat(first.text("$.consultantCode")).matches("C\\d{4}");
 
-        assertThat(page.status()).isEqualTo(200);
-        // Sorted by name: Lerato, Sipho, Thandi. The unassigned client counts for
-        // nobody.
-        assertThat(page.texts("$.items[*].consultantCode")).containsExactly("C003", "C002", "C001");
-        assertThat(page.numbers("$.items[*].clientCount")).containsExactly(0L, 1L, 3L);
+        ApiClient.Response blank = add("""
+                {"consultantCode":"  ","fullName":"Second Generated"}""");
+        assertThat(blank.status()).as(blank.body()).isEqualTo(201);
+        int a = Integer.parseInt(first.text("$.consultantCode").substring(1));
+        int b = Integer.parseInt(blank.text("$.consultantCode").substring(1));
+        assertThat(b).as("the next number").isEqualTo(a + 1);
+
+        assertThat(jdbc.queryForObject("select count(*) from audit_logs where action = 'CONSULTANT_CREATED'"
+                + " and metadata ->> 'codeGenerated' = 'true'", Long.class)).isEqualTo(2);
     }
 
     @Test
-    void singleConsultantHasAClientCount() {
-        ApiClient admin = signIn(ADMIN_EMAIL);
+    void aTakenCodeIsSkipped() {
+        String next = "C" + String.format("%04d",
+                jdbc.queryForObject("select last_value + (case when is_called then 1 else 0 end)"
+                        + " from consultant_code_seq", Long.class));
+        createConsultant(next, "Typed By Hand");
 
-        assertThat(clientCountOf(admin, thandiId)).isEqualTo(3);
-        assertThat(clientCountOf(admin, leratoId)).isZero();
+        ApiClient.Response generated = add("""
+                {"fullName":"Generated After"}""");
+        assertThat(generated.status()).isEqualTo(201);
+        assertThat(generated.text("$.consultantCode")).isNotEqualTo(next).matches("C\\d{4}");
     }
 
     @Test
-    void newConsultantStartsWithNoClients() {
-        ApiClient.Response created = signIn(ADMIN_EMAIL).post("/api/consultants", """
-                {"consultantCode":"C009","fullName":"New Test"}""");
-
-        assertThat(created.status()).isEqualTo(201);
-        assertThat(created.number("$.clientCount")).isZero();
+    void aCodeCanStillBeTypedIn() {
+        ApiClient.Response typed = add("""
+                {"consultantCode":" c777 ","fullName":"Existing Staff Code"}""");
+        assertThat(typed.status()).isEqualTo(201);
+        assertThat(typed.text("$.consultantCode")).isEqualTo("C777");
+        assertThat(add("""
+                {"consultantCode":"C777","fullName":"Again"}""").status()).isEqualTo(409);
+        assertThat(add("""
+                {"consultantCode":"not valid!","fullName":"Bad"}""").status()).isEqualTo(400);
     }
 
     @Test
-    void countsFollowTransfers() {
-        ApiClient admin = signIn(ADMIN_EMAIL);
-
-        ApiClient.Response transfer = admin.post("/api/client-transfers", """
-                {"fromConsultantId":%d,"toConsultantId":%d,"clientIds":[%d,%d],"reason":"Test handover"}"""
-                .formatted(thandiId, siphoId, clientA, clientB));
-        assertThat(transfer.status()).as(transfer.body()).isEqualTo(200);
-
-        assertThat(clientCountOf(admin, thandiId)).isEqualTo(1);
-        assertThat(clientCountOf(admin, siphoId)).isEqualTo(3);
-    }
-
-    @Test
-    void statusChangeReportsClientsStillToHandOver() {
-        ApiClient admin = signIn(ADMIN_EMAIL);
-        long version = admin.get("/api/consultants/" + thandiId).number("$.version");
-
-        ApiClient.Response response = admin.patch("/api/consultants/" + thandiId + "/status", """
-                {"status":"INACTIVE","reason":"Left the company","version":%d}""".formatted(version));
-
-        assertThat(response.status()).as(response.body()).isEqualTo(200);
-        assertThat(response.text("$.status")).isEqualTo("INACTIVE");
-        // Clients are not moved automatically; the frontend uses this to prompt a
-        // handover.
-        assertThat(response.number("$.clientCount")).isEqualTo(3);
+    void aConsultantLoginGetsAGeneratedCodeToo() {
+        ApiClient.Response created = admin.post("/api/consultant-accounts", """
+                {"fullName":"With Login","email":"withlogin@test.local","temporaryPassword":"Temp-Password-2026"}""");
+        assertThat(created.status()).as(created.body()).isEqualTo(201);
+        assertThat(created.text("$.consultant.consultantCode")).matches("C\\d{4}");
     }
 }

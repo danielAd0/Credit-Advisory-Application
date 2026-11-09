@@ -19,7 +19,7 @@ import za.co.mafori.creditadvisory.imports.alias.ConsultantAliasService.CreateAl
 
 @RestController
 @RequestMapping("/api/consultant-aliases")
-@PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
+@PreAuthorize("hasRole('ADMIN')") // part of the import: admin only
 public class ConsultantAliasController {
 
     private final ConsultantAliasService service;
