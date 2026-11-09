@@ -194,6 +194,11 @@ public class WeeklyRegisterParser {
             for (var entry : sheet.rows().tailMap(headerRow, false).entrySet()) {
                 if (isDataRow(entry.getValue())) {
                     dataRows.add(entry.getKey());
+                } else if (hasContentWithoutClient(entry.getValue())) {
+                    // Not a client row, but not empty either: the Report sheet may still count it.
+                    sheetIssues.add(new ParseIssue(WARNING, IssueCodes.ROW_NO_CLIENT, sheet.name(),
+                            entry.getKey() + 1, null, "This row has a consultant or an amount but no name, surname "
+                                    + "or ID number, so it was not imported. Add the client's details, or clear the row."));
                 }
             }
             if (dataRows.isEmpty()) {
@@ -288,6 +293,34 @@ public class WeeklyRegisterParser {
             }
             sheetIssues.add(sheetIssue(ERROR, IssueCodes.SHEET_MISSING_HEADER, String.join(", ", missing),
                     "The sheet has client rows but no column for: " + String.join(", ", missing) + "."));
+            return false;
+        }
+
+        /**
+         * A consultant name, or an amount typed in (not a formula, so a sheet's total
+         * row
+         * does not count), in a row that is not a client row.
+         */
+        private boolean hasContentWithoutClient(Map<Integer, RawCell> cells) {
+            Integer consultant = fieldColumns.get(RegisterField.CONSULTANT);
+            RawCell c = consultant == null ? null : cells.get(consultant);
+            if (c != null && c.kind() == RawCell.Kind.TEXT && !c.isBlankText()) {
+                return true;
+            }
+            List<Integer> amountColumns = new ArrayList<>(productColumns.keySet());
+            for (RegisterField f : List.of(RegisterField.QUOTATION, RegisterField.BANKED)) {
+                Integer column = fieldColumns.get(f);
+                if (column != null) {
+                    amountColumns.add(column);
+                }
+            }
+            for (int column : amountColumns) {
+                RawCell cell = cells.get(column);
+                if (cell != null && !cell.isFormula() && cell.kind() == RawCell.Kind.NUMBER
+                        && cell.number().signum() != 0) {
+                    return true;
+                }
+            }
             return false;
         }
 

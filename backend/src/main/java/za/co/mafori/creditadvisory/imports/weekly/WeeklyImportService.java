@@ -543,6 +543,32 @@ public class WeeklyImportService {
         return id;
     }
 
+    /**
+     * The clean-up job: marks previews past their 24 hours as EXPIRED and deletes
+     * their staged
+     * personal data, as cancel does. Locks each job first, so a confirm running at
+     * the same time
+     * either finishes first or finds the preview expired. Audited as
+     * IMPORT_EXPIRED.
+     *
+     * @return how many previews were expired
+     */
+    @Transactional
+    public int expirePreviews() {
+        int expired = 0;
+        for (long id : store.expiredPreviewIds(500)) {
+            Job job = store.lockJob(id).orElse(null);
+            if (job == null || !"PREVIEWED".equals(job.state()) || job.expiresAt().isAfter(clock.instant())) {
+                continue; // confirmed or cancelled meanwhile
+            }
+            store.markFinished(id, "EXPIRED");
+            audit.record("IMPORT_EXPIRED", "IMPORT_JOB", id, meta("expiresAt", job.expiresAt().toString(),
+                    "weekStarting", String.valueOf(job.weekStarting())));
+            expired++;
+        }
+        return expired;
+    }
+
     @Transactional
     public ImportSummary cancel(long jobId) {
         Job job = requireOpen(store.lockJob(jobId).orElseThrow(() -> notFound(jobId)));
