@@ -11,11 +11,11 @@ no client values are copied into this document or the code.
 
 | # | Question | Decision |
 | --- | --- | --- |
-| D1 | Which figures are the truth when Report or Breakdown disagree with the client rows? | **Recalculate from the client rows and also store the sheet's figures.** Every difference is listed in the import summary for the manager to check. |
+| D1 | Which figures are the truth when Report or Breakdown disagree with the client rows? | **Recalculate from the client rows and also store the sheet's figures.** Every difference is listed in the import summary for the admin to check. |
 | D2 | Rows with no consultant | **Import them.** The client stays unassigned, the row is flagged, and it shows up in the "assign clients" list. |
 | D3 | Quotation / Banked per row | **Store the row's own values** exactly as the sheet calculated them, plus every product amount. Flag rows whose day uses a different formula. |
 | D4 | Process | This document first, then build in stages (section 13). |
-| D5 | Rows with **only an ID number** and nothing else (the real file has 43 on Tuesday) | **Rejected** (`row:missing-name`), so the manager cleans up the sheet. They are not imported and not counted as clients (decided 5 Nov 2026). |
+| D5 | Rows with **only an ID number** and nothing else (the real file has 43 on Tuesday) | **Rejected** (`row:missing-name`), so the admin cleans up the sheet. They are not imported and not counted as clients (decided 5 Nov 2026). |
 
 ---
 
@@ -133,7 +133,7 @@ down is never missed. The header row is the first of the first 10 rows that has 
   IDs appear twice in the analysed week. This is one client with several transactions, shown as an info line.
 
 ### 4.3 Transaction date
-The DATE column is **empty in every row** of the analysed file. The manager picks the **week (a Monday)** when
+The DATE column is **empty in every row** of the analysed file. The admin picks the **week (a Monday)** when
 uploading; it is prefilled from a file name like "14 - 18 Sept 2026". Each row's date is then *week Monday + the
 sheet's weekday*. If a DATE cell has a value, it must equal that date, otherwise `row:date-outside-day` (error).
 
@@ -141,7 +141,7 @@ sheet's weekday*. If a DATE cell has a value, it must equal that date, otherwise
 - Matched against `consultants.full_name` (case- and space-insensitive), then against `consultant_aliases`. The
   sheet uses first names and labels such as "AMBITIOUS", "VICTORIA" and "ABIGAIL", so **no guessing by partial name**.
 - **Blank**: the row is imported with `consultant_id = NULL` and a warning (D2).
-- **Unknown name**: confirm is blocked until a manager maps the name in the preview, either to an existing
+- **Unknown name**: confirm is blocked until the admin maps the name in the preview (or creates it as a new consultant), either to an existing
   consultant (which saves an alias for every future week) or by creating a new consultant. Then it is re-checked.
 - A consultant who is INACTIVE or SUSPENDED can still be *attributed* to a past transaction, but a **new client is
   not assigned** to them (FR-17). That gives a warning.
@@ -269,8 +269,8 @@ the workbook said.
 > Built in stage 3. The exact, current contract is **`docs/api-imports.md`**; the table below is the original plan.
 
 ```
-Upload (.xlsx, ≤10 MB, MANAGER/ADMIN) ─► Preview job (validate, stage rows, nothing written to client tables)
-     ─► Manager maps unknown consultants / reviews warnings & reconciliation
+Upload (.xlsx, ≤10 MB, ADMIN) ─► Preview job (validate, stage rows, nothing written to client tables)
+     ─► Admin maps unknown consultants / reviews warnings & reconciliation
      ─► Confirm (one transaction: clients, transactions, lines, extras, history, report figures)
      ─► Summary (FR-12) ─► personal data in import_rows purged
 ```
@@ -347,11 +347,11 @@ errors** · warnings and errors by code.
 `sheet:unexpected-data` (hidden sheet with data) · `row:invalid-id-number` · `row:id-leading-zero-restored` (warning) ·
 `row:missing-name` · `row:invalid-amount` · `row:negative-amount` · `row:formula-error` · `row:date-outside-day` ·
 `row:no-consultant` (warning) · `row:unknown-consultant` (blocks confirm until mapped) · `row:consultant-not-active` (warning) ·
-`row:quotation-mismatch` / `row:banked-mismatch` (warning, D3) · `client:name-differs` (warning) ·
+`row:quotation-mismatch` / `row:banked-mismatch` (warning, D3) · `client:name-differs` (warning; blocks confirm until approved: `NAME_DIFFERENCES`) · `client:unassigned-by-manager` (warning) · `row:no-client` (warning) ·
 `client:consultant-differs` (warning) · `lookup:created` (info) · `import:duplicate-file` · `import:week-already-imported`.
 
 ## 12. Security and POPIA
-- MANAGER/ADMIN only; consultants can never upload.
+- ADMIN only (decision 9 November 2026); managers and consultants can never upload.
 - `.xlsx` only, 10 MB maximum, POI zip-bomb limits on, no macros, no formula evaluation, no external links.
 - The file is **never stored**: only its SHA-256, plus staged rows in `import_rows` until confirm or cancel (or 24 h
   expiry), after which their personal columns are wiped (V3 design).
@@ -367,7 +367,14 @@ errors** · warnings and errors by code.
 | 2 ✅ | Parser: sheet detection, header mapping, row rules (sections 2–4) + unit tests | Sifiso |
 | 3 ✅ | Preview, consultant mapping, confirm, cancel, summary endpoints + API tests (see `docs/api-imports.md`) | Sifiso |
 | 4 ✅ | Report and Breakdown reader + reconciliation (sections 5, 6, 10), V17, endpoints + tests | Sifiso |
-| 5 | `/api/reports/weeks/...` endpoints on the views (+ the stored figures for the week's current import) | Daniel |
+| 5 ✅ | `/api/reports/weeks/...` endpoints on the views, CSV exports | Ntiyiso |
+| 4b ✅ | Safeguards: `NAME_DIFFERENCES` blocker, `CLIENT_CREATED` per client, issues CSV (FR-12), re-import keeps transfers and unassigns | Sifiso |
+| 6 ✅ | Clean-up job (expired previews purged), `row:no-client` warning, consultant alias list, employer merge for `needs_review` | Sifiso |
+| 7 ✅ | Consultants from the sheet (`new-consultants`, look-alike suggestions), generated consultant codes (V19) | Sifiso |
+
+**Decision (9 November 2026):** only an **ADMIN** runs imports and adds staff, including creating consultants from
+the sheet and managing name spellings. The requirements allowed MANAGER as well ("Only users with the Manager or Administrator role must be allowed to import Excel reports"). Managers keep everything else
+(clients, transfers, unassigning, reports).
 | 6 | Upload, preview, mapping, summary and report pages | Jack |
 
 ## 14. Open questions for the business (defaults in **bold**, used until answered)

@@ -112,7 +112,7 @@ Every successful change below writes one row to `audit_logs` in the **same trans
 
 | Action                           | Target                       | Metadata                                                                                                                              |
 | -------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `CONSULTANT_CREATED`             | consultant                   | `consultantCode`, `fullName`                                                                                                          |
+| `CONSULTANT_CREATED`             | consultant                   | `consultantCode`, `fullName`, `codeGenerated`; `importJobId` when created from an import                                                                                                          |
 | `CONSULTANT_RENAMED`             | consultant                   | `from`, `to`                                                                                                                          |
 | `CONSULTANT_STATUS_CHANGED`      | consultant                   | `from`, `to`, `reason`, `clientCount` (clients still assigned at that moment)                                                         |
 | `USER_CREATED`                   | user                         | `email`, `roles`, `consultantId`                                                                                                      |
@@ -376,14 +376,18 @@ Sorted by `fullName`.
 **Request**
 
 ```json
-{ "consultantCode": "c004", "fullName": "Thandi Xundu" }
+{ "fullName": "Thandi Xundu" }
 ```
+or, to keep a code the person already has, `{ "consultantCode": "c004", "fullName": "Thandi Xundu" }`.
 
 **201 Created** - Consultant object, `Location: /api/consultants/4`. New consultants are `ACTIVE`.
 
 **Rules**
 
-- `consultantCode` is trimmed and upper-cased before saving (`c004` becomes `C004`). Allowed: letters, digits, `_` and `-`, max 32, must start with a letter or digit.
+- `consultantCode` is **optional**. Left out (or blank), the next code is **generated**: `C0001`, `C0002`, ... (V19's
+  sequence, so two admins saving at once never get the same one; a code already taken is skipped).
+- A code given is trimmed and upper-cased before saving (`c004` becomes `C004`). Allowed: letters, digits, `_` and `-`, max 32, must start with a letter or digit.
+- Frontend: the "Add consultant" form only needs the name; show the generated code from the response.
 - `fullName` required, max 200, not blank.
 
 **Errors:** `400` invalid fields, `409` code already exists (`urn:credit-advisory:consultant:duplicate-code`).

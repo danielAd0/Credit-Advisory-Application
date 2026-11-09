@@ -15,9 +15,10 @@ Creates the consultant record **and** its login (role `CONSULTANT`, linked to th
 transaction. If anything fails, nothing is created.
 
 ```json
-{ "consultantCode": "C010", "fullName": "Naledi Mokoena",
-  "email": "naledi@mafori.co.za", "temporaryPassword": "Welcome-Mafori-2026" }
+{ "fullName": "Naledi Mokoena", "email": "naledi@mafori.co.za", "temporaryPassword": "Welcome-Mafori-2026" }
 ```
+`consultantCode` is **optional**: left out, the next code (`C0001`, `C0002`, ...) is generated. Send one only to keep
+a code the person already has.
 
 `201` → `{ "consultant": Consultant, "user": User }`
 
@@ -67,7 +68,7 @@ Employers from the **Mafori Employer Schedule** (columns *Company*, *Employer*, 
 
 | Method | Path | Body |
 | --- | --- | --- |
-| GET | `/api/employers?search=&active=&employerType=&page=&size=` | – (sorted by name) |
+| GET | `/api/employers?search=&active=&employerType=&needsReview=&page=&size=` | – (sorted by name) |
 | GET | `/api/employers/{id}` | – |
 | POST | `/api/employers` | `{ name, company?, employerType? }` |
 | PATCH | `/api/employers/{id}` | `{ name, company, employerType, version }` |
@@ -75,6 +76,40 @@ Employers from the **Mafori Employer Schedule** (columns *Company*, *Employer*, 
 
 Names are trimmed and inner spaces collapsed; uniqueness is case-insensitive.
 Errors: `409 employer:duplicate-name`, `404 employer:not-found`.
+
+Every employer now has **`needsReview`**. It is `true` for an employer the weekly import created from a spelling
+nobody had seen ("PHUMELELA LOCAL MUNIC"). An admin then either merges it into the right employer, or keeps it.
+
+| Method | Path | Body | Who |
+| --- | --- | --- | --- |
+| GET | `/api/employers?needsReview=true` | – (the list to clean up) | any signed-in user |
+| GET | `/api/employers/{id}/aliases` | – → `[ { id, alias, createdAt } ]`, the spellings matched to it | MANAGER, ADMIN |
+| POST | `/api/employers/{id}/merge` | `{ targetEmployerId, version, reason }` | ADMIN |
+| PATCH | `/api/employers/{id}/review` | `{ version }`: keep it as an employer of its own (`needsReview` → false) | ADMIN |
+
+**Merge** moves employer `{id}`'s clients, sales and spellings to the target in one transaction. It then removes
+employer `{id}` and keeps its name as one of the target's spellings, so later imports match it to the target.
+Every sale still keeps the spelling it was imported with. `version` is employer `{id}`'s version.
+
+`200` →
+```json
+{ "mergedEmployerId": 81, "mergedEmployerName": "PHUMELELA LOCAL MUNIC",
+  "target": { "id": 12, "name": "PHUMELELA LOCAL MUNICIPALITY", "...": "...", "needsReview": false },
+  "clientsMoved": 6, "transactionsMoved": 9, "aliasesMoved": 0, "nameKeptAsAlias": true }
+```
+
+| Status | type | When |
+| --- | --- | --- |
+| 422 | `employer:merge-into-itself` | the target is the same employer |
+| 409 | `employer:merge-target-inactive` | the target is inactive (activate it first) |
+| 409 | `conflict:stale-version` | someone changed employer `{id}` meanwhile |
+| 404 | `employer:not-found` | either employer |
+| 400 | | no `reason` (max 500) |
+
+Audited as `EMPLOYER_MERGED` (with both names and the counts) and `EMPLOYER_REVIEWED`.
+
+Frontend: an "Employers to review" list (`needsReview=true`), each with **Merge into…** (an employer picker
+plus a reason) and **Keep**.
 
 ## 4. Assigning clients to consultants (MANAGER, ADMIN)
 
