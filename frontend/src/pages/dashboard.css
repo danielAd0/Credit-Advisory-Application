@@ -1,0 +1,88 @@
+.dash-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 30rem;
+  gap: 1rem;
+  align-items: start;
+  margin-top: 1.5rem;
+}
+
+.dash-top .ws {
+  margin-top: 0;
+  max-width: none;
+}
+
+.st {
+  padding: 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.st h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.15rem;
+}
+
+.st table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.st col.c-metric {
+  width: 42%;
+}
+
+.st col.c-count {
+  width: 14%;
+}
+
+.st th,
+.st td {
+  padding: 0.7rem 0.5rem;
+  text-align: left;
+  vertical-align: middle;
+  white-space: normal;
+  border-bottom: 1px solid var(--line);
+}
+
+.st tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.st th {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.st th.num,
+.st td.num {
+  text-align: center;
+}
+
+.st td a {
+  color: var(--ink);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.st td a:hover {
+  color: var(--orange);
+  text-decoration: underline;
+}
+
+.st td:last-child {
+  font-size: 0.8rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1100px) {
+  .dash-top {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
