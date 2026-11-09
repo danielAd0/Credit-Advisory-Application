@@ -39,6 +39,7 @@ export { catalogue } from './catalogue';
 export type { Employer, Product } from './catalogue';
 export { detailOf, isStale } from './errors';
 export { mfa, mfaPending } from './mfa';
+export { ID_REVEAL_LIMIT, REAUTHENTICATION_REQUIRED, idReveal } from './idReveal';
 export type { MfaEnabled, MfaSetup } from './mfa';
 
 export const features = {

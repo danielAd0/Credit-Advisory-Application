@@ -1,0 +1,74 @@
+/* "Show ID number" on the client page. Classes start with "rv-". */
+.rv {
+  margin: 0 0 0.75rem;
+}
+.rv-line {
+  margin: 0;
+}
+.rv-full {
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+.rv-link {
+  padding: 0;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--ink);
+  text-decoration: underline;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.rv-link:hover {
+  color: var(--orange);
+}
+.rv-link:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+.rv-note {
+  margin: 0.25rem 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.rv-box {
+  max-width: 460px;
+  margin-top: 0.75rem;
+  padding: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.rv-box label {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.rv-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+.rv-row input {
+  flex: 1 1 12rem;
+  min-width: 0;
+  height: 2.5rem;
+  padding: 0 0.75rem;
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-sizing: border-box;
+}
+.rv-row input:focus {
+  outline: none;
+  border-color: var(--orange);
+  box-shadow: 0 0 0 3px rgba(255, 90, 0, 0.25);
+}
+.rv-error {
+  max-width: 460px;
+  margin-top: 0.75rem;
+}
