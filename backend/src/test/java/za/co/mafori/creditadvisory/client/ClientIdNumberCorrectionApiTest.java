@@ -35,6 +35,8 @@ class ClientIdNumberCorrectionApiTest extends ApiTestBase {
         createUser("thandi@test.local", thandiId, RoleName.CONSULTANT);
         createUser("manager@test.local", null, RoleName.MANAGER);
         manager = signIn("manager@test.local");
+        // Some tests check the stored number through ?include=idNumber.
+        confirmPassword(manager);
     }
 
     private ApiClient.Response correct(ApiClient as, long id, String idNumber, String reason, long version) {

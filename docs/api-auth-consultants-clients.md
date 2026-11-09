@@ -103,7 +103,7 @@ List endpoints accept `?page=0&size=20` (page is 0-based, size max 100) and retu
 ### ID numbers
 
 - Lists and broad views show only the masked form: `"idNumberMasked": "*********5082"`.
-- The full number (`"idNumber"`) is only returned when an authorised user explicitly asks for it with `GET /api/clients/{id}?include=idNumber`, and every such response is recorded in the audit log. The one exception is the response to `POST /api/clients`, which echoes the number the user just typed in.
+- The full number (`"idNumber"`) is only returned when an authorised user explicitly asks for it with `GET /api/clients/{id}?include=idNumber`, after re-entering their password (`POST /api/auth/reauthenticate`), within an hourly limit, and every such response is recorded in the audit log. The one exception is the response to `POST /api/clients`, which echoes the number the user just typed in.
 - **Full ID numbers are never put in URLs or query strings** (they would end up in server logs and browser history). Searching by ID number uses a POST body.
 
 ### Audit trail (FR-21)
@@ -122,7 +122,9 @@ Every successful change below writes one row to `audit_logs` in the **same trans
 | `USER_PASSWORD_RESET`            | user                         | - (never the password)                                                                                                                |
 | `USER_UNLOCKED`                  | user                         | -                                                                                                                                     |
 | `PASSWORD_CHANGED`               | user (the user themselves)   | -                                                                                                                                     |
-| `ACCOUNT_LOCKED`                 | user                         | `lockedUntil` (no actor: nobody is signed in)                                                                                         |
+| `ACCOUNT_LOCKED`                 | user                         | `lockedUntil` (no actor when locked at sign-in; the user themselves when locked by wrong passwords on `POST /api/auth/reauthenticate`)                                                                                         |
+| `PASSWORD_CONFIRMATION_FAILED` | user | `locked` (whether this wrong password locked the account) - a wrong password on `POST /api/auth/reauthenticate` |
+| `ID_REVEAL_LIMIT_REACHED` | user | `limit`, `window` - the user asked for more full ID numbers in an hour than allowed; written once per hour |
 | `FIRST_ADMIN_CREATED`            | user                         | `email` (no actor: created at start-up on a new server, see README "Running in production")                                           |
 | `SIGN_IN_RATE_LIMITED`           | -                            | `address`, `failures`, `window` (never the emails tried)                                                                              |
 | `CLIENT_CREATED`                 | client                       | `consultantId` (or `null` if unassigned)                                                                                              |
@@ -248,6 +250,39 @@ Every other request returns `403` with type `urn:credit-advisory:auth:password-c
 | 400 | invalid fields; `urn:credit-advisory:auth:wrong-current-password` when the current password is wrong; `urn:credit-advisory:validation:weak-password` when the new password breaks a rule (`detail` says which) |
 
 Passwords are never logged or returned by any endpoint.
+
+### POST /api/auth/reauthenticate
+
+**Who:** everyone signed in
+
+**Purpose:** the user enters their password again before seeing a full ID number, so a stolen or unattended session alone is not enough. Ask for it when the user presses "Show ID number" and the reveal answers `403 auth:reauthentication-required`.
+
+**Request**
+
+```json
+{ "password": "Their-Own-Password-123" }
+```
+
+**200 OK**
+
+```json
+{ "confirmedUntil": "2026-11-09T08:05:00Z" }
+```
+
+For the next **5 minutes** (`app.auth.password-confirmation-window`), `GET /api/clients/{id}?include=idNumber` works **in this session only** - not in the user's other browsers. After that, the password is asked again. Signing out or the session ending forgets it.
+
+**Rules**
+
+- A wrong password counts toward the same lockout as sign-in: 5 wrong in a row (sign-in and re-entry together) locks the account for 15 minutes. The right password resets the count.
+- A wrong password does **not** sign the user's other sessions out.
+- The wrong password that locks the account also **signs this session out** (`401`): whoever is guessing may not be the user.
+- Every wrong password writes `PASSWORD_CONFIRMATION_FAILED` to the audit log.
+
+**Errors**
+| Status | When |
+|---|---|
+| 400 | `password` missing; `urn:credit-advisory:auth:wrong-password` - wrong password, the session stays signed in |
+| 401 | not signed in; `urn:credit-advisory:auth:account-locked` - the account is locked (by this or earlier wrong passwords) and this session has been signed out |
 
 ---
 
@@ -379,7 +414,7 @@ Used by `GET /api/clients/{id}`, `POST /api/clients` and `PATCH /api/clients/{id
 | Response                                 | `idNumber`                                    |
 | ---------------------------------------- | --------------------------------------------- |
 | `GET /api/clients/{id}`                  | `null`                                        |
-| `GET /api/clients/{id}?include=idNumber` | the full number (audited)                     |
+| `GET /api/clients/{id}?include=idNumber` | the full number (password re-entered, limited, audited) |
 | `POST /api/clients`                      | the full number (the one the user just typed) |
 | `PATCH /api/clients/{id}`                | `null`                                        |
 
@@ -462,11 +497,20 @@ Sorted by `lastName`, then `firstName`.
 
 **Rules**
 
-- Open the detail page **without** `include`: that is not audited, because nothing sensitive is shown.
+- Open the detail page **without** `include`: that is not audited, because nothing sensitive is shown, and needs no password.
 - Ask for the full number only when the user explicitly wants to see it (e.g. a "Show ID number" button), with `?include=idNumber`. Each such call writes an audit entry: action `CLIENT_VIEWED`, the actor's user id, target `CLIENT` / `<client id>`, and the time. The ID number is **never** written to the audit log.
+- **Password first:** `?include=idNumber` only works within 5 minutes of `POST /api/auth/reauthenticate` in this session. Otherwise it answers `403 auth:reauthentication-required`: show a password box, send it to `/api/auth/reauthenticate`, then ask for the number again.
+- **Hourly limit:** one user may see at most **20** full ID numbers per hour (`app.auth.max-id-reveals-per-hour`). After that the answer is `429` with a `Retry-After` header (seconds) until the hour is over, and the first refusal writes `ID_REVEAL_LIMIT_REACHED` to the audit log, so an admin can find it with `GET /api/audit-logs?action=ID_REVEAL_LIMIT_REACHED`. Every request with `?include=idNumber` counts, whether the client exists or not. Opening clients without `include` is never limited.
+- Both checks happen **before** the client is looked up, so the `403` and `429` say nothing about whether the client exists.
 - Do not keep the full number in the page longer than needed (no storage, no logging), and never use it to fill lists.
 
-**Errors:** `400` `include` has any other value, `404` not found or not visible to the caller.
+**Errors**
+| Status | When |
+|---|---|
+| 400 | `include` has any other value |
+| 403 | `?include=idNumber` without a recent password re-entry (`urn:credit-advisory:auth:reauthentication-required`) |
+| 404 | not found or not visible to the caller |
+| 429 | the hourly limit of full ID numbers is used up (`urn:credit-advisory:client:id-reveal-limit`, with `Retry-After`) |
 
 ### POST /api/clients/lookup
 
@@ -1065,7 +1109,7 @@ Sorted newest first.
 }
 ```
 
-- `actor` is `null` for events where nobody was signed in (`ACCOUNT_LOCKED`, `SIGN_IN_RATE_LIMITED`).
+- `actor` is `null` for events where nobody was signed in (`SIGN_IN_RATE_LIMITED`, and `ACCOUNT_LOCKED` when it happened at sign-in).
 - `metadata` is a JSON object whose keys depend on the action (section 1). The frontend should show the keys it knows and ignore the rest.
 - Useful links from other screens: a consultant's history is `?targetType=CONSULTANT&targetId={id}`, a user's is `?targetType=USER&targetId={id}`.
 
