@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import za.co.mafori.creditadvisory.auth.mfa.MfaService;
 
 /**
  * Sign-in endpoints (contract section 2). Logout is handled by Spring
@@ -36,15 +37,17 @@ public class AuthController {
     private final SecurityContextRepository securityContextRepository;
     private final CurrentAccountService accounts;
     private final LoginRateLimiter rateLimiter;
+    private final MfaService mfa;
     private final SecurityContextHolderStrategy contextHolder = SecurityContextHolder.getContextHolderStrategy();
 
     public AuthController(AuthenticationManager authenticationManager,
             SecurityContextRepository securityContextRepository, CurrentAccountService accounts,
-            LoginRateLimiter rateLimiter) {
+            LoginRateLimiter rateLimiter, MfaService mfa) {
         this.authenticationManager = authenticationManager;
         this.securityContextRepository = securityContextRepository;
         this.accounts = accounts;
         this.rateLimiter = rateLimiter;
+        this.mfa = mfa;
     }
 
     /**
@@ -79,18 +82,25 @@ public class AuthController {
             request.changeSessionId();
         }
 
+        // The password was right. With MFA the session still has to pass the second
+        // step before it can do anything (MfaRequiredFilter).
+        AppUserPrincipal principal = (AppUserPrincipal) result.getPrincipal();
+        if (mfa.required()) {
+            principal = principal.withMfaPending();
+        }
+
         SecurityContext context = contextHolder.createEmptyContext();
-        context.setAuthentication(result);
+        context.setAuthentication(
+                UsernamePasswordAuthenticationToken.authenticated(principal, null, principal.authorities()));
         contextHolder.setContext(context);
         securityContextRepository.saveContext(context, request, response);
 
-        AppUserPrincipal principal = (AppUserPrincipal) result.getPrincipal();
-        return accounts.describe(principal.userId());
+        return accounts.describe(principal);
     }
 
     @GetMapping("/me")
     public MeResponse me(@AuthenticationPrincipal AppUserPrincipal principal) {
-        return accounts.describe(principal.userId());
+        return accounts.describe(principal);
     }
 
     /**

@@ -36,7 +36,8 @@ public class ProductionSafetyCheck implements BeanFactoryPostProcessor, Environm
             List.of("spring.datasource.username", "DB_USERNAME"),
             List.of("spring.datasource.password", "DB_PASSWORD"),
             List.of("app.idnumber.lookup-key", "ID_NUMBER_LOOKUP_KEY"),
-            List.of("app.idnumber.encryption-key", "ID_NUMBER_ENCRYPTION_KEY"));
+            List.of("app.idnumber.encryption-key", "ID_NUMBER_ENCRYPTION_KEY"),
+            List.of("app.mfa.encryption-key", "MFA_ENCRYPTION_KEY"));
 
     private static final String POSTGRES_PREFIX = "jdbc:postgresql://";
 
@@ -103,6 +104,15 @@ public class ProductionSafetyCheck implements BeanFactoryPostProcessor, Environm
         String lookupKey = read(environment, "app.idnumber.lookup-key");
         if (!lookupKey.isEmpty() && lookupKey.equals(read(environment, "app.idnumber.encryption-key"))) {
             problems.add("ID_NUMBER_LOOKUP_KEY and ID_NUMBER_ENCRYPTION_KEY must be two different keys");
+        }
+
+        String mfaKey = read(environment, "app.mfa.encryption-key");
+        if (!mfaKey.isEmpty() && (mfaKey.equals(lookupKey)
+                || mfaKey.equals(read(environment, "app.idnumber.encryption-key")))) {
+            problems.add("MFA_ENCRYPTION_KEY must be its own key, not one of the ID number keys");
+        }
+        if ("false".equalsIgnoreCase(read(environment, "app.mfa.required"))) {
+            problems.add("app.mfa.required must be true: every user signs in with an authenticator code");
         }
 
         if (!"true".equalsIgnoreCase(read(environment, "server.servlet.session.cookie.secure"))) {

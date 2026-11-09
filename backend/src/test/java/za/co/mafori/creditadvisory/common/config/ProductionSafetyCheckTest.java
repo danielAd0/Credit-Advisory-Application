@@ -29,6 +29,8 @@ class ProductionSafetyCheckTest {
         environment.setProperty("spring.datasource.password", "not-a-real-password");
         environment.setProperty("app.idnumber.lookup-key", "made-up-lookup-key");
         environment.setProperty("app.idnumber.encryption-key", "made-up-encryption-key");
+        environment.setProperty("app.mfa.encryption-key", "made-up-mfa-key");
+        environment.setProperty("app.mfa.required", "true");
         environment.setProperty("server.servlet.session.cookie.secure", "true");
         environment.setProperty("spring.flyway.clean-disabled", "true");
         environment.setProperty("app.auth.cors-allowed-origins", "");
@@ -98,12 +100,32 @@ class ProductionSafetyCheckTest {
                 "spring.datasource.password=not-a-real-password",
                 "app.idnumber.lookup-key=made-up-lookup-key",
                 "app.idnumber.encryption-key=made-up-encryption-key",
+                "app.mfa.encryption-key=made-up-mfa-key",
                 "server.servlet.session.cookie.secure=true",
                 "spring.flyway.clean-disabled=true")
                 .run(context -> assertThat(context).hasNotFailed());
 
         // Without prod the check does not exist at all.
         runner.run(context -> assertThat(context).hasNotFailed().doesNotHaveBean(ProductionSafetyCheck.class));
+    }
+
+    @Test
+    void mfaMustBeOnWithItsOwnKey() {
+        MockEnvironment missingKey = goodProduction();
+        missingKey.setProperty("app.mfa.encryption-key", "${MFA_ENCRYPTION_KEY}");
+        assertThat(ProductionSafetyCheck.problems(missingKey)).singleElement().asString()
+                .contains("MFA_ENCRYPTION_KEY");
+
+        MockEnvironment switchedOff = goodProduction();
+        switchedOff.setProperty("app.mfa.required", "false");
+        assertThat(ProductionSafetyCheck.problems(switchedOff)).singleElement().asString()
+                .contains("app.mfa.required must be true");
+
+        MockEnvironment sharedKey = goodProduction();
+        sharedKey.setProperty("app.mfa.encryption-key", "made-up-encryption-key");
+        assertThat(ProductionSafetyCheck.problems(sharedKey)).singleElement().asString()
+                .contains("its own key")
+                .doesNotContain("made-up-encryption-key");
     }
 
     @Test
