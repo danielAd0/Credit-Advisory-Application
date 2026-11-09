@@ -29,6 +29,7 @@ public final class IssueCodes {
     public static final String ROW_INVALID_DATE = "row:invalid-date";
     public static final String ROW_DATE_OUTSIDE_DAY = "row:date-outside-day";
     public static final String ROW_NO_CONSULTANT = "row:no-consultant";
+    public static final String ROW_NO_CLIENT = "row:no-client";
     public static final String ROW_DUPLICATE_PRODUCT_COLUMN = "row:duplicate-product-column";
     public static final String ROW_EXTRA_LOOKS_LIKE_ID = "row:extra-looks-like-id";
 

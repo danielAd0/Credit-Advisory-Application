@@ -12,7 +12,7 @@ import za.co.mafori.creditadvisory.imports.report.ReconciliationViews.Reconcilia
 
 @RestController
 @RequestMapping("/api/imports")
-@PreAuthorize("hasAnyRole('MANAGER','ADMIN')")
+@PreAuthorize("hasRole('ADMIN')") // part of the import: admin only
 public class ReconciliationController {
 
     private final ReconciliationService service;

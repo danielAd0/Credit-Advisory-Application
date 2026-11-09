@@ -26,10 +26,12 @@ public class ConsultantService {
 
     private final ConsultantRepository consultants;
     private final AuditLogWriter audit;
+    private final ConsultantCodeGenerator codes;
 
-    public ConsultantService(ConsultantRepository consultants, AuditLogWriter audit) {
+    public ConsultantService(ConsultantRepository consultants, AuditLogWriter audit, ConsultantCodeGenerator codes) {
         this.consultants = consultants;
         this.audit = audit;
+        this.codes = codes;
     }
 
     @Transactional(readOnly = true)
@@ -53,14 +55,16 @@ public class ConsultantService {
 
     @Transactional
     public ConsultantResponse create(CreateConsultantRequest request) {
-        String code = Consultant.normalizeCode(request.consultantCode());
-        if (consultants.existsByConsultantCode(code)) {
+        boolean generated = request.consultantCode() == null || request.consultantCode().isBlank();
+        String code = generated ? codes.next() : Consultant.normalizeCode(request.consultantCode());
+        if (!generated && consultants.existsByConsultantCode(code)) {
             throw ApiException.conflict("consultant:duplicate-code", "Duplicate consultant code",
                     "A consultant with code " + code + " already exists.");
         }
         Consultant saved = consultants.save(new Consultant(code, request.fullName()));
         audit.record("CONSULTANT_CREATED", "CONSULTANT", saved.getId(),
-                meta("consultantCode", saved.getConsultantCode(), "fullName", saved.getFullName()));
+                meta("consultantCode", saved.getConsultantCode(), "fullName", saved.getFullName(),
+                        "codeGenerated", generated));
         // A brand-new consultant has no clients yet.
         return ConsultantResponse.from(saved, 0);
     }

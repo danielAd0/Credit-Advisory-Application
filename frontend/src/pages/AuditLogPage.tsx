@@ -24,10 +24,18 @@ const ACTIONS: Partial<Record<string, string>> = {
   ACCOUNT_LOCKED: 'Account locked after failed sign-ins',
   FIRST_ADMIN_CREATED: 'First administrator created',
   SIGN_IN_RATE_LIMITED: 'Sign-in attempts blocked',
+  MFA_ENABLED: 'Two-step sign-in set up',
+  MFA_RESET: 'Two-step sign-in reset',
+  MFA_CODE_FAILED: 'Wrong two-step code',
+  MFA_RECOVERY_CODE_USED: 'Recovery code used',
+  MFA_RECOVERY_CODE_FAILED: 'Wrong recovery code',
+  PASSWORD_CONFIRMATION_FAILED: 'Wrong password before showing an ID number',
   CLIENT_CREATED: 'Client created',
   CLIENT_VIEWED: 'Client ID number viewed',
+  ID_REVEAL_LIMIT_REACHED: 'Too many ID numbers viewed',
   CLIENT_LOOKUP: 'Client looked up',
   CLIENT_UPDATED: 'Client updated',
+  CLIENT_ID_NUMBER_CORRECTED: 'Client ID number corrected',
   CLIENTS_TRANSFERRED: 'Clients transferred',
   CLIENTS_ASSIGNED: 'Clients assigned',
   CLIENT_UNASSIGNED: 'Client unassigned',
@@ -35,6 +43,21 @@ const ACTIONS: Partial<Record<string, string>> = {
   CASE_VIEWED: 'Case viewed',
   CASE_UPDATED: 'Case updated',
   CASE_NOTE_ADDED: 'Case note added',
+  IMPORT_PREVIEWED: 'Import previewed',
+  IMPORT_CONFIRMED: 'Import confirmed',
+  IMPORT_CANCELLED: 'Import cancelled',
+  IMPORT_EXPIRED: 'Import preview expired',
+  IMPORT_ISSUES_EXPORTED: 'Import problems exported',
+  WEEK_REPLACED: 'Week replaced by a new import',
+  CONSULTANT_ALIAS_CREATED: 'Consultant name alias added',
+  CONSULTANT_ALIAS_REMOVED: 'Consultant name alias removed',
+  REPORT_EXPORTED: 'Report exported',
+  EMPLOYER_CREATED: 'Employer created',
+  EMPLOYER_UPDATED: 'Employer updated',
+  EMPLOYER_MERGED: 'Employers merged',
+  EMPLOYER_REVIEWED: 'Employer reviewed',
+  PRODUCT_CREATED: 'Product created',
+  PRODUCT_UPDATED: 'Product updated',
 };
 
 const KEYS: Partial<Record<string, string>> = {
@@ -57,9 +80,13 @@ const KEYS: Partial<Record<string, string>> = {
   lockedUntil: 'Locked until',
   address: 'Address',
   failures: 'Failures',
+  locked: 'Account locked',
+  hadMfa: 'Had two-step sign-in',
+  remaining: 'Recovery codes left',
+  recoveryCodes: 'Recovery codes',
 };
 
-const TARGETS = ['CONSULTANT', 'USER'];
+const TARGETS = ['CLIENT', 'USER', 'CONSULTANT', 'CASE', 'IMPORT_JOB', 'EMPLOYER', 'PRODUCT'];
 
 function show(key: string, value: unknown): string {
   if (Array.isArray(value)) return value.join(', ');
@@ -171,7 +198,7 @@ export default function AuditLogPage() {
             <option value="">Anything</option>
             {TARGETS.map((t) => (
               <option key={t} value={t}>
-                {t.charAt(0) + t.slice(1).toLowerCase()}
+                {t.charAt(0) + t.slice(1).toLowerCase().replace('_job', '')}
               </option>
             ))}
           </select>

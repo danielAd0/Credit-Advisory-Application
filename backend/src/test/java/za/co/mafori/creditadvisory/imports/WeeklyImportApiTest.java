@@ -30,7 +30,7 @@ class WeeklyImportApiTest extends ApiTestBase {
      */
     private static final byte[] WORKBOOK = FakeWeeklyRegisterWorkbook.build();
     private long consultantOne;
-    private ApiClient manager;
+    private ApiClient admin;
 
     @BeforeEach
     void createStaff() {
@@ -40,7 +40,7 @@ class WeeklyImportApiTest extends ApiTestBase {
         setConsultantStatus(createConsultant("C004", "TEST CONSULTANT FOUR"), ConsultantStatus.SUSPENDED);
         createConsultant("C005", "TESTLABEL");
         createUser("manager@test.local", null, RoleName.MANAGER);
-        manager = signIn("manager@test.local");
+        admin = signIn(ADMIN_EMAIL);
     }
 
     private ApiClient.Response preview(ApiClient as) {
@@ -54,7 +54,7 @@ class WeeklyImportApiTest extends ApiTestBase {
     }
 
     private ApiClient.Response mapUnknownConsultant(long id) {
-        return manager.post("/api/imports/" + id + "/consultant-mappings", """
+        return admin.post("/api/imports/" + id + "/consultant-mappings", """
                 {"nameInSheet":"%s","consultantId":%d}""".formatted(FakeWeeklyRegisterWorkbook.UNMAPPED_CONSULTANT,
                 consultantOne));
     }
@@ -65,7 +65,7 @@ class WeeklyImportApiTest extends ApiTestBase {
 
     @Test
     void previewMapAndConfirmTheFakeWeek() {
-        ApiClient.Response preview = preview(manager);
+        ApiClient.Response preview = preview(admin);
         assertThat(preview.status()).as(preview.body()).isEqualTo(201);
         long id = preview.number("$.id");
         String digest = preview.text("$.fileDigest");
@@ -78,18 +78,18 @@ class WeeklyImportApiTest extends ApiTestBase {
         assertThat(preview.texts("$.blockers")).containsExactly("UNMAPPED_CONSULTANTS");
         assertThat(count("select count(*) from clients")).as("preview writes no clients").isZero();
 
-        assertThat(confirm(manager, id, digest, null).status()).isEqualTo(422);
+        assertThat(confirm(admin, id, digest, null).status()).isEqualTo(422);
         ApiClient.Response mapped = mapUnknownConsultant(id);
         assertThat(mapped.status()).as(mapped.body()).isEqualTo(200);
         assertThat(mapped.texts("$.blockers")).isEmpty();
 
-        ApiClient.Response rows = manager.get("/api/imports/" + id + "/rows?sheet=Monday&size=5");
+        ApiClient.Response rows = admin.get("/api/imports/" + id + "/rows?sheet=Monday&size=5");
         assertThat(rows.status()).isEqualTo(200);
         assertThat(rows.number("$.totalItems")).isEqualTo(12);
         assertThat(rows.text("$.items[0].idNumberMasked")).matches("\\*{9}\\d{4}");
-        assertThat(manager.get("/api/imports/" + id + "/issues?severity=WARNING").status()).isEqualTo(200);
+        assertThat(admin.get("/api/imports/" + id + "/issues?severity=WARNING").status()).isEqualTo(200);
 
-        ApiClient.Response confirmed = confirm(manager, id, digest, null);
+        ApiClient.Response confirmed = confirm(admin, id, digest, null);
         assertThat(confirmed.status()).as(confirmed.body()).isEqualTo(200);
         assertThat(confirmed.number("$.transactions")).isEqualTo(expected.totalRows());
         assertThat(confirmed.number("$.newClients")).isEqualTo(expected.distinctPeople());
@@ -103,13 +103,13 @@ class WeeklyImportApiTest extends ApiTestBase {
                 .isEqualTo(expected.sheetBanked().get("Monday"));
         assertThat(count("select count(*) from import_rows where first_name is not null or id_number_hash is not null"))
                 .as("personal data purged after confirm").isZero();
-        assertThat(manager.get("/api/imports/" + id).text("$.state")).isEqualTo("COMMITTED");
-        assertThat(preview(manager).status()).as("same file twice").isEqualTo(409);
+        assertThat(admin.get("/api/imports/" + id).text("$.state")).isEqualTo("COMMITTED");
+        assertThat(preview(admin).status()).as("same file twice").isEqualTo(409);
     }
 
     @Test
     void confirmIsAllOrNothing() {
-        ApiClient.Response preview = preview(manager);
+        ApiClient.Response preview = preview(admin);
         long id = preview.number("$.id");
         assertThat(mapUnknownConsultant(id).status()).isEqualTo(200);
         // Make the database refuse the first row's extra column: the whole confirm must
@@ -121,26 +121,26 @@ class WeeklyImportApiTest extends ApiTestBase {
                 create trigger test_refuse_extras before insert on client_transaction_extras
                 for each row execute function test_refuse_extras()""");
 
-        ApiClient.Response confirmed = confirm(manager, id, preview.text("$.fileDigest"), null);
+        ApiClient.Response confirmed = confirm(admin, id, preview.text("$.fileDigest"), null);
 
         assertThat(confirmed.status()).isGreaterThanOrEqualTo(400);
         assertThat(count("select count(*) from clients")).isZero();
         assertThat(count("select count(*) from client_transactions")).isZero();
         assertThat(count("select count(*) from reporting_weeks where current_import_job_id is not null")).isZero();
-        assertThat(manager.get("/api/imports/" + id).text("$.state")).isEqualTo("PREVIEWED");
+        assertThat(admin.get("/api/imports/" + id).text("$.state")).isEqualTo("PREVIEWED");
     }
 
     @Test
-    void replacingAWeekNeedsAnAdminAndAReason() {
-        ApiClient.Response first = preview(manager);
+    void replacingAWeekNeedsAReason() {
+        ApiClient.Response first = preview(admin);
         long firstId = first.number("$.id");
         mapUnknownConsultant(firstId);
-        assertThat(confirm(manager, firstId, first.text("$.fileDigest"), null).status()).isEqualTo(200);
+        assertThat(confirm(admin, firstId, first.text("$.fileDigest"), null).status()).isEqualTo(200);
         // Pretend the next upload is a corrected file (the fake generator builds
         // identical bytes).
         jdbc.update("update import_jobs set file_digest = repeat('e', 64) where id = ?", firstId);
 
-        ApiClient.Response second = preview(manager);
+        ApiClient.Response second = preview(admin);
         assertThat(second.status()).as(second.body()).isEqualTo(201);
         long secondId = second.number("$.id");
         assertThat(second.value("$.replaceRequired")).isEqualTo(true);
@@ -148,8 +148,6 @@ class WeeklyImportApiTest extends ApiTestBase {
         assertThat(second.number("$.existingClients")).isEqualTo(expected.distinctPeople());
 
         String digest = second.text("$.fileDigest");
-        assertThat(confirm(manager, secondId, digest, "Corrected").status()).isEqualTo(403);
-        ApiClient admin = signIn(ADMIN_EMAIL);
         assertThat(confirm(admin, secondId, digest, null).status()).isEqualTo(422);
         ApiClient.Response replaced = confirm(admin, secondId, digest, "Corrected Tuesday");
         assertThat(replaced.status()).as(replaced.body()).isEqualTo(200);
@@ -162,41 +160,46 @@ class WeeklyImportApiTest extends ApiTestBase {
 
     @Test
     void cancelThrowsThePreviewAway() {
-        long id = preview(manager).number("$.id");
-        ApiClient.Response cancelled = manager.post("/api/imports/" + id + "/cancel", null);
+        long id = preview(admin).number("$.id");
+        ApiClient.Response cancelled = admin.post("/api/imports/" + id + "/cancel", null);
         assertThat(cancelled.status()).isEqualTo(200);
         assertThat(cancelled.text("$.state")).isEqualTo("CANCELLED");
         assertThat(count("select count(*) from import_rows where first_name is not null")).isZero();
-        assertThat(manager.post("/api/imports/" + id + "/cancel", null).status()).isEqualTo(409);
-        assertThat(manager.get("/api/imports").number("$.totalItems")).isEqualTo(1);
+        assertThat(admin.post("/api/imports/" + id + "/cancel", null).status()).isEqualTo(409);
+        assertThat(admin.get("/api/imports").number("$.totalItems")).isEqualTo(1);
     }
 
     @Test
     void expiredPreviewCannotBeConfirmed() {
-        ApiClient.Response preview = preview(manager);
+        ApiClient.Response preview = preview(admin);
         long id = preview.number("$.id");
         jdbc.update("update import_jobs set expires_at = now() - interval '1 minute' where id = ?", id);
-        assertThat(manager.get("/api/imports/" + id).text("$.state")).isEqualTo("EXPIRED");
-        assertThat(confirm(manager, id, preview.text("$.fileDigest"), null).status()).isEqualTo(409);
+        assertThat(admin.get("/api/imports/" + id).text("$.state")).isEqualTo("EXPIRED");
+        assertThat(confirm(admin, id, preview.text("$.fileDigest"), null).status()).isEqualTo(409);
     }
 
     @Test
     void badUploadsAreRefused() {
-        assertThat(manager.upload(PREVIEW + "?weekStarting=2026-09-14", "register.xlsx", "NAME,SURNAME".getBytes())
+        assertThat(admin.upload(PREVIEW + "?weekStarting=2026-09-14", "register.xlsx", "NAME,SURNAME".getBytes())
                 .text("$.type"))
                 .isEqualTo("urn:credit-advisory:file:not-xlsx");
-        assertThat(manager.upload(PREVIEW + "?weekStarting=2026-09-15", "r.xlsx", FakeWeeklyRegisterWorkbook.build())
+        assertThat(admin.upload(PREVIEW + "?weekStarting=2026-09-15", "r.xlsx", FakeWeeklyRegisterWorkbook.build())
                 .text("$.type")).isEqualTo("urn:credit-advisory:import:week-not-monday");
-        assertThat(manager.upload(PREVIEW, "register.xlsx", FakeWeeklyRegisterWorkbook.build()).text("$.type"))
+        assertThat(admin.upload(PREVIEW, "register.xlsx", FakeWeeklyRegisterWorkbook.build()).text("$.type"))
                 .isEqualTo("urn:credit-advisory:import:week-required");
         assertThat(
-                manager.get("/api/imports/weekly-register/week-guess?fileName=" + "Register%2014-18%20Sept%202026.xlsx")
+                admin.get("/api/imports/weekly-register/week-guess?fileName=" + "Register%2014-18%20Sept%202026.xlsx")
                         .text("$.weekStarting"))
                 .isEqualTo("2026-09-14");
     }
 
     @Test
-    void onlyManagersAndAdminsCanImport() {
+    void onlyAnAdminCanImport() {
+        ApiClient manager = signIn("manager@test.local");
+        assertThat(preview(manager).status()).isEqualTo(403);
+        assertThat(manager.get("/api/imports").status()).isEqualTo(403);
+        assertThat(manager.get("/api/imports/weekly-register/week-guess?fileName=x.xlsx").status()).isEqualTo(403);
+
         long consultantId = createConsultant("C009", "Some Consultant");
         createUser("consultant@test.local", consultantId, RoleName.CONSULTANT);
         ApiClient consultant = signIn("consultant@test.local");

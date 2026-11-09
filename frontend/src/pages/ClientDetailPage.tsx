@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { ApiError, data, type AssignmentEntry, type ClientDetail } from '../api';
 import { clientName } from '../api/names';
 import ClientCases from '../components/ClientCases';
+import RevealIdNumber from '../components/RevealIdNumber';
 import { hasAnyRole, useSession } from '../auth/useAuth';
 import './clientdetail.css';
 
@@ -113,9 +114,7 @@ export default function ClientDetailPage() {
     <div className="cd">
       {back}
       <h1>{clientName(c)}</h1>
-      <p className="muted">
-        ID number <span className="mono">{c.idNumberMasked}</span>
-      </p>
+      <RevealIdNumber key={c.id} clientId={c.id} masked={c.idNumberMasked} />
       <p>
         <Link className="btn" to={`/clients/${c.id}/edit`}>
           Edit client

@@ -31,6 +31,9 @@ public class Employer {
     @Column(name = "active", nullable = false)
     private Boolean active;
 
+    @Column(name = "needs_review", nullable = false)
+    private Boolean needsReview = false;
+
     @Version
     @Column(name = "version", nullable = false)
     private Long version;
@@ -103,6 +106,10 @@ public class Employer {
 
     public Boolean isActive() {
         return active;
+    }
+
+    public Boolean needsReview() {
+        return Boolean.TRUE.equals(needsReview);
     }
 
     public Long getVersion() {

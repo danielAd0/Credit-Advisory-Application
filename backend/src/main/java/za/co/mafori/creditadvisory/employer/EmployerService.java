@@ -28,13 +28,13 @@ public class EmployerService {
     }
 
     @Transactional(readOnly = true)
-    public PageResponse<EmployerResponse> search(String search, Boolean active, String employerType, int page,
-            int size) {
+    public PageResponse<EmployerResponse> search(String search, Boolean active, String employerType,
+            Boolean needsReview, int page, int size) {
         int safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
         PageRequest pageable = PageRequest.of(Math.max(page, 0), safeSize, Sort.by("name").and(Sort.by("id")));
         String type = employerType == null || employerType.isBlank() ? null
                 : employerType.strip().toLowerCase(Locale.ROOT);
-        return PageResponse.of(employers.search(LikePattern.contains(search), active, type, pageable),
+        return PageResponse.of(employers.search(LikePattern.contains(search), active, type, needsReview, pageable),
                 EmployerResponse::from);
     }
 

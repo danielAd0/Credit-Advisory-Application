@@ -26,10 +26,15 @@ import za.co.mafori.creditadvisory.user.UserAccount;
  * change-password, me, csrf and logout endpoints may be used
  * (PasswordChangeRequiredFilter).
  *
+ * <p>
+ * mfaPending: the password was right, but the second step (authenticator code)
+ * is not done yet, so only the MFA endpoints, me, csrf and logout may be used
+ * (MfaRequiredFilter).
+ *
  * Serializable because the servlet container may write sessions to disk.
  */
 public record AppUserPrincipal(long userId, String email, Set<RoleName> roles, Long consultantId,
-        long accountVersion, boolean mustChangePassword)
+        long accountVersion, boolean mustChangePassword, boolean mfaPending)
         implements AuthenticatedPrincipal, Serializable {
 
     public AppUserPrincipal {
@@ -39,7 +44,17 @@ public record AppUserPrincipal(long userId, String email, Set<RoleName> roles, L
     public static AppUserPrincipal from(UserAccount user) {
         Long consultantId = user.getConsultant() == null ? null : user.getConsultant().getId();
         return new AppUserPrincipal(user.getId(), user.getEmail(), user.getRoleNames(), consultantId,
-                user.getVersion(), user.mustChangePassword());
+                user.getVersion(), user.mustChangePassword(), false);
+    }
+
+    /** Right after the password, when the second step is still needed. */
+    public AppUserPrincipal withMfaPending() {
+        return new AppUserPrincipal(userId, email, roles, consultantId, accountVersion, mustChangePassword, true);
+    }
+
+    /** The second step is done. */
+    public AppUserPrincipal afterMfa() {
+        return new AppUserPrincipal(userId, email, roles, consultantId, accountVersion, mustChangePassword, false);
     }
 
     /**
@@ -47,7 +62,7 @@ public record AppUserPrincipal(long userId, String email, Set<RoleName> roles, L
      * version, and no longer forced to change it.
      */
     public AppUserPrincipal afterOwnPasswordChange(long newVersion) {
-        return new AppUserPrincipal(userId, email, roles, consultantId, newVersion, false);
+        return new AppUserPrincipal(userId, email, roles, consultantId, newVersion, false, mfaPending);
     }
 
     /**

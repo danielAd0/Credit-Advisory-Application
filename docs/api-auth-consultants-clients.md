@@ -112,7 +112,7 @@ Every successful change below writes one row to `audit_logs` in the **same trans
 
 | Action                           | Target                       | Metadata                                                                                                                              |
 | -------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `CONSULTANT_CREATED`             | consultant                   | `consultantCode`, `fullName`                                                                                                          |
+| `CONSULTANT_CREATED`             | consultant                   | `consultantCode`, `fullName`, `codeGenerated`; `importJobId` when created from an import                                                                                                          |
 | `CONSULTANT_RENAMED`             | consultant                   | `from`, `to`                                                                                                                          |
 | `CONSULTANT_STATUS_CHANGED`      | consultant                   | `from`, `to`, `reason`, `clientCount` (clients still assigned at that moment)                                                         |
 | `USER_CREATED`                   | user                         | `email`, `roles`, `consultantId`                                                                                                      |
@@ -122,8 +122,13 @@ Every successful change below writes one row to `audit_logs` in the **same trans
 | `USER_PASSWORD_RESET`            | user                         | - (never the password)                                                                                                                |
 | `USER_UNLOCKED`                  | user                         | -                                                                                                                                     |
 | `PASSWORD_CHANGED`               | user (the user themselves)   | -                                                                                                                                     |
-| `ACCOUNT_LOCKED`                 | user                         | `lockedUntil` (no actor when locked at sign-in; the user themselves when locked by wrong passwords on `POST /api/auth/reauthenticate`)                                                                                         |
+| `ACCOUNT_LOCKED`                 | user                         | `lockedUntil` (no actor when locked at sign-in; the user themselves when locked by wrong passwords on `POST /api/auth/reauthenticate` or wrong codes on `/api/auth/mfa/*`)                                                                                         |
 | `PASSWORD_CONFIRMATION_FAILED` | user | `locked` (whether this wrong password locked the account) - a wrong password on `POST /api/auth/reauthenticate` |
+| `MFA_ENABLED` | user | `recoveryCodes` (how many were created - never the codes) |
+| `MFA_CODE_FAILED` | user | `locked` - a wrong or already-used authenticator code |
+| `MFA_RECOVERY_CODE_USED` | user | `remaining` (unused recovery codes left) |
+| `MFA_RECOVERY_CODE_FAILED` | user | `locked` - a wrong or already-used recovery code |
+| `MFA_RESET` | user (the one reset) | `hadMfa`; the actor is the admin |
 | `ID_REVEAL_LIMIT_REACHED` | user | `limit`, `window` - the user asked for more full ID numbers in an hour than allowed; written once per hour |
 | `FIRST_ADMIN_CREATED`            | user                         | `email` (no actor: created at start-up on a new server, see README "Running in production")                                           |
 | `SIGN_IN_RATE_LIMITED`           | -                            | `address`, `failures`, `window` (never the emails tried)                                                                              |
@@ -163,7 +168,7 @@ Entries only record that something changed when it really changed (renaming to t
 { "email": "thandi@mafori.co.za", "password": "the-password" }
 ```
 
-**200 OK** - signed in, session cookie set. Body is the same as `GET /api/auth/me`.
+**200 OK** - the password was right, session cookie set. Body is the same as `GET /api/auth/me`. **Look at `mfa`:** the session can only do the second sign-in step until it says `VERIFIED` (see "Two-step sign-in" below).
 
 **Errors**
 | Status | When |
@@ -203,16 +208,54 @@ Giving the same answer for every failure stops anyone from finding out which ema
     "consultantCode": "C004",
     "fullName": "Thandi Xundu"
   },
-  "mustChangePassword": false
+  "mustChangePassword": false,
+  "mfa": "VERIFIED"
 }
 ```
 
 - `roles` contains one or more of `CONSULTANT`, `MANAGER`, `ADMIN`.
 - `consultant` is `null` for users who are not consultants (e.g. an admin).
 - `mustChangePassword` is `true` when an admin set the password (new account or reset). See "Password change required" below.
+- `mfa` is where this session stands with the second sign-in step: `SETUP_REQUIRED` (no authenticator yet: show the set-up screen), `CODE_REQUIRED` (show the code screen), `VERIFIED` (done), or `NOT_REQUIRED` (only on developer machines with `app.mfa.required=false`; never in production).
 - The frontend uses `roles` only to decide which buttons and pages to show. The backend checks permissions again on every request.
 
 **401** if not signed in.
+
+### Two-step sign-in (MFA)
+
+**Every user** signs in with their password **and** a 6-digit code from an authenticator app (Google Authenticator, Microsoft Authenticator or similar). Production refuses to start without it.
+
+After a correct password, `mfa` is `SETUP_REQUIRED` or `CODE_REQUIRED`, and until it is `VERIFIED` the session may **only**:
+
+- `GET /api/auth/me`, `GET /api/auth/csrf`, `POST /api/auth/logout`
+- the four endpoints below
+
+Every other request returns `403` with type `urn:credit-advisory:auth:mfa-required`: treat it anywhere as "send them to the code screen".
+
+**First sign-in (`SETUP_REQUIRED`):**
+
+1. `POST /api/auth/mfa/setup` (no body) → `200 {"secret": "JBSWY3DPEHPK3PXP...", "otpauthUri": "otpauth://totp/Credit%20Advisory:thandi%40mafori.co.za?secret=...&issuer=Credit%20Advisory&algorithm=SHA1&digits=6&period=30"}`. Show `otpauthUri` as a **QR code** (for example the `qrcode` npm package) and `secret` underneath, for typing in by hand. Calling it again gives a new secret.
+2. The user scans it, then `POST /api/auth/mfa/enable` with `{"code": "123456"}` (the code the app shows) → `200 {"recoveryCodes": ["K7QM2-XW4PD", ...10 codes], "account": {...the me object, mfa VERIFIED}}`.
+3. **Show the 10 recovery codes once** and tell the user to keep them somewhere safe (printed, or in a password manager). They cannot be fetched again. Each one can be used once instead of the app's code, if the phone is lost.
+
+**Every later sign-in (`CODE_REQUIRED`):** `POST /api/auth/mfa/verify` with `{"code": "123456"}` → `200` the me object with `mfa` `VERIFIED`.
+
+**Lost phone:** `POST /api/auth/mfa/recovery` with `{"recoveryCode": "K7QM2-XW4PD"}` → `200` the me object. Dashes, spaces and lower case are fine. If no recovery codes are left either, an admin resets the user's MFA (`POST /api/users/{id}/mfa-reset`, section 6) and the user sets up the app again.
+
+**Rules**
+
+- A code is accepted for 30 seconds, plus 30 seconds either side for a phone clock that is a little off. **Each code is accepted only once**, so one seen over someone's shoulder is useless.
+- Wrong codes and wrong recovery codes count toward the same lockout as wrong passwords: 5 wrong in a row (password, code and re-entered password together) lock the account for 15 minutes, and the one that locks it **signs this session out** (`401`). A wrong code while setting up (`/enable`) does not count: that secret is not in use yet.
+- When both steps are done, the session gets a new session id.
+- The secret is stored encrypted with its own key (`MFA_ENCRYPTION_KEY`); recovery codes only as hashes. Neither is ever returned again or logged.
+- With an admin-set password the user does MFA **first**, then "Password change required" applies.
+
+**Errors (all four endpoints)**
+| Status | When |
+|---|---|
+| 400 | `code` / `recoveryCode` missing; `urn:credit-advisory:auth:wrong-code` - wrong, already used, or not 6 digits |
+| 401 | not signed in; `urn:credit-advisory:auth:account-locked` - too many wrong codes, this session has been signed out |
+| 409 | `urn:credit-advisory:auth:mfa-not-pending` - this session already finished the second step; `urn:credit-advisory:auth:mfa-already-set-up` - `/setup` or `/enable` when an authenticator already exists (use `/verify`); `urn:credit-advisory:auth:mfa-setup-not-started` - `/enable` before `/setup`; `urn:credit-advisory:auth:mfa-setup-required` - `/verify` or `/recovery` before any authenticator was set up |
 
 ### Password change required
 
@@ -333,14 +376,18 @@ Sorted by `fullName`.
 **Request**
 
 ```json
-{ "consultantCode": "c004", "fullName": "Thandi Xundu" }
+{ "fullName": "Thandi Xundu" }
 ```
+or, to keep a code the person already has, `{ "consultantCode": "c004", "fullName": "Thandi Xundu" }`.
 
 **201 Created** - Consultant object, `Location: /api/consultants/4`. New consultants are `ACTIVE`.
 
 **Rules**
 
-- `consultantCode` is trimmed and upper-cased before saving (`c004` becomes `C004`). Allowed: letters, digits, `_` and `-`, max 32, must start with a letter or digit.
+- `consultantCode` is **optional**. Left out (or blank), the next code is **generated**: `C0001`, `C0002`, ... (V19's
+  sequence, so two admins saving at once never get the same one; a code already taken is skipped).
+- A code given is trimmed and upper-cased before saving (`c004` becomes `C004`). Allowed: letters, digits, `_` and `-`, max 32, must start with a letter or digit.
+- Frontend: the "Add consultant" form only needs the name; show the generated code from the response.
 - `fullName` required, max 200, not blank.
 
 **Errors:** `400` invalid fields, `409` code already exists (`urn:credit-advisory:consultant:duplicate-code`).
@@ -1000,6 +1047,16 @@ No body. Clears the failed sign-in count and any lockout.
 **200 OK** - the updated User object.
 
 **Errors:** `404` user does not exist.
+
+### POST /api/users/{id}/mfa-reset
+
+No body. For a user who lost their phone **and** their recovery codes: removes their authenticator and recovery codes. Every session of theirs is signed out now; at their next sign-in `mfa` is `SETUP_REQUIRED` and they set up the app again. Audited as `MFA_RESET`.
+
+Check who is asking before you do this (for example in person or by phone): a reset lets whoever knows the password set up their own authenticator.
+
+**204 No Content**
+
+**Errors:** `403` caller is not an ADMIN, `404` user does not exist.
 
 ---
 

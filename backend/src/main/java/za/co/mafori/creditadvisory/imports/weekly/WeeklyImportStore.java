@@ -105,6 +105,15 @@ public class WeeklyImportStore {
                 + " and current_import_job_id is not null", (rs, n) -> rs.getLong(1), week).stream().findFirst();
     }
 
+    /** Previews past their expiry time, oldest first (the clean-up job). */
+    public List<Long> expiredPreviewIds(int limit) {
+        return jdbc.query("""
+                select id from import_jobs
+                where import_type = 'WEEKLY_REGISTER' and state = 'PREVIEWED' and expires_at < now()
+                order by expires_at, id limit ?
+                """, (rs, n) -> rs.getLong(1), limit);
+    }
+
     public void markFinished(long jobId, String state) {
         jdbc.update("update import_jobs set state = ?, personal_data_purged_at = now(), version = version + 1"
                 + " where id = ? and state = 'PREVIEWED'", state, jobId);
@@ -338,6 +347,16 @@ public class WeeklyImportStore {
                 select count(*) > 0 from consultant_aliases
                 where lower(regexp_replace(btrim(alias), '\\s+', ' ', 'g')) = ?
                 """, Boolean.class, key(alias));
+    }
+
+    /**
+     * A consultant created from a sheet name
+     * (WeeklyImportService.createConsultantsFromSheet).
+     */
+    public long createConsultant(String code, String fullName) {
+        return jdbc.queryForObject(
+                "insert into consultants (consultant_code, full_name) values (?, ?) returning id", Long.class,
+                code, fullName);
     }
 
     public void insertConsultantAlias(long consultantId, String alias, long userId) {

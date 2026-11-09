@@ -35,7 +35,7 @@ import za.co.mafori.creditadvisory.user.RoleName;
 
 @RestController
 @RequestMapping("/api/imports")
-@PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
+@PreAuthorize("hasRole('ADMIN')") // only an admin runs imports (and adds staff from the sheet)
 public class WeeklyImportController {
 
     private final WeeklyImportService service;
@@ -103,6 +103,18 @@ public class WeeklyImportController {
     public ImportSummary mapConsultant(@AuthenticationPrincipal AppUserPrincipal caller, @PathVariable long id,
             @Valid @RequestBody ConsultantMappingRequest request) {
         return service.mapConsultant(caller.userId(), id, request.nameInSheet(), request.consultantId());
+    }
+
+    /**
+     * Creates consultants from names in the sheet that match nobody (each gets a
+     * generated
+     * code, no login). The other way to resolve an unknown name is
+     * consultant-mappings.
+     */
+    @PostMapping("/{id}/new-consultants")
+    public WeeklyImportViews.NewConsultantsResult createConsultants(@AuthenticationPrincipal AppUserPrincipal caller,
+            @PathVariable long id, @Valid @RequestBody WeeklyImportViews.NewConsultantsRequest request) {
+        return service.createConsultantsFromSheet(caller.userId(), id, request.namesInSheet());
     }
 
     @PostMapping("/{id}/confirm")

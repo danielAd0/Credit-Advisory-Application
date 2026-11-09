@@ -350,4 +350,4 @@ Week,2026-09-14 to 2026-09-20,4,3,133600.00,103425.00,600000.00,No
 
 ## 8. Not built yet
 
-- **Reconciliation with the workbook's own Report sheet** (stage 4 of the import): `weekly_report_figures` holds the workbook's figures; comparing them is part of the import work.
+- ~~Reconciliation with the workbook's own Report sheet~~: built in stage 4 of the import. See `GET /api/imports/{id}/reconciliation` and `/report-figures` in `docs/api-imports.md`, section 8.

@@ -23,9 +23,11 @@ import za.co.mafori.creditadvisory.common.web.PageResponse;
 public class EmployerController {
 
     private final EmployerService service;
+    private final EmployerMergeService merges;
 
-    public EmployerController(EmployerService service) {
+    public EmployerController(EmployerService service, EmployerMergeService merges) {
         this.service = service;
+        this.merges = merges;
     }
 
     @GetMapping
@@ -33,9 +35,28 @@ public class EmployerController {
             @RequestParam(required = false) String search,
             @RequestParam(required = false) Boolean active,
             @RequestParam(required = false) String employerType,
+            @RequestParam(required = false) Boolean needsReview,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
-        return service.search(search, active, employerType, page, size);
+        return service.search(search, active, employerType, needsReview, page, size);
+    }
+
+    @GetMapping("/{id}/aliases")
+    @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
+    public java.util.List<EmployerAliasResponse> aliases(@PathVariable long id) {
+        return merges.aliases(id);
+    }
+
+    @PostMapping("/{id}/merge")
+    @PreAuthorize("hasRole('ADMIN')")
+    public EmployerMergeResponse merge(@PathVariable long id, @Valid @RequestBody EmployerMergeRequest request) {
+        return merges.merge(id, request);
+    }
+
+    @PatchMapping("/{id}/review")
+    @PreAuthorize("hasRole('ADMIN')")
+    public EmployerResponse markReviewed(@PathVariable long id, @Valid @RequestBody EmployerReviewRequest request) {
+        return merges.markReviewed(id, request);
     }
 
     @GetMapping("/{id}")
