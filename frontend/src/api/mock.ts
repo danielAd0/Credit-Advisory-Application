@@ -13,8 +13,6 @@ import type {
   ClientUpdate,
   ConsultantRef,
   ConsultantSummary,
-  ImportPreview,
-  ImportResult,
   MoveRequest,
   MoveResult,
   NewClient,
@@ -22,10 +20,7 @@ import type {
   Session,
 } from './types';
 
-// Consultant names are the real staff list. Client details are invented, never real
-// (contract: mock data must be invented).
-
-const delay = (ms = 250) => new Promise((r) => setTimeout(r, ms));
+export const delay = (ms = 250) => new Promise((r) => setTimeout(r, ms));
 const when = (day: number) => new Date(2026, 9, day).toISOString();
 
 function consultant(id: number, fullName: string): ConsultantSummary {
@@ -41,7 +36,7 @@ function consultant(id: number, fullName: string): ConsultantSummary {
   };
 }
 
-const consultants: ConsultantSummary[] = [
+export const consultants: ConsultantSummary[] = [
   consultant(1, 'Boitumelo Khumalo'),
   consultant(2, 'Thandi Xundu'),
   consultant(3, 'Fhatu Mavuna'),
@@ -68,7 +63,7 @@ const link = (c: ConsultantSummary) => ({
   status: c.status,
 });
 
-const clients: ClientSummary[] = Array.from({ length: 8 }, (_, i) => {
+export const clients: ClientSummary[] = Array.from({ length: 8 }, (_, i) => {
   const c = i === 7 ? null : consultants[i % 3];
   return {
     id: i + 1,
@@ -86,13 +81,11 @@ const clients: ClientSummary[] = Array.from({ length: 8 }, (_, i) => {
 
 let nextId = clients.length + 1;
 
-/** Newest first, like the real endpoint. */
 const assignments = new Map<number, AssignmentEntry[]>();
 
 const KEY = 'mockUser';
 const who = () => sessionStorage.getItem(KEY) ?? 'unknown';
 
-/** Sign in with an email that starts with "new" to see the forced "choose your password" screen. */
 const MUST_CHANGE = 'mockMustChange';
 
 function mockSession(email: string): Session {
@@ -271,88 +264,39 @@ export async function moveClients(r: MoveRequest): Promise<MoveResult> {
 export async function removeClient(id: number, reason: string): Promise<void> {
   await delay(500);
   if (!reason.trim()) throw new ApiError(400, 'Reason required.');
-  const i = clients.findIndex((k) => k.id === id);
-  if (i === -1) throw new ApiError(404, 'Client not found.');
-  clients.splice(i, 1); // the real server would archive instead of erasing
-}
-
-// ---------- Import (invented preview: the file's contents are never read in mock mode) ----------
-const DEMO_IMPORT_ID = 'demo-import';
-
-export async function previewImport(file: File): Promise<ImportPreview> {
-  await delay(900);
-  return {
-    id: DEMO_IMPORT_ID,
-    fileName: file.name,
-    totalRows: 120,
-    newRows: 84,
-    updatedRows: 18,
-    unchangedRows: 9,
-    invalidRows: 5,
-    conflictRows: 4,
-    issues: [
-      {
-        row: 6,
-        idNumberMasked: '*********0412',
-        kind: 'INVALID_ID',
-        message: 'ID number must be 13 digits.',
-      },
-      {
-        row: 19,
-        idNumberMasked: '*******0388',
-        kind: 'INVALID_ID',
-        message: 'ID number must be 13 digits.',
-      },
-      {
-        row: 31,
-        idNumberMasked: '*********0127',
-        kind: 'DUPLICATE_IN_FILE',
-        message: 'Also appears on row 12. Fix the duplicate and upload again.',
-      },
-      {
-        row: 44,
-        idNumberMasked: '*********0560',
-        kind: 'UNKNOWN_CONSULTANT',
-        message: 'Consultant code "C-099" is not recognised.',
-      },
-      {
-        row: 58,
-        idNumberMasked: '*********0731',
-        kind: 'INACTIVE_CONSULTANT',
-        message: 'Consultant code "C-014" is suspended. Choose an active consultant.',
-      },
-      {
-        row: 63,
-        idNumberMasked: '*********0845',
-        kind: 'ASSIGNMENT_CONFLICT',
-        message: 'Already assigned to a different consultant. A manager must decide.',
-      },
-      {
-        row: 77,
-        idNumberMasked: '*********0292',
-        kind: 'ASSIGNMENT_CONFLICT',
-        message: 'Already assigned to a different consultant. A manager must decide.',
-      },
-      {
-        row: 90,
-        idNumberMasked: '*********0674',
-        kind: 'ASSIGNMENT_CONFLICT',
-        message: 'Already assigned to a different consultant. A manager must decide.',
-      },
-      {
-        row: 101,
-        idNumberMasked: '*********0519',
-        kind: 'ASSIGNMENT_CONFLICT',
-        message: 'Already assigned to a different consultant. A manager must decide.',
-      },
-    ],
+  const c = clients.find((k) => k.id === id);
+  if (!c) throw new ApiError(404, 'Client not found.');
+  if (!c.consultant) {
+    throw new ApiError(409, 'This client has no consultant.', {
+      type: 'urn:credit-advisory:unassign:not-assigned',
+      detail: 'This client has no consultant.',
+    });
+  }
+  const open = cases.filter((k) => k.client.id === id && k.status !== 'CLOSED').length;
+  if (open > 0) {
+    const detail = `This client has ${open} case${open === 1 ? '' : 's'} that ${
+      open === 1 ? 'is' : 'are'
+    } not closed. Close ${open === 1 ? 'it' : 'them'} first, or transfer the client instead.`;
+    throw new ApiError(409, detail, { type: 'urn:credit-advisory:unassign:open-cases', detail });
+  }
+  const at = new Date().toISOString();
+  const entry: AssignmentEntry = {
+    changedAt: at,
+    changeType: 'UNASSIGN',
+    fromConsultant: {
+      id: c.consultant.id,
+      consultantCode: c.consultant.consultantCode,
+      fullName: c.consultant.fullName,
+    },
+    toConsultant: null,
+    reason: reason.trim(),
+    changedBy: { id: 1, email: who() },
+    batchId: null,
   };
-}
-
-export async function confirmImport(id: string): Promise<ImportResult> {
-  await delay(1200);
-  if (id !== DEMO_IMPORT_ID) throw new ApiError(404, 'Unknown import.');
-  return { imported: 102, unchanged: 9, skipped: 9 };
+  assignments.set(id, [entry, ...(assignments.get(id) ?? [])]);
+  c.consultant = null;
+  c.version += 1;
+  c.updatedAt = at;
 }
 
 export async function getDashboardSummary(): Promise<DashboardSummary> {
@@ -381,12 +325,15 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
     unassignedClients: clients.filter((c) => !c.consultant).length,
     clientsNeedingHandover: clients.filter((c) => c.consultant && c.consultant.status !== 'ACTIVE')
       .length,
-    consultants: { active: by('ACTIVE'), inactive: by('INACTIVE'), suspended: by('SUSPENDED') },
+    consultants: {
+      active: by('ACTIVE'),
+      inactive: by('INACTIVE'),
+      suspended: by('SUSPENDED'),
+    },
     cases: caseCounts,
   };
 }
 
-// ---------- Credit cases (invented) ----------
 const caseUser = () => ({ id: 1, email: who(), consultantName: null });
 
 const cases: CaseDetail[] = [
@@ -403,7 +350,11 @@ const cases: CaseDetail[] = [
     status: 'IN_PROGRESS',
     openedAt: when(21),
     closedAt: null,
-    createdBy: { id: 1, email: 'consultant@example.com', consultantName: 'Boitumelo Khumalo' },
+    createdBy: {
+      id: 1,
+      email: 'consultant@example.com',
+      consultantName: 'Boitumelo Khumalo',
+    },
     version: 1,
     createdAt: when(21),
     updatedAt: when(22),
@@ -411,7 +362,11 @@ const cases: CaseDetail[] = [
       {
         id: 1,
         note: 'Payslip received.',
-        author: { id: 1, email: 'consultant@example.com', consultantName: 'Boitumelo Khumalo' },
+        author: {
+          id: 1,
+          email: 'consultant@example.com',
+          consultantName: 'Boitumelo Khumalo',
+        },
         createdAt: when(22),
       },
     ],
@@ -429,7 +384,11 @@ const cases: CaseDetail[] = [
     status: 'CLOSED',
     openedAt: when(5),
     closedAt: when(9),
-    createdBy: { id: 1, email: 'consultant@example.com', consultantName: 'Boitumelo Khumalo' },
+    createdBy: {
+      id: 1,
+      email: 'consultant@example.com',
+      consultantName: 'Boitumelo Khumalo',
+    },
     version: 2,
     createdAt: when(5),
     updatedAt: when(9),

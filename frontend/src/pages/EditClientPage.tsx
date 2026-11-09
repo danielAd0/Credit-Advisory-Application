@@ -9,8 +9,8 @@ interface Form {
   lastName: string;
   email: string;
   phone: string;
-  /** Only while the backend cannot correct ID numbers (see `features`). Blank keeps the current number. */
   idNumber: string;
+  idReason: string;
 }
 
 type Errors = Partial<Record<keyof Form, string>>;
@@ -21,6 +21,7 @@ function validate(v: Form): Errors {
   if (!v.lastName.trim()) e.lastName = 'Enter the last name.';
   if (v.idNumber && !/^\d{13}$/.test(v.idNumber))
     e.idNumber = 'The ID number must be exactly 13 digits.';
+  if (v.idNumber && !v.idReason.trim()) e.idReason = 'Say why the ID number is being corrected.';
   if (v.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.email))
     e.email = 'That email address does not look right.';
   if (v.phone && !/^\+?[\d\s]{9,15}$/.test(v.phone))
@@ -34,9 +35,11 @@ export default function EditClientPage() {
   const navigate = useNavigate();
   const session = useSession();
   const canEditId = features.correctIdNumber && hasAnyRole(session, ['ADMIN', 'MANAGER']);
-  const [loaded, setLoaded] = useState<{ id: number; masked: string; version: number } | null>(
-    null,
-  );
+  const [loaded, setLoaded] = useState<{
+    id: number;
+    masked: string;
+    version: number;
+  } | null>(null);
   const [loadState, setLoadState] = useState<'ok' | 'missing' | 'failed'>('ok');
   const [values, setValues] = useState<Form | null>(null);
   const [errors, setErrors] = useState<Errors>({});
@@ -57,6 +60,7 @@ export default function EditClientPage() {
           email: c.email ?? '',
           phone: c.phone ?? '',
           idNumber: '',
+          idReason: '',
         });
         setLoadState('ok');
       })
@@ -105,7 +109,6 @@ export default function EditClientPage() {
 
   const current = values;
   const set = (key: keyof Form) => (e: ChangeEvent<HTMLInputElement>) => {
-    // The ID number accepts digits only, so a pasted space or dash cannot cause a rejection later.
     const value =
       key === 'idNumber' ? e.target.value.replace(/\D/g, '').slice(0, 13) : e.target.value;
     setValues({ ...current, [key]: value });
@@ -128,6 +131,7 @@ export default function EditClientPage() {
         phone: current.phone.trim(),
         version: loaded.version,
         idNumber: canEditId && current.idNumber ? current.idNumber : undefined,
+        idNumberReason: canEditId && current.idNumber ? current.idReason.trim() : undefined,
       });
       navigate(`/clients/${id}`);
     } catch (err) {
@@ -212,6 +216,7 @@ export default function EditClientPage() {
             false,
             'Leave blank to keep the current ID number. The change is recorded with your name.',
           )}
+        {canEditId && current.idNumber && field('idReason', 'Reason for the correction')}
         <div className="ac-row">
           {field('email', 'Email', 'email')}
           {field('phone', 'Phone', 'tel')}

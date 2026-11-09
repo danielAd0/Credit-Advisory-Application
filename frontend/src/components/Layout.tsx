@@ -4,10 +4,23 @@ import { hasAnyRole, useAuth, useSession } from '../auth/useAuth';
 
 const nav: { to: string; label: string; roles: Role[]; enabled?: boolean }[] = [
   { to: '/', label: 'Dashboard', roles: ['ADMIN', 'MANAGER', 'CONSULTANT'] },
-  { to: '/clients', label: 'Clients', roles: ['ADMIN', 'MANAGER', 'CONSULTANT'] },
+  {
+    to: '/clients',
+    label: 'Clients',
+    roles: ['ADMIN', 'MANAGER', 'CONSULTANT'],
+  },
+  { to: '/reports', label: 'Reports', roles: ['ADMIN', 'MANAGER', 'CONSULTANT'] },
   { to: '/consultants', label: 'Consultants', roles: ['ADMIN', 'MANAGER'] },
+  { to: '/products', label: 'Products', roles: ['ADMIN', 'MANAGER'] },
+  { to: '/employers', label: 'Employers', roles: ['ADMIN', 'MANAGER'] },
+  { to: '/audit-log', label: 'Audit log', roles: ['ADMIN'] },
   { to: '/reassign', label: 'Reassign clients', roles: ['ADMIN', 'MANAGER'] },
-  { to: '/import', label: 'Import', roles: ['ADMIN', 'MANAGER'], enabled: features.import },
+  {
+    to: '/import',
+    label: 'Import',
+    roles: ['ADMIN', 'MANAGER'],
+    enabled: features.import,
+  },
 ];
 
 export default function Layout() {

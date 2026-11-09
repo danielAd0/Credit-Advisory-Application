@@ -1,10 +1,5 @@
-// Admin API: consultant onboarding, product catalogue, employers, client assignment.
-// Shapes match docs/api-admin.md. Uses the same session/CSRF handling as real.ts.
-
 import { api } from './http';
 import type { ClientSummary, ConsultantStatus, PageResponse, Role } from './types';
-
-// ---------- shapes ----------
 
 export interface Consultant {
   id: number;
@@ -32,6 +27,7 @@ export interface UserAccount {
   locked: boolean;
   lockedUntil: string | null;
   lastLoginAt: string | null;
+  mustChangePassword: boolean;
   version: number;
   createdAt: string;
   updatedAt: string;

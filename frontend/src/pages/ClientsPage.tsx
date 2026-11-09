@@ -11,10 +11,11 @@ export default function ClientsPage() {
   const isManager = hasAnyRole(session, ['ADMIN', 'MANAGER']);
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(0);
-  const [version, setVersion] = useState(0); // bumped after a removal so the list reloads
-  const [result, setResult] = useState<{ key: string; data: PageResponse<ClientSummary> } | null>(
-    null,
-  );
+  const [version, setVersion] = useState(0);
+  const [result, setResult] = useState<{
+    key: string;
+    data: PageResponse<ClientSummary>;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [target, setTarget] = useState<ClientSummary | null>(null);
@@ -26,7 +27,6 @@ export default function ClientsPage() {
 
   const key = `${query}|${page}|${version}`;
 
-  // Wait 250 ms after typing stops, and ignore answers that arrive late.
   useEffect(() => {
     let current = true;
     const t = setTimeout(() => {
@@ -48,7 +48,6 @@ export default function ClientsPage() {
     };
   }, [query, page, key]);
 
-  // Open and close the native dialog to match what is selected for removal.
   useEffect(() => {
     const d = dialogRef.current;
     if (!d) return;
@@ -71,7 +70,9 @@ export default function ClientsPage() {
     setRemoveError(null);
     try {
       await data.removeClient(target.id, reason.trim());
-      setNotice(`${clientName(target)} was removed.`);
+      setNotice(
+        `${clientName(target)} no longer has a consultant. You can assign them on the Reassign page.`,
+      );
       setTarget(null);
       setPage(0);
       setVersion((v) => v + 1);
@@ -81,7 +82,7 @@ export default function ClientsPage() {
           (err instanceof ApiError && err.status === 403
             ? 'You do not have permission to remove clients.'
             : err instanceof ApiError && err.status === 409
-              ? 'This client has open cases and cannot be removed yet.'
+              ? 'This client has no consultant, or still has open cases.'
               : 'Could not remove the client. Nothing was changed.'),
       );
     } finally {
@@ -158,7 +159,7 @@ export default function ClientsPage() {
                     >
                       Edit
                     </Link>
-                    {isManager && features.removeClient && (
+                    {isManager && features.removeClient && c.consultant && (
                       <button
                         type="button"
                         className="ca-link danger"
@@ -199,10 +200,11 @@ export default function ClientsPage() {
               void confirmRemove();
             }}
           >
-            <h2 id="ca-title">Remove {clientName(target)}?</h2>
+            <h2 id="ca-title">Remove {clientName(target)} from their consultant?</h2>
             <p className="muted">
-              ID number <span className="mono">{target.idNumberMasked}</span>. The client is
-              archived, not erased, and a manager can restore them.
+              ID number <span className="mono">{target.idNumberMasked}</span>. The client stays in
+              the system with all their details, but will no longer have a consultant. You can
+              assign them to someone else later on the Reassign page.
             </p>
             {removeError && (
               <p className="alert error" role="alert">
@@ -215,7 +217,7 @@ export default function ClientsPage() {
               type="text"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              maxLength={200}
+              maxLength={500}
               autoComplete="off"
             />
             <p className="ca-hint">

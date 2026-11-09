@@ -5,14 +5,19 @@ import RequireAuth from './auth/RequireAuth';
 import { RequireRole } from './auth/RequireRole';
 import Layout from './components/Layout';
 import ChangePasswordPage from './pages/ChangePasswordPage';
+import AuditLogPage from './pages/AuditLogPage';
 import AddClientPage from './pages/AddClientPage';
 import ClientDetailPage from './pages/ClientDetailPage';
 import ClientsPage from './pages/ClientsPage';
+import AddConsultantPage from './pages/AddConsultantPage';
 import ConsultantsPage from './pages/ConsultantsPage';
 import Dashboard from './pages/Dashboard';
 import EditClientPage from './pages/EditClientPage';
 import ImportPage from './pages/ImportPage';
 import LoginPage from './pages/LoginPage';
+import EmployersPage from './pages/EmployersPage';
+import ProductsPage from './pages/ProductsPage';
+import ReportsPage from './pages/ReportsPage';
 import ReassignPage from './pages/ReassignPage';
 
 const managers: Role[] = ['ADMIN', 'MANAGER'];
@@ -39,6 +44,25 @@ export default function App() {
                   </RequireRole>
                 }
               />
+              <Route
+                path="consultants/new"
+                element={
+                  <RequireRole roles={['ADMIN']}>
+                    <AddConsultantPage />
+                  </RequireRole>
+                }
+              />
+              <Route
+                path="audit-log"
+                element={
+                  <RequireRole roles={['ADMIN']}>
+                    <AuditLogPage />
+                  </RequireRole>
+                }
+              />
+              <Route path="reports" element={<ReportsPage />} />
+              <Route path="products" element={<ProductsPage />} />
+              <Route path="employers" element={<EmployersPage />} />
               <Route
                 path="reassign"
                 element={

@@ -1,400 +1,680 @@
-import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
+import { useCallback, useEffect, useState, type ChangeEvent } from 'react';
 import {
-  ApiError,
   data,
   detailOf,
-  type ImportIssueKind,
-  type ImportPreview,
-  type ImportResult,
+  imports,
+  isStale,
+  type ConfirmResult,
+  type ConsultantSummary,
+  type ImportBlocker,
+  type ImportHistoryItem,
+  type ImportIssue,
+  type ImportRow,
+  type ImportSummary,
+  type PageResponse,
+  type RowAction,
+  type Severity,
 } from '../api';
-import './import.css';
+import { hasAnyRole, useSession } from '../auth/useAuth';
+import Pager from '../components/Pager';
+import './addclient.css';
+import './consultants.css';
+import './imports.css';
 
-// Placeholder until the real limit is agreed with IT. The server must enforce its own limit too.
-const MAX_MB = 10;
-const MAX_BYTES = MAX_MB * 1024 * 1024;
+const MAX_BYTES = 10 * 1024 * 1024;
 
-const KIND_LABEL: Record<ImportIssueKind, string> = {
-  INVALID_ID: 'Invalid ID number',
-  DUPLICATE_IN_FILE: 'Duplicate in file',
-  UNKNOWN_CONSULTANT: 'Unknown consultant code',
-  INACTIVE_CONSULTANT: 'Consultant not active',
-  ASSIGNMENT_CONFLICT: 'Different consultant already assigned',
+const rand = (n: number) =>
+  n.toLocaleString('en-ZA', { style: 'currency', currency: 'ZAR', minimumFractionDigits: 2 });
+const day = (iso: string) => new Date(iso).toLocaleDateString('en-ZA');
+
+const BLOCKER_TEXT: Record<ImportBlocker, string> = {
+  UNMAPPED_CONSULTANTS: 'Match each consultant name below to a consultant.',
+  SHEET_ERRORS: 'The workbook has errors that stop the import. Fix it and upload it again.',
+  EXPIRED: 'This preview has expired. Upload the file again.',
+  NOT_PREVIEWED: 'This import is already finished.',
 };
 
-type Stage =
-  | { name: 'pick' }
-  | { name: 'checking' }
-  | { name: 'review'; preview: ImportPreview }
-  | { name: 'importing'; preview: ImportPreview }
-  | { name: 'done'; preview: ImportPreview; result: ImportResult };
+const STATE_LABEL: Partial<Record<string, string>> = {
+  PREVIEWED: 'Waiting for confirmation',
+  COMMITTED: 'Imported',
+  CANCELLED: 'Cancelled',
+  EXPIRED: 'Expired',
+};
 
-const STEPS = ['Choose file', 'Review', 'Done'];
-const stepOf = (s: Stage['name']) =>
-  s === 'pick' || s === 'checking' ? 0 : s === 'review' || s === 'importing' ? 1 : 2;
-
-function checkFile(file: File): string | null {
-  if (!file.name.toLowerCase().endsWith('.xlsx'))
-    return 'Choose an Excel workbook that ends in .xlsx.';
-  if (file.size === 0) return 'That file is empty.';
-  if (file.size > MAX_BYTES) return `That file is larger than ${MAX_MB} MB.`;
-  return null;
-}
-
-function explain(err: unknown): string {
-  const detail = detailOf(err);
-  if (detail) return detail;
-  if (err instanceof ApiError) {
-    if (err.status === 413) return 'That file is too large for the server.';
-    if (err.status === 400 || err.status === 415 || err.status === 422)
-      return 'The server could not read that file. Check that it is an .xlsx workbook with the agreed worksheet.';
-    if (err.status === 403) return 'You do not have permission to import.';
-    if (err.status === 409 || err.status === 404)
-      return 'This preview is out of date. Choose the file again.';
-  }
-  return 'We could not complete that. Check your connection and try again.';
-}
-
-// Spreadsheet programs run text that starts with these characters as a formula.
-const safeCell = (v: string) => (/^[=+\-@]/.test(v) ? `'${v}` : v);
-
-function downloadIssues(preview: ImportPreview) {
-  const rows = [
-    ['Row', 'ID number (masked)', 'Problem', 'Detail'],
-    ...preview.issues.map((i) => [String(i.row), i.idNumberMasked, KIND_LABEL[i.kind], i.message]),
-  ];
-  const csv = rows
-    .map((r) => r.map((c) => `"${safeCell(c).replace(/"/g, '""')}"`).join(','))
-    .join('\r\n');
-  const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'import-skipped-rows.csv';
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-export default function ImportPage() {
-  const [stage, setStage] = useState<Stage>({ name: 'pick' });
+function UploadCard({ onPreview }: { onPreview: (s: ImportSummary) => void }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [week, setWeek] = useState('');
+  const [hint, setHint] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [dragging, setDragging] = useState(false);
-  const [filter, setFilter] = useState<ImportIssueKind | 'ALL'>('ALL');
-  const headingRef = useRef<HTMLHeadingElement>(null);
 
-  // Move keyboard and screen-reader focus to the new step's heading.
-  useEffect(() => {
-    headingRef.current?.focus();
-  }, [stage.name]);
-
-  async function handleFile(file: File | undefined) {
-    if (!file) return;
-    const problem = checkFile(file);
-    if (problem) {
-      setError(problem);
-      return;
-    }
+  async function pick(e: ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0] ?? null;
     setError(null);
-    setStage({ name: 'checking' });
+    setFile(null);
+    setWeek('');
+    setHint(null);
+    if (!f) return;
+    if (!f.name.toLowerCase().endsWith('.xlsx'))
+      return setError('Choose an Excel workbook that ends in .xlsx.');
+    if (f.size === 0) return setError('That file is empty.');
+    if (f.size > MAX_BYTES) return setError('That file is larger than 10 MB.');
+    setFile(f);
     try {
-      const preview = await data.previewImport(file);
-      setFilter('ALL');
-      setStage({ name: 'review', preview });
-    } catch (err) {
-      setStage({ name: 'pick' });
-      setError(explain(err));
+      const guessed = await imports.weekGuess(f.name);
+      if (guessed) {
+        setWeek(guessed);
+        setHint('Read from the file name. Change it if it is wrong.');
+      } else {
+        setHint('The file name has no date, so choose the Monday of the week.');
+      }
+    } catch {
+      setHint('Choose the Monday of the week.');
     }
   }
 
-  async function confirm(preview: ImportPreview) {
+  async function submit() {
+    if (!file || busy) return;
+    setBusy(true);
     setError(null);
-    setStage({ name: 'importing', preview });
     try {
-      const result = await data.confirmImport(preview.id);
-      setStage({ name: 'done', preview, result });
+      onPreview(await imports.preview(file, week || undefined));
     } catch (err) {
-      setStage({ name: 'review', preview });
-      setError(explain(err));
+      setError(detailOf(err) ?? 'Could not check the file. Try again.');
+    } finally {
+      setBusy(false);
     }
   }
-
-  function restart() {
-    setError(null);
-    setStage({ name: 'pick' });
-  }
-
-  const onPick = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = ''; // lets the same file be chosen again
-    void handleFile(file);
-  };
-  const onDrop = (e: DragEvent<HTMLLabelElement>) => {
-    e.preventDefault();
-    setDragging(false);
-    void handleFile(e.dataTransfer.files[0]);
-  };
-
-  const current = stepOf(stage.name);
 
   return (
-    <div className="imp">
-      <h1>Import clients</h1>
+    <section className="wi-card" aria-label="Upload a weekly register">
+      <h2>Upload a weekly register</h2>
       <p className="muted">
-        Add or update clients and their consultants from an Excel workbook. Nothing is saved until
-        you confirm.
+        Nothing is saved yet. You will see a summary and can confirm or cancel.
       </p>
-
-      <ol className="imp-steps" aria-label="Import steps">
-        {STEPS.map((label, i) => (
-          <li
-            key={label}
-            className={i < current ? 'is-done' : i === current ? 'is-current' : ''}
-            aria-current={i === current ? 'step' : undefined}
-          >
-            <span className="imp-step-num" aria-hidden="true">
-              {i + 1}
-            </span>
-            {label}
-          </li>
-        ))}
-      </ol>
-
       {error && (
-        <p className="alert error imp-error" role="alert">
+        <p className="alert error" role="alert">
           {error}
         </p>
       )}
+      <div className="wi-row">
+        <div className="ac-field">
+          <label htmlFor="wi-file">Excel workbook (.xlsx)</label>
+          <input
+            id="wi-file"
+            className="wi-file"
+            type="file"
+            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            onChange={pick}
+          />
+        </div>
+        <div className="ac-field">
+          <label htmlFor="wi-week">Week starting (Monday)</label>
+          <input
+            id="wi-week"
+            type="date"
+            value={week}
+            onChange={(e) => setWeek(e.target.value)}
+            disabled={!file}
+          />
+        </div>
+        <button type="button" className="btn primary" onClick={submit} disabled={!file || busy}>
+          {busy ? 'Checking...' : 'Check file'}
+        </button>
+      </div>
+      {hint && <p className="ac-hint">{hint}</p>}
+    </section>
+  );
+}
 
-      {(stage.name === 'pick' || stage.name === 'checking') && (
-        <section className="imp-card">
-          <h2 ref={headingRef} tabIndex={-1}>
-            Choose a workbook
-          </h2>
-          <p className="muted">One .xlsx file with the agreed worksheet, up to {MAX_MB} MB.</p>
+function History({ onOpen }: { onOpen: (id: number) => void }) {
+  const [page, setPage] = useState(0);
+  const [result, setResult] = useState<PageResponse<ImportHistoryItem> | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-          {stage.name === 'checking' ? (
-            <p className="imp-busy" role="status">
-              <span className="imp-spinner" aria-hidden="true" />
-              Checking the workbook. This can take a moment.
-            </p>
-          ) : (
-            <label
-              className={`imp-drop${dragging ? ' is-dragging' : ''}`}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDragging(true);
-              }}
-              onDragLeave={() => setDragging(false)}
-              onDrop={onDrop}
-            >
-              <input
-                className="imp-file"
-                type="file"
-                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                onChange={onPick}
-              />
-              <svg viewBox="0 0 24 24" width="32" height="32" aria-hidden="true">
-                <path
-                  d="M12 16V5m0 0-4 4m4-4 4 4M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.7"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-              <span className="imp-drop-title">
-                Drop the workbook here, or <u>browse</u>
-              </span>
-              <span className="imp-drop-note">.xlsx only</span>
-            </label>
-          )}
+  useEffect(() => {
+    let live = true;
+    imports
+      .list(page, 10)
+      .then((r) => live && setResult(r))
+      .catch(() => live && setError('Could not load the import history.'));
+    return () => {
+      live = false;
+    };
+  }, [page]);
 
-          <details className="imp-columns">
-            <summary>Columns the workbook needs</summary>
-            <ul>
-              <li>
-                <strong>ID Number</strong>: 13 digits, stored as text so a leading zero is kept
-              </li>
-              <li>
-                <strong>First Name</strong> and <strong>Last Name</strong>
-              </li>
-              <li>
-                <strong>Email</strong> and <strong>Phone</strong>: checked when filled in
-              </li>
-              <li>
-                <strong>Consultant Code</strong>: how the consultant is matched
-              </li>
-              <li>
-                <strong>Consultant Name</strong>: for display only
-              </li>
-            </ul>
-            <p className="muted">
-              These columns are provisional until the import template is approved.
-            </p>
-          </details>
-        </section>
+  return (
+    <section className="wi-card" aria-label="Import history">
+      <h2>Previous imports</h2>
+      {error && <p className="alert error">{error}</p>}
+      {!error && result === null && <p className="muted">Loading...</p>}
+      {result && result.items.length === 0 && (
+        <p className="muted">Nothing has been imported yet.</p>
+      )}
+      {result && result.items.length > 0 && (
+        <>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Week</th>
+                  <th>File</th>
+                  <th>Status</th>
+                  <th>Rows</th>
+                  <th>Uploaded by</th>
+                  <th>
+                    <span className="sr-only">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {result.items.map((h) => (
+                  <tr key={h.id}>
+                    <td>{day(h.weekStarting)}</td>
+                    <td>{h.fileName}</td>
+                    <td>{STATE_LABEL[h.state] ?? h.state}</td>
+                    <td>
+                      {h.state === 'COMMITTED'
+                        ? `${h.appliedRows} of ${h.totalRows}`
+                        : `${h.totalRows}`}
+                      {h.rejectedRows > 0 && ` (${h.rejectedRows} rejected)`}
+                    </td>
+                    <td>{h.uploadedBy}</td>
+                    <td>
+                      <button type="button" className="btn" onClick={() => onOpen(h.id)}>
+                        {h.state === 'PREVIEWED' ? 'Review' : 'View'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <Pager
+            page={result.page}
+            size={result.size}
+            totalItems={result.totalItems}
+            totalPages={result.totalPages}
+            onPage={setPage}
+          />
+        </>
+      )}
+    </section>
+  );
+}
+
+function Details({ id }: { id: number }) {
+  const [tab, setTab] = useState<'issues' | 'rows'>('issues');
+  const [severity, setSeverity] = useState<Severity | ''>('');
+  const [action, setAction] = useState<RowAction | ''>('');
+  const [page, setPage] = useState(0);
+  const [issues, setIssues] = useState<PageResponse<ImportIssue> | null>(null);
+  const [rows, setRows] = useState<PageResponse<ImportRow> | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    const fail = () => live && setError('Could not load the details.');
+    if (tab === 'issues') {
+      imports
+        .issues(id, { severity: severity || undefined, page, size: 25 })
+        .then((r) => live && (setIssues(r), setError(null)))
+        .catch(fail);
+    } else {
+      imports
+        .rows(id, { action: action || undefined, page, size: 25 })
+        .then((r) => live && (setRows(r), setError(null)))
+        .catch(fail);
+    }
+    return () => {
+      live = false;
+    };
+  }, [id, tab, severity, action, page]);
+
+  const current = tab === 'issues' ? issues : rows;
+
+  return (
+    <section className="wi-card" aria-label="Details">
+      <div className="wi-tabs">
+        <button
+          type="button"
+          className="btn"
+          aria-pressed={tab === 'issues'}
+          onClick={() => {
+            setTab('issues');
+            setPage(0);
+          }}
+        >
+          Issues
+        </button>
+        <button
+          type="button"
+          className="btn"
+          aria-pressed={tab === 'rows'}
+          onClick={() => {
+            setTab('rows');
+            setPage(0);
+          }}
+        >
+          Rows
+        </button>
+        {tab === 'issues' ? (
+          <select
+            aria-label="Filter by severity"
+            value={severity}
+            onChange={(e) => {
+              setSeverity(e.target.value as Severity | '');
+              setPage(0);
+            }}
+          >
+            <option value="">All issues</option>
+            <option value="ERROR">Errors</option>
+            <option value="WARNING">Warnings</option>
+            <option value="INFO">Notes</option>
+          </select>
+        ) : (
+          <select
+            aria-label="Filter by action"
+            value={action}
+            onChange={(e) => {
+              setAction(e.target.value as RowAction | '');
+              setPage(0);
+            }}
+          >
+            <option value="">All rows</option>
+            <option value="NEW">New clients</option>
+            <option value="UNCHANGED">Existing clients</option>
+            <option value="DUPLICATE">Repeat clients</option>
+            <option value="INVALID">Rejected</option>
+          </select>
+        )}
+      </div>
+
+      {error && <p className="alert error">{error}</p>}
+      {!error && current === null && <p className="muted">Loading...</p>}
+      {current && current.items.length === 0 && <p className="muted">Nothing to show.</p>}
+
+      {tab === 'issues' && issues && issues.items.length > 0 && (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Level</th>
+                <th>Where</th>
+                <th>Message</th>
+              </tr>
+            </thead>
+            <tbody>
+              {issues.items.map((i, n) => (
+                <tr key={`${i.code}-${i.sheetName}-${i.rowNumber}-${n}`}>
+                  <td className={`wi-sev ${i.severity}`}>{i.severity.toLowerCase()}</td>
+                  <td>
+                    {i.sheetName ? `${i.sheetName}, row ${i.rowNumber ?? '-'}` : 'Whole file'}
+                    {i.field ? ` (${i.field})` : ''}
+                  </td>
+                  <td>{i.message}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
-      {(stage.name === 'review' || stage.name === 'importing') &&
-        (() => {
-          const p = stage.preview;
-          const importable = p.newRows + p.updatedRows;
-          const skipped = p.invalidRows + p.conflictRows;
-          const busy = stage.name === 'importing';
-          const kinds = (Object.keys(KIND_LABEL) as ImportIssueKind[]).filter((k) =>
-            p.issues.some((i) => i.kind === k),
-          );
-          const shown = filter === 'ALL' ? p.issues : p.issues.filter((i) => i.kind === filter);
-          const stats = [
-            { label: 'New clients', value: p.newRows, tone: 'good' },
-            { label: 'Updated', value: p.updatedRows, tone: 'good' },
-            { label: 'Unchanged', value: p.unchangedRows, tone: 'neutral' },
-            { label: 'Invalid rows', value: p.invalidRows, tone: 'bad' },
-            { label: 'Conflicts', value: p.conflictRows, tone: 'warn' },
-          ];
-          return (
-            <>
-              <section className="imp-card">
-                <div className="imp-head">
-                  <div>
-                    <h2 ref={headingRef} tabIndex={-1}>
-                      Review before importing
-                    </h2>
-                    <p className="muted">
-                      <span className="mono">{p.fileName}</span> has {p.totalRows} rows.
-                    </p>
-                  </div>
-                  <button className="btn" onClick={restart} disabled={busy}>
-                    Choose another file
-                  </button>
-                </div>
+      {tab === 'rows' && rows && rows.items.length > 0 && (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Day</th>
+                <th>Row</th>
+                <th>Action</th>
+                <th>ID number</th>
+                <th>Client</th>
+                <th>Consultant</th>
+                <th>Quotation</th>
+                <th>Banked</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.items.map((r) => (
+                <tr key={r.id}>
+                  <td>{r.sheetName}</td>
+                  <td>{r.rowNumber}</td>
+                  <td>{r.action.toLowerCase()}</td>
+                  <td className="mono">{r.idNumberMasked}</td>
+                  <td>
+                    {r.firstName || r.lastName ? `${r.firstName ?? ''} ${r.lastName ?? ''}` : '-'}
+                  </td>
+                  <td>{r.consultantName ?? '-'}</td>
+                  <td>{rand(r.quotation)}</td>
+                  <td>{rand(r.banked)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
-                <ul className="imp-stats">
-                  {stats.map((s) => (
-                    <li key={s.label} className={`imp-stat ${s.tone}`}>
-                      <span className="imp-stat-value">{s.value}</span>
-                      <span className="imp-stat-label">{s.label}</span>
-                    </li>
-                  ))}
-                </ul>
+      {current && (
+        <Pager
+          page={current.page}
+          size={current.size}
+          totalItems={current.totalItems}
+          totalPages={current.totalPages}
+          onPage={setPage}
+        />
+      )}
+    </section>
+  );
+}
 
-                <p className="imp-summary">
-                  Importing adds <strong>{p.newRows}</strong> and updates{' '}
-                  <strong>{p.updatedRows}</strong>.
-                  {skipped > 0 ? (
-                    <>
-                      {' '}
-                      The other <strong>{skipped}</strong> problem rows are skipped and listed
-                      below. Conflicts are never applied automatically.
-                    </>
-                  ) : (
-                    <> No problems were found.</>
-                  )}
-                </p>
+function ConsultantMapping({
+  job,
+  onUpdated,
+}: {
+  job: ImportSummary;
+  onUpdated: (s: ImportSummary) => void;
+}) {
+  const [options, setOptions] = useState<ConsultantSummary[]>([]);
+  const [choice, setChoice] = useState<Partial<Record<string, string>>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-                <div className="imp-actions">
-                  <button
-                    className="btn primary"
-                    onClick={() => void confirm(p)}
-                    disabled={busy || importable === 0}
-                  >
-                    {busy
-                      ? 'Importing...'
-                      : `Import ${importable} ${importable === 1 ? 'row' : 'rows'}`}
-                  </button>
-                  <button className="btn" onClick={restart} disabled={busy}>
-                    Cancel
-                  </button>
-                </div>
-              </section>
+  useEffect(() => {
+    let live = true;
+    data
+      .listConsultants()
+      .then((r) => live && setOptions(r.filter((c) => c.status === 'ACTIVE')))
+      .catch(() => live && setError('Could not load consultants.'));
+    return () => {
+      live = false;
+    };
+  }, []);
 
-              {p.issues.length > 0 && (
-                <section className="imp-card">
-                  <h2>Rows that need attention</h2>
-                  <div className="imp-filters" role="group" aria-label="Filter by problem">
-                    <button
-                      className={`imp-chip${filter === 'ALL' ? ' is-on' : ''}`}
-                      aria-pressed={filter === 'ALL'}
-                      onClick={() => setFilter('ALL')}
-                    >
-                      All ({p.issues.length})
-                    </button>
-                    {kinds.map((k) => (
-                      <button
-                        key={k}
-                        className={`imp-chip${filter === k ? ' is-on' : ''}`}
-                        aria-pressed={filter === k}
-                        onClick={() => setFilter(k)}
-                      >
-                        {KIND_LABEL[k]} ({p.issues.filter((i) => i.kind === k).length})
-                      </button>
-                    ))}
-                  </div>
-                  <div className="table-wrap">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th className="num">Row</th>
-                          <th>ID number</th>
-                          <th>Problem</th>
-                          <th>What to do</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {shown.map((i) => (
-                          <tr key={`${i.row}-${i.kind}`}>
-                            <td className="num">{i.row}</td>
-                            <td className="mono">{i.idNumberMasked}</td>
-                            <td>{KIND_LABEL[i.kind]}</td>
-                            <td className="imp-wrap">{i.message}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <p className="muted imp-note">
-                    ID numbers are masked here and in the downloaded list.
-                  </p>
-                </section>
-              )}
-            </>
-          );
-        })()}
+  async function map(name: string) {
+    const id = Number(choice[name]);
+    if (!id || busy) return;
+    setBusy(name);
+    setError(null);
+    try {
+      onUpdated(await imports.mapConsultant(job.id, name, id));
+    } catch (err) {
+      setError(detailOf(err) ?? 'Could not match that name.');
+    } finally {
+      setBusy(null);
+    }
+  }
 
-      {stage.name === 'done' && (
-        <section className="imp-card">
-          <h2 ref={headingRef} tabIndex={-1}>
-            Import finished
-          </h2>
-          <ul className="imp-stats">
-            <li className="imp-stat good">
-              <span className="imp-stat-value">{stage.result.imported}</span>
-              <span className="imp-stat-label">Added or updated</span>
-            </li>
-            <li className="imp-stat neutral">
-              <span className="imp-stat-value">{stage.result.unchanged}</span>
-              <span className="imp-stat-label">Already up to date</span>
-            </li>
-            <li className="imp-stat bad">
-              <span className="imp-stat-value">{stage.result.skipped}</span>
-              <span className="imp-stat-label">Skipped</span>
-            </li>
-          </ul>
-          <p className="imp-summary">
-            {stage.result.skipped > 0
-              ? 'Skipped rows were not changed. Download the list, fix them in the workbook, and upload it again. Rows that were already imported will not be duplicated.'
-              : 'Every row was applied.'}
+  if (job.unmappedConsultants.length === 0) return null;
+  return (
+    <section className="wi-card" aria-label="Match consultants">
+      <h2>Match consultant names</h2>
+      <p className="muted">
+        These names in the workbook are not recognised yet. The match is remembered for later
+        imports.
+      </p>
+      {error && <p className="alert error">{error}</p>}
+      {job.unmappedConsultants.map((u) => (
+        <div className="wi-map" key={u.nameInSheet}>
+          <strong>{u.nameInSheet}</strong>
+          <span className="muted">
+            {u.rows} row{u.rows === 1 ? '' : 's'}
+          </span>
+          <select
+            aria-label={`Consultant for ${u.nameInSheet}`}
+            value={choice[u.nameInSheet] ?? ''}
+            onChange={(e) => setChoice({ ...choice, [u.nameInSheet]: e.target.value })}
+          >
+            <option value="">Choose a consultant</option>
+            {options.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.fullName} ({c.consultantCode})
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="btn"
+            disabled={!choice[u.nameInSheet] || busy !== null}
+            onClick={() => map(u.nameInSheet)}
+          >
+            Match
+          </button>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+function ImportView({ initial, onBack }: { initial: ImportSummary; onBack: () => void }) {
+  const session = useSession();
+  const isAdmin = hasAnyRole(session, ['ADMIN']);
+  const [job, setJob] = useState(initial);
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<ConfirmResult | null>(null);
+
+  const reload = useCallback(async () => setJob(await imports.get(initial.id)), [initial.id]);
+
+  async function confirm() {
+    if (busy) return;
+    if (job.replaceRequired && !reason.trim())
+      return setError('Give a reason for replacing this week.');
+    setBusy(true);
+    setError(null);
+    try {
+      setResult(
+        await imports.confirm(job.id, job.fileDigest, job.replaceRequired ? reason.trim() : null),
+      );
+      await reload();
+    } catch (err) {
+      setError(
+        isStale(err)
+          ? 'Something changed since the preview. Upload the file again.'
+          : (detailOf(err) ?? 'Could not confirm the import.'),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function cancel() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      setJob(await imports.cancel(job.id));
+    } catch (err) {
+      setError(detailOf(err) ?? 'Could not cancel the import.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const previewed = job.state === 'PREVIEWED';
+  const blocked = previewed && job.replaceRequired && !isAdmin;
+
+  return (
+    <>
+      <p>
+        <button type="button" className="btn" onClick={onBack}>
+          Back to imports
+        </button>
+      </p>
+
+      <section className="wi-card" aria-label="Import summary">
+        <h2>
+          Week of {day(job.weekStarting)} to {day(job.weekEnding)}
+        </h2>
+        <p className="muted">
+          {job.fileName} · {STATE_LABEL[job.state] ?? job.state} · uploaded by {job.uploadedBy}
+        </p>
+
+        {result && (
+          <p className="alert ok" role="status">
+            Imported. {result.transactions} sales were saved, {result.newClients} new clients were
+            created and {result.clientsAssigned} were assigned to a consultant
+            {result.employersCreated > 0 &&
+              `, and ${result.employersCreated} new employers were added`}
+            .
           </p>
-          <div className="imp-actions">
-            {stage.preview.issues.length > 0 && (
-              <button className="btn" onClick={() => downloadIssues(stage.preview)}>
-                Download skipped rows (CSV)
-              </button>
+        )}
+        {error && (
+          <p className="alert error" role="alert">
+            {error}
+          </p>
+        )}
+
+        <div className="wi-stats">
+          <div className="wi-stat">
+            <strong>{job.totalRows}</strong>
+            <span>Rows</span>
+          </div>
+          <div className="wi-stat">
+            <strong>{job.newClients}</strong>
+            <span>New clients</span>
+          </div>
+          <div className="wi-stat">
+            <strong>{job.existingClients}</strong>
+            <span>Existing clients</span>
+          </div>
+          <div className="wi-stat">
+            <strong>{job.repeatRows}</strong>
+            <span>Repeat rows</span>
+          </div>
+          <div className={`wi-stat ${job.rejectedRows > 0 ? 'bad' : ''}`}>
+            <strong>{job.rejectedRows}</strong>
+            <span>Rejected</span>
+          </div>
+        </div>
+        <p>
+          Quotation <strong>{rand(job.quotationTotal)}</strong> · Banked{' '}
+          <strong>{rand(job.bankedTotal)}</strong>
+          <span className="muted">
+            {' '}
+            · {job.errors} errors, {job.warnings} warnings, {job.infos} notes
+          </span>
+        </p>
+
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Day</th>
+                <th>Date</th>
+                <th>Rows</th>
+                <th>Rejected</th>
+                <th>Quotation</th>
+                <th>Banked</th>
+              </tr>
+            </thead>
+            <tbody>
+              {job.days.map((d) => (
+                <tr key={d.dayOfWeek}>
+                  <td>{d.sheetName ?? <span className="muted">No sheet</span>}</td>
+                  <td>{d.date ? day(d.date) : '-'}</td>
+                  <td>{d.rows}</td>
+                  <td>{d.rejected}</td>
+                  <td>{rand(d.quotation)}</td>
+                  <td>{rand(d.banked)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {previewed && job.blockers.length > 0 && (
+          <ul className="alert error">
+            {job.blockers.map((b) => (
+              <li key={b}>{BLOCKER_TEXT[b]}</li>
+            ))}
+          </ul>
+        )}
+
+        {previewed && job.replaceRequired && (
+          <div style={{ marginTop: '1rem' }}>
+            <p className="alert error" role="status">
+              This week was already imported. Confirming replaces it.
+              {!isAdmin && ' Only an administrator can do that.'}
+            </p>
+            {isAdmin && (
+              <div className="ac-field">
+                <label htmlFor="wi-reason">Reason for replacing</label>
+                <textarea
+                  id="wi-reason"
+                  maxLength={500}
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                />
+              </div>
             )}
-            <button className="btn primary" onClick={restart}>
-              Import another file
+          </div>
+        )}
+
+        {previewed && (
+          <div className="wi-actions">
+            <button
+              type="button"
+              className="btn primary"
+              onClick={confirm}
+              disabled={busy || !job.canConfirm || blocked}
+            >
+              {busy ? 'Working...' : 'Confirm import'}
+            </button>
+            <button type="button" className="btn" onClick={cancel} disabled={busy}>
+              Cancel import
             </button>
           </div>
-        </section>
+        )}
+      </section>
+
+      {previewed && <ConsultantMapping job={job} onUpdated={setJob} />}
+      <Details id={job.id} />
+    </>
+  );
+}
+
+export default function ImportPage() {
+  const [job, setJob] = useState<ImportSummary | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [historyKey, setHistoryKey] = useState(0);
+
+  async function open(id: number) {
+    setError(null);
+    try {
+      setJob(await imports.get(id));
+    } catch (err) {
+      setError(detailOf(err) ?? 'Could not open that import.');
+    }
+  }
+
+  return (
+    <div className="wi">
+      <h1>Import weekly register</h1>
+      <p className="muted">
+        Upload the weekly Credit Advisory workbook. New clients and the week&rsquo;s sales are added
+        after you confirm. ID numbers are always shown masked.
+      </p>
+      {error && (
+        <p className="alert error" role="alert">
+          {error}
+        </p>
+      )}
+      {job ? (
+        <ImportView
+          key={job.id}
+          initial={job}
+          onBack={() => {
+            setJob(null);
+            setHistoryKey((n) => n + 1);
+          }}
+        />
+      ) : (
+        <>
+          <UploadCard onPreview={setJob} />
+          <History key={historyKey} onOpen={open} />
+        </>
       )}
     </div>
   );
