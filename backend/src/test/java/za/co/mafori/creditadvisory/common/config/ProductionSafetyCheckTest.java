@@ -24,7 +24,8 @@ class ProductionSafetyCheckTest {
     private static MockEnvironment goodProduction() {
         MockEnvironment environment = new MockEnvironment();
         environment.setActiveProfiles("prod");
-        environment.setProperty("spring.datasource.url", "jdbc:postgresql://db.internal:5432/credit_advisory");
+        environment.setProperty("spring.datasource.url",
+                "jdbc:postgresql://db.internal:5432/credit_advisory?sslmode=verify-full");
         environment.setProperty("spring.datasource.username", "ca_app");
         environment.setProperty("spring.datasource.password", "not-a-real-password");
         environment.setProperty("app.idnumber.lookup-key", "made-up-lookup-key");
@@ -34,6 +35,9 @@ class ProductionSafetyCheckTest {
         environment.setProperty("server.servlet.session.cookie.secure", "true");
         environment.setProperty("spring.flyway.clean-disabled", "true");
         environment.setProperty("app.auth.cors-allowed-origins", "");
+        environment.setProperty("server.address", "10.0.0.5");
+        environment.setProperty("management.server.port", "8081");
+        environment.setProperty("management.server.address", "127.0.0.1");
         return environment;
     }
 
@@ -95,14 +99,17 @@ class ProductionSafetyCheckTest {
 
         // prod with everything configured: it starts.
         runner.withPropertyValues("spring.profiles.active=prod",
-                "spring.datasource.url=jdbc:postgresql://db.internal:5432/credit_advisory",
+                "spring.datasource.url=jdbc:postgresql://db.internal:5432/credit_advisory?sslmode=verify-full",
                 "spring.datasource.username=ca_app",
                 "spring.datasource.password=not-a-real-password",
                 "app.idnumber.lookup-key=made-up-lookup-key",
                 "app.idnumber.encryption-key=made-up-encryption-key",
                 "app.mfa.encryption-key=made-up-mfa-key",
                 "server.servlet.session.cookie.secure=true",
-                "spring.flyway.clean-disabled=true")
+                "spring.flyway.clean-disabled=true",
+                "server.address=10.0.0.5",
+                "management.server.port=8081",
+                "management.server.address=127.0.0.1")
                 .run(context -> assertThat(context).hasNotFailed());
 
         // Without prod the check does not exist at all.
@@ -126,6 +133,49 @@ class ProductionSafetyCheckTest {
         assertThat(ProductionSafetyCheck.problems(sharedKey)).singleElement().asString()
                 .contains("its own key")
                 .doesNotContain("made-up-encryption-key");
+    }
+
+    @Test
+    void theAppAndTheHealthCheckListenOnOneAddressAndTheirOwnPorts() {
+        for (String everywhere : List.of("0.0.0.0", "::", "*")) {
+            MockEnvironment environment = goodProduction();
+            environment.setProperty("server.address", everywhere);
+            assertThat(ProductionSafetyCheck.problems(environment)).as(everywhere).singleElement().asString()
+                    .contains("SERVER_ADDRESS");
+        }
+
+        MockEnvironment noAddress = goodProduction();
+        noAddress.setProperty("server.address", "");
+        noAddress.setProperty("management.server.address", "0.0.0.0");
+        assertThat(ProductionSafetyCheck.problems(noAddress)).hasSize(2);
+
+        MockEnvironment noHealthPort = goodProduction();
+        noHealthPort.setProperty("management.server.port", "");
+        assertThat(ProductionSafetyCheck.problems(noHealthPort)).singleElement().asString()
+                .contains("MANAGEMENT_PORT");
+
+        MockEnvironment samePort = goodProduction();
+        samePort.setProperty("management.server.port", "8080");
+        assertThat(ProductionSafetyCheck.problems(samePort)).singleElement().asString()
+                .contains("different port");
+        samePort.setProperty("server.port", "9000");
+        assertThat(ProductionSafetyCheck.problems(samePort)).isEmpty();
+    }
+
+    @Test
+    void aDatabaseOnAnotherMachineNeedsAnEncryptedConnection() {
+        for (String plain : List.of("jdbc:postgresql://db.internal:5432/credit_advisory",
+                "jdbc:postgresql://db.internal:5432/credit_advisory?sslmode=prefer",
+                "jdbc:postgresql://db.internal:5432/credit_advisory?sslmode=disable&ssl=true",
+                "jdbc:postgresql://db.internal:5432/credit_advisory?ssl=false")) {
+            assertThat(problemsWithUrl(plain)).as(plain).singleElement().asString().contains("sslmode=verify-full");
+        }
+        for (String encrypted : List.of("jdbc:postgresql://db.internal:5432/credit_advisory?sslmode=require",
+                "jdbc:postgresql://db.internal:5432/credit_advisory?ApplicationName=ca&sslmode=verify-ca",
+                "jdbc:postgresql://db.internal:5432/credit_advisory?ssl=true",
+                "jdbc:postgresql://db.internal:5432/credit_advisory?ssl")) {
+            assertThat(problemsWithUrl(encrypted)).as(encrypted).isEmpty();
+        }
     }
 
     @Test
