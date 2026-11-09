@@ -31,9 +31,9 @@ public class Client {
 
     /**
      * Keyed HMAC-SHA256 of the ID number (32 bytes). Unique: catches duplicate
-     * clients.
+     * clients. Changes only through correctIdNumber.
      */
-    @Column(name = "id_number_hash", nullable = false, updatable = false)
+    @Column(name = "id_number_hash", nullable = false)
     private byte[] idNumberHash;
 
     /**
@@ -43,7 +43,8 @@ public class Client {
     @Column(name = "id_number_encrypted", nullable = false)
     private byte[] idNumberEncrypted;
 
-    @Column(name = "id_number_last4", nullable = false, length = 4, updatable = false)
+    /** Changes only through correctIdNumber. */
+    @Column(name = "id_number_last4", nullable = false, length = 4)
     private String idNumberLast4;
 
     @Column(name = "first_name", nullable = false, length = 100)
@@ -126,11 +127,26 @@ public class Client {
     }
 
     /**
-     * Re-encryption with a newer key (key rotation). The hash and last four never
-     * change.
+     * Re-encryption with a newer key (key rotation). The number itself, and so the
+     * hash and last four, stay the same. To change the number, use
+     * correctIdNumber.
      */
     public void replaceEncryptedIdNumber(byte[] newCiphertext) {
         this.idNumberEncrypted = newCiphertext.clone();
+    }
+
+    /**
+     * Replaces a wrongly captured ID number. All three protected forms change
+     * together, so they always describe the same number.
+     *
+     * Only call this from ClientService.correctIdNumber, which checks who is
+     * asking, refuses duplicates and audits the correction. Never call it on its
+     * own.
+     */
+    public void correctIdNumber(byte[] newIdNumberHash, byte[] newIdNumberEncrypted, String newIdNumberLast4) {
+        this.idNumberHash = newIdNumberHash.clone();
+        this.idNumberEncrypted = newIdNumberEncrypted.clone();
+        this.idNumberLast4 = newIdNumberLast4;
     }
 
     /** Masked for lists and broad views: ********1234 */

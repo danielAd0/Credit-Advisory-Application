@@ -11,6 +11,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import za.co.mafori.creditadvisory.auth.LoginRateLimiter;
+import za.co.mafori.creditadvisory.client.IdRevealLimiter;
 import za.co.mafori.creditadvisory.common.idnumber.IdNumberProtector;
 import za.co.mafori.creditadvisory.common.idnumber.ProtectedIdNumber;
 import za.co.mafori.creditadvisory.common.idnumber.SaIdNumber;
@@ -61,6 +62,9 @@ public abstract class ApiTestBase {
     private LoginRateLimiter loginRateLimiter;
 
     @Autowired
+    private IdRevealLimiter idRevealLimiter;
+
+    @Autowired
     protected IdNumberProtector idNumberProtector;
 
     protected long adminId;
@@ -79,6 +83,7 @@ public abstract class ApiTestBase {
         // Every test signs in from 127.0.0.1, so start each test with a clean rate
         // limit.
         loginRateLimiter.clear();
+        idRevealLimiter.clear();
         adminId = createUser(ADMIN_EMAIL, null, RoleName.ADMIN);
     }
 
@@ -96,6 +101,16 @@ public abstract class ApiTestBase {
         ApiClient.Response response = api.signIn(email, PASSWORD);
         assertThat(response.status()).as("sign-in for %s: %s", email, response.body()).isEqualTo(200);
         return api;
+    }
+
+    /**
+     * Re-enters PASSWORD in this signed-in browser, so it may see full ID numbers
+     * for the next few minutes (POST /api/auth/reauthenticate).
+     */
+    protected void confirmPassword(ApiClient api) {
+        ApiClient.Response response = api.post("/api/auth/reauthenticate", """
+                {"password":"%s"}""".formatted(PASSWORD));
+        assertThat(response.status()).as("reauthenticate: %s", response.body()).isEqualTo(200);
     }
 
     protected long createUser(String email, Long consultantId, RoleName... roleNames) {

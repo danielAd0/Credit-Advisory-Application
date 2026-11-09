@@ -108,6 +108,16 @@ public class ClientAssignmentHistory {
         return new ClientAssignmentHistory(client, from, to, type, reason, batchID, changedBy);
     }
 
+    /**
+     * A client taken away from their consultant without a new one (POST
+     * /api/clients/{id}/unassign). The client stays in the system, unassigned.
+     */
+    public static ClientAssignmentHistory unassigned(Client client, Consultant from, String reason,
+            UserAccount changedBy) {
+        return new ClientAssignmentHistory(client, from, null, AssignmentChangeType.UNASSIGN, reason, null,
+                changedBy);
+    }
+
     @PrePersist
     void onCreate() {
         this.changedAt = Instant.now();

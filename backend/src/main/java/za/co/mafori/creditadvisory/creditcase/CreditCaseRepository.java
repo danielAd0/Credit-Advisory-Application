@@ -11,44 +11,51 @@ import org.springframework.data.repository.query.Param;
 
 public interface CreditCaseRepository extends JpaRepository<CreditCase, Long> {
 
-    /**
-     * One case with everything the response needs - for the single-case endpoints.
-     */
-    @EntityGraph(attributePaths = { "client", "client.currentConsultant", "createdBy", "createdBy.consultant" })
-    Optional<CreditCase> findWithClientById(Long id);
+        /**
+         * One case with everything the response needs - for the single-case endpoints.
+         */
+        @EntityGraph(attributePaths = { "client", "client.currentConsultant", "createdBy", "createdBy.consultant" })
+        Optional<CreditCase> findWithClientById(Long id);
 
-    /**
-     * GET /api/cases. Every filter is optional (null = no filter).
-     *
-     * @param consultantId only cases of clients CURRENTLY assigned to this
-     *                     consultant (so after a transfer the cases move with the
-     *                     client)
-     */
-    @EntityGraph(attributePaths = { "client", "client.currentConsultant", "createdBy", "createdBy.consultant" })
-    @Query(value = """
-            select cc from CreditCase cc join cc.client c left join c.currentConsultant con
-            where (:consultantId is null or con.id = :consultantId)
-              and (:clientId is null or c.id = :clientId)
-              and (:status is null or cc.status = :status)
-            """, countQuery = """
-            select count(cc) from CreditCase cc join cc.client c left join c.currentConsultant con
-            where (:consultantId is null or con.id = :consultantId)
-              and (:clientId is null or c.id = :clientId)
-              and (:status is null or cc.status = :status)
-            """)
-    Page<CreditCase> search(@Param("consultantId") Long consultantId,
-            @Param("clientId") Long clientId,
-            @Param("status") CaseStatus status,
-            Pageable pageable);
+        /**
+         * GET /api/cases. Every filter is optional (null = no filter).
+         *
+         * @param consultantId only cases of clients CURRENTLY assigned to this
+         *                     consultant (so after a transfer the cases move with the
+         *                     client)
+         */
+        @EntityGraph(attributePaths = { "client", "client.currentConsultant", "createdBy", "createdBy.consultant" })
+        @Query(value = """
+                        select cc from CreditCase cc join cc.client c left join c.currentConsultant con
+                        where (:consultantId is null or con.id = :consultantId)
+                          and (:clientId is null or c.id = :clientId)
+                          and (:status is null or cc.status = :status)
+                        """, countQuery = """
+                        select count(cc) from CreditCase cc join cc.client c left join c.currentConsultant con
+                        where (:consultantId is null or con.id = :consultantId)
+                          and (:clientId is null or c.id = :clientId)
+                          and (:status is null or cc.status = :status)
+                        """)
+        Page<CreditCase> search(@Param("consultantId") Long consultantId,
+                        @Param("clientId") Long clientId,
+                        @Param("status") CaseStatus status,
+                        Pageable pageable);
 
-    /**
-     * Dashboard: [status, count] pairs. consultantId null = every case; otherwise
-     * only cases of clients currently assigned to that consultant.
-     */
-    @Query("""
-            select cc.status, count(cc) from CreditCase cc join cc.client c left join c.currentConsultant con
-            where (:consultantId is null or con.id = :consultantId)
-            group by cc.status
-            """)
-    List<Object[]> countByStatus(@Param("consultantId") Long consultantId);
+        /**
+         * Dashboard: [status, count] pairs. consultantId null = every case; otherwise
+         * only cases of clients currently assigned to that consultant.
+         */
+        @Query("""
+                        select cc.status, count(cc) from CreditCase cc join cc.client c left join c.currentConsultant con
+                        where (:consultantId is null or con.id = :consultantId)
+                        group by cc.status
+                        """)
+        List<Object[]> countByStatus(@Param("consultantId") Long consultantId);
+
+        /**
+         * How many cases of one client do NOT have this status. Called with CLOSED to
+         * count the cases still being worked on (OPEN or IN_PROGRESS).
+         */
+        @Query("select count(cc) from CreditCase cc where cc.client.id = :clientId and cc.status <> :status")
+        long countByClientIdAndStatusNot(@Param("clientId") long clientId, @Param("status") CaseStatus status);
 }

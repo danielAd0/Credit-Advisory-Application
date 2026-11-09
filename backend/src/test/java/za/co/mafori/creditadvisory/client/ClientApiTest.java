@@ -185,6 +185,8 @@ class ClientApiTest extends ApiTestBase {
     @Test
     void askingForTheIdNumberShowsItAndIsAudited() {
         long clientId = createdBy(thandi);
+        confirmPassword(thandi);
+        confirmPassword(manager);
 
         ApiClient.Response mine = thandi.get("/api/clients/" + clientId + "?include=idNumber");
         assertThat(mine.status()).isEqualTo(200);
@@ -199,6 +201,7 @@ class ClientApiTest extends ApiTestBase {
     @Test
     void someoneElsesClientLooksLikeItDoesNotExist() {
         long clientId = createdBy(thandi);
+        confirmPassword(sipho);
 
         ApiClient.Response response = sipho.get("/api/clients/" + clientId + "?include=idNumber");
 
