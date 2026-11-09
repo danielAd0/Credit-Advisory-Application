@@ -108,6 +108,9 @@ public class SecurityConfig {
                                                 .frameOptions(frame -> frame.deny()))
                                 // FR-18: re-check the account on every request, just before access is decided.
                                 .addFilterBefore(new AccountStillActiveFilter(users), AuthorizationFilter.class)
+                                // Password right but authenticator code not entered yet: only the MFA
+                                // endpoints, me, csrf and logout. Runs after AccountStillActiveFilter.
+                                .addFilterBefore(new MfaRequiredFilter(), AuthorizationFilter.class)
                                 // Admin-set password: only change-password, me, csrf and logout until it is
                                 // changed.
                                 // Added after AccountStillActiveFilter, so it runs after it.

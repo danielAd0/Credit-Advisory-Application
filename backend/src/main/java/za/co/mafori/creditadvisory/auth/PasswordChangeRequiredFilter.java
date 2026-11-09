@@ -19,6 +19,10 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * frontend knows to show the change-password screen.
  *
  * <p>
+ * While the second sign-in step is still pending, MfaRequiredFilter decides
+ * instead: the user finishes MFA first, then changes their password.
+ *
+ * <p>
  * Enforced here, on the server, so it cannot be skipped by calling the API
  * directly. Not a @Component for the same reason as AccountStillActiveFilter:
  * it
@@ -43,6 +47,7 @@ public class PasswordChangeRequiredFilter extends OncePerRequestFilter {
         if (authentication != null
                 && authentication.getPrincipal() instanceof AppUserPrincipal principal
                 && principal.mustChangePassword()
+                && !principal.mfaPending()
                 && !ALLOWED.contains(request.getMethod() + " " + request.getRequestURI())) {
             response.setStatus(HttpStatus.FORBIDDEN.value());
             response.setContentType("application/problem+json");

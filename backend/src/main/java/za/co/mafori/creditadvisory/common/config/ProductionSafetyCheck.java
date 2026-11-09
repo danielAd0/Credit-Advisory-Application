@@ -36,7 +36,8 @@ public class ProductionSafetyCheck implements BeanFactoryPostProcessor, Environm
             List.of("spring.datasource.username", "DB_USERNAME"),
             List.of("spring.datasource.password", "DB_PASSWORD"),
             List.of("app.idnumber.lookup-key", "ID_NUMBER_LOOKUP_KEY"),
-            List.of("app.idnumber.encryption-key", "ID_NUMBER_ENCRYPTION_KEY"));
+            List.of("app.idnumber.encryption-key", "ID_NUMBER_ENCRYPTION_KEY"),
+            List.of("app.mfa.encryption-key", "MFA_ENCRYPTION_KEY"));
 
     private static final String POSTGRES_PREFIX = "jdbc:postgresql://";
 
@@ -92,10 +93,14 @@ public class ProductionSafetyCheck implements BeanFactoryPostProcessor, Environm
                     problems.add("DB_URL points at a database whose name ends in _test: the automated tests"
                             + " wipe those databases");
                 }
-                if (pointsAtThisMachine(url)
-                        && !"true".equalsIgnoreCase(read(environment, "app.safety.allow-local-database"))) {
-                    problems.add("DB_URL points at this machine (localhost). If the database really runs on"
-                            + " the same server, set ALLOW_LOCAL_DATABASE=true");
+                if (pointsAtThisMachine(url)) {
+                    if (!"true".equalsIgnoreCase(read(environment, "app.safety.allow-local-database"))) {
+                        problems.add("DB_URL points at this machine (localhost). If the database really runs on"
+                                + " the same server, set ALLOW_LOCAL_DATABASE=true");
+                    }
+                } else if (!usesEncryptedConnection(url)) {
+                    problems.add("DB_URL must use an encrypted connection to the database on another machine:"
+                            + " add ?sslmode=verify-full (or at least sslmode=require)");
                 }
             }
         }
@@ -104,6 +109,17 @@ public class ProductionSafetyCheck implements BeanFactoryPostProcessor, Environm
         if (!lookupKey.isEmpty() && lookupKey.equals(read(environment, "app.idnumber.encryption-key"))) {
             problems.add("ID_NUMBER_LOOKUP_KEY and ID_NUMBER_ENCRYPTION_KEY must be two different keys");
         }
+
+        String mfaKey = read(environment, "app.mfa.encryption-key");
+        if (!mfaKey.isEmpty() && (mfaKey.equals(lookupKey)
+                || mfaKey.equals(read(environment, "app.idnumber.encryption-key")))) {
+            problems.add("MFA_ENCRYPTION_KEY must be its own key, not one of the ID number keys");
+        }
+        if ("false".equalsIgnoreCase(read(environment, "app.mfa.required"))) {
+            problems.add("app.mfa.required must be true: every user signs in with an authenticator code");
+        }
+
+        problems.addAll(networkProblems(environment));
 
         if (!"true".equalsIgnoreCase(read(environment, "server.servlet.session.cookie.secure"))) {
             problems.add("server.servlet.session.cookie.secure must be true (session cookie over HTTPS only)");
@@ -121,6 +137,70 @@ public class ProductionSafetyCheck implements BeanFactoryPostProcessor, Environm
             }
         }
         return problems;
+    }
+
+    /**
+     * The application and the health check each listen on one address, never on
+     * every network, and the health check has a port of its own (README, "Network
+     * checklist"). Addresses are not secret, but they are still not printed.
+     */
+    static List<String> networkProblems(Environment environment) {
+        List<String> problems = new ArrayList<>();
+
+        if (listensEverywhere(read(environment, "server.address"))) {
+            problems.add("server.address (SERVER_ADDRESS) must be one address - 127.0.0.1 when the proxy runs on"
+                    + " this machine, otherwise the private address the proxy connects to - not every network");
+        }
+        if (listensEverywhere(read(environment, "management.server.address"))) {
+            problems.add("management.server.address (MANAGEMENT_ADDRESS) must be one address, not every network");
+        }
+
+        String managementPort = read(environment, "management.server.port");
+        String serverPort = read(environment, "server.port");
+        if (managementPort.isEmpty()) {
+            problems.add("management.server.port is not set (environment variable MANAGEMENT_PORT): the health"
+                    + " check must have its own port");
+        } else if (managementPort.equals(serverPort.isEmpty() ? "8080" : serverPort)) {
+            problems.add("MANAGEMENT_PORT must be a different port from the application's");
+        }
+        return problems;
+    }
+
+    /** Empty means "every network" to Spring, just like 0.0.0.0 and ::. */
+    static boolean listensEverywhere(String address) {
+        return switch (address.toLowerCase(Locale.ROOT)) {
+            case "", "*", "0.0.0.0", "::", "[::]", "0:0:0:0:0:0:0:0" -> true;
+            default -> false;
+        };
+    }
+
+    /**
+     * True if the PostgreSQL driver will encrypt the connection AND refuse a
+     * server that does not support it: sslmode require, verify-ca or verify-full,
+     * or ssl=true without an sslmode (the driver then checks like verify-full).
+     * sslmode prefer or allow fall back to plain text, so they do not count.
+     */
+    static boolean usesEncryptedConnection(String url) {
+        int query = url.indexOf('?');
+        if (query < 0) {
+            return false;
+        }
+        String sslmode = null;
+        boolean ssl = false;
+        for (String pair : url.substring(query + 1).split("&")) {
+            int equals = pair.indexOf('=');
+            String key = (equals < 0 ? pair : pair.substring(0, equals)).strip().toLowerCase(Locale.ROOT);
+            String value = equals < 0 ? "" : pair.substring(equals + 1).strip().toLowerCase(Locale.ROOT);
+            if (key.equals("sslmode")) {
+                sslmode = value;
+            } else if (key.equals("ssl")) {
+                ssl = value.isEmpty() || value.equals("true");
+            }
+        }
+        if (sslmode != null) {
+            return sslmode.equals("require") || sslmode.equals("verify-ca") || sslmode.equals("verify-full");
+        }
+        return ssl;
     }
 
     /**
