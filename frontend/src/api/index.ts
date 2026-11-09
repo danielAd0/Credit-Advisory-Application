@@ -3,22 +3,11 @@ import * as real from './real';
 
 const useMock = import.meta.env.VITE_USE_MOCK === 'true';
 
-export { reports } from './reports';
-export type {
-  BudgetResponse,
-  ConsultantsResponse,
-  ProductsResponse,
-  ReportScope,
-  SummaryResponse,
-  WeekListItem,
-} from './reports';
-
 export const data = useMock ? mock : real;
 export { ApiError } from './http';
 export { accounts } from './accounts';
 export type { Consultant, ConsultantAccount, UserAccount } from './accounts';
 export { imports } from './imports';
-
 export type {
   ConfirmResult,
   ImportBlocker,
@@ -32,7 +21,15 @@ export type {
   Severity,
   UnmappedConsultant,
 } from './imports';
-
+export { reports } from './reports';
+export type {
+  BudgetResponse,
+  ConsultantsResponse,
+  ProductsResponse,
+  ReportScope,
+  SummaryResponse,
+  WeekListItem,
+} from './reports';
 export { audit } from './audit';
 export type { AuditEntry, AuditFilter } from './audit';
 export { catalogue } from './catalogue';
@@ -45,6 +42,7 @@ export type { MfaEnabled, MfaSetup } from './mfa';
 export const features = {
   import: true,
   removeClient: true,
+  reportExport: !useMock,
   correctIdNumber: true,
 };
 

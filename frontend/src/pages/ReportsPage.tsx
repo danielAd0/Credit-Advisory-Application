@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import {
   data,
   detailOf,
+  features,
   reports,
   type BudgetResponse,
   type ConsultantSummary,
@@ -28,7 +29,7 @@ const day = (iso: string) => new Date(iso).toLocaleDateString('en-ZA');
 
 type Tab = 'summary' | 'consultants' | 'products' | 'budget';
 
-/** Loads one report, keeping the answer only while it still matches what was asked for. */
+
 function useReport<T>(load: () => Promise<T>, deps: unknown[]) {
   const [state, setState] = useState<{ value: T | null; error: string | null; key: string }>({
     value: null,
@@ -48,8 +49,7 @@ function useReport<T>(load: () => Promise<T>, deps: unknown[]) {
     return () => {
       live = false;
     };
-    // `load` is rebuilt on every render; the key says when the inputs really changed.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [key]);
   const current = state.key === key;
   return { value: current ? state.value : null, error: current ? state.error : null };
@@ -62,7 +62,7 @@ interface GridRow {
   total: number;
 }
 
-/** A row per item, one column per day (Monday to Sunday) and a week total. */
+
 function DayGrid({
   firstColumn,
   rows,
@@ -125,6 +125,18 @@ function DayGrid({
   );
 }
 
+
+function Download({ path }: { path: string }) {
+  if (!features.reportExport) return null;
+  return (
+    <p className="rp-download">
+      <a className="btn" href={`/api/reports/weeks/${path}`}>
+        Download as CSV
+      </a>
+    </p>
+  );
+}
+
 const Failed = ({ message }: { message: string }) => (
   <p className="alert error" role="alert">
     {message}
@@ -141,6 +153,7 @@ function Summary({ week }: { week: string }) {
     : 0;
   return (
     <>
+      <Download path={`${week}/summary.csv`} />
       <div className="rp-stats">
         <div className="wi-stat">
           <strong>{rand(r.week.quotationTotal)}</strong>
@@ -253,6 +266,7 @@ function Consultants({ week }: { week: string }) {
   }));
   return (
     <>
+      <Download path={`${week}/consultants.csv`} />
       <div className="rp-toggle">
         <button
           type="button"
@@ -285,7 +299,7 @@ function Products({ week, manager }: { week: string; manager: boolean }) {
     data
       .listConsultants()
       .then((r) => live && setPeople(r))
-      .catch(() => undefined); // the filter is optional
+      .catch(() => undefined);
     return () => {
       live = false;
     };
@@ -313,6 +327,9 @@ function Products({ week, manager }: { week: string; manager: boolean }) {
           </select>
         </div>
       )}
+      <Download
+        path={`${week}/products.csv${consultantId ? `?consultantId=${consultantId}` : ''}`}
+      />
       {error && <Failed message={error} />}
       {!error && !r && <p className="muted">Loading...</p>}
       {r && (
@@ -345,19 +362,22 @@ function Budget({ week }: { week: string }) {
   if (error) return <Failed message={error} />;
   if (!r) return <p className="muted">Loading...</p>;
   return (
-    <DayGrid
-      firstColumn="Budget structure"
-      money
-      empty="No budget structures this week."
-      rows={r.structures.map((s) => ({
-        key: s.budgetStructure,
-        label: s.budgetStructure,
-        cells: DAY_NAMES.map(
-          (_, i) => s.days.find((d) => d.dayOfWeek === i + 1)?.loanAmountTotal ?? 0,
-        ),
-        total: s.week.loanAmountTotal,
-      }))}
-    />
+    <>
+      <Download path={`${week}/budget-structures.csv`} />
+      <DayGrid
+        firstColumn="Budget structure"
+        money
+        empty="No budget structures this week."
+        rows={r.structures.map((s) => ({
+          key: s.budgetStructure,
+          label: s.budgetStructure,
+          cells: DAY_NAMES.map(
+            (_, i) => s.days.find((d) => d.dayOfWeek === i + 1)?.loanAmountTotal ?? 0,
+          ),
+          total: s.week.loanAmountTotal,
+        }))}
+      />
+    </>
   );
 }
 
