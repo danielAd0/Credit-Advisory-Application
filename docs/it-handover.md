@@ -1,16 +1,34 @@
-# Credit Advisory - IT handover
+# Credit Advisory - running it in production
 
-For the IT team that installs and runs the Credit Advisory Application. It says **what to set up, in
-which order, and what to do when something goes wrong**. The settings themselves are listed once, in the
-README section "Running in production" - this note refers to it rather than repeating it.
+For whoever installs and runs the Credit Advisory Application: a separate IT department, or the
+development team itself (then read section 10 first). It says **who does what, what to set up, in which
+order, and what to do when something goes wrong**. The settings themselves are listed once, in the README
+section "Running in production" - this note refers to it rather than repeating it.
 
 The application holds clients' names, phone numbers, email addresses and South African ID numbers, so it
 falls under POPIA. Every step below is written with that in mind.
 
-Questions: the development team - Ntiyiso (Dan) Bila, backend; Sifiso, import and reconciliation;
-Jack, frontend.
+Questions about the code: the development team - Ntiyiso (Dan) Bila, backend; Sifiso, import and
+reconciliation; Jack, frontend.
 
 ---
+
+## 0. Who does what
+
+Fill this in before anything is installed, and keep it up to date (section 11). Every role is a **named
+person**, never "the team" or a shared account.
+
+| Role | Does | Who | Rule |
+| --- | --- | --- | --- |
+| Information officer | is responsible for the client data under POPIA; receives incident reports | ______________ | someone in the business, as the company has registered |
+| Key holders (2) | make the three keys on the server, keep them, restore them | 1. ______________ 2. ______________ | at least one is **not** a developer; both are permanent staff |
+| Server admins | install, update, restart, read the server logs; each with their own login | ______________ | personal accounts only |
+| Release checker | looks at what is about to go live before every update | ______________ | not the person who built that release |
+| Audit reviewer | reads the audit log once a month (section 10) | ______________ | **not** a developer and not a server admin |
+| Backup owner | checks that nightly backups ran; does the restore test | ______________ | |
+
+If a separate IT department runs the server, the server admins, key holders and backup owner are usually
+IT, and the developers have none of these roles.
 
 ## 1. What runs where
 
@@ -29,14 +47,14 @@ Jack, frontend.
 The application never connects to the internet. Frontend and API are served from **the same https
 address**, so no CORS set-up is needed.
 
-## 2. What IT provides
+## 2. What has to be in place
 
 - A server for the application with **Java 21** (Temurin or any OpenJDK 21), and a dedicated user account
   that is not an administrator.
 - **PostgreSQL 16**, with a TLS certificate. Same server or another one - another one is better.
 - A **reverse proxy** with a certificate from a trusted authority (not self-signed) for the address users
   will type, e.g. `advisory.example.co.za`.
-- A place to keep **secrets** (a password manager or vault) that only named IT staff can open.
+- A place to keep **secrets** (a password manager or vault) that only the two key holders can open.
 - **Backups** for the database and, separately, for the three keys (section 4).
 
 ## 3. Database
@@ -98,12 +116,15 @@ $b = New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Create
 
 Rules:
 
-- IT makes them, IT keeps them. **Developers never see production keys** - they have their own for their
-  laptops, and the test keys in the repository are for fake test data only.
+- The **key holders** make them, **on the production server**, and keep them. They never exist on a
+  developer's laptop or in an `application-local.properties` - developers have their own keys for their
+  own machines, and the test keys in the repository are for fake test data only.
+- If a key holder is also a developer, the rule still holds: the production keys stay on the server and in
+  the vault, never in that person's development set-up.
 - Never send a key by email, chat or ticket, and never put one in a screenshot.
 - Store each in the vault **and** in a second, offline place (e.g. a sealed envelope in a safe, or an
-  encrypted USB stick in a different building). Keep this apart from the database backups: a stolen
-  backup must not come with its key.
+  encrypted USB stick in a different building), held by the key holder who is **not** a developer. Keep
+  this apart from the database backups: a stolen backup must not come with its key.
 - **Never change `ID_NUMBER_*` keys on a server that has clients.** Changing a key is not supported yet;
   the stored numbers would no longer match it.
 
@@ -111,9 +132,11 @@ Rules:
 
 ### 5.1 The jar
 
-The development team hands over a jar built from a commit on `main` whose automated tests all passed
-(`.\mvnw.cmd clean package` in `backend` runs them first; it needs the developers' test database, which is
-why IT does not build it). Check that the commit is the one agreed.
+A developer builds the jar from a commit on `main` whose automated tests all passed
+(`.\mvnw.cmd clean package` in `backend` runs them first; it needs a developer's test database, which is
+why it is not built on the server). Before it goes live, the **release checker** confirms which commit it
+is and looks at what changed since the last release (`git log --oneline <last release>..<this commit>`).
+Tag the commit, e.g. `git tag release-2026-11-15`, so the next check knows where to start.
 
 Put it in `/opt/credit-advisory/credit-advisory.jar` (or `C:\Program Files\CreditAdvisory\` on Windows),
 owned by an administrator, readable by the service account, not writable by it.
@@ -292,9 +315,53 @@ Everybody is signed out by a restart. Users are also signed out after 30 minutes
 | The application will not start: database errors | is PostgreSQL running, does the firewall allow the app server, do `DB_URL`, user and password match, is the certificate valid for `sslmode=verify-full` |
 | `MFA_ENCRYPTION_KEY` lost, no backup | set a new key; then, as the database superuser, `DELETE FROM user_mfa;` and restart. Everyone sets up their authenticator again at their next sign-in. Tell users first |
 | An ID-number key lost, no backup | stop the application and call the development team. The stored ID numbers cannot be recovered |
-| A key may have leaked (seen by someone who should not have) | treat it as a security incident: tell the company's information officer and the development team the same day. Changing a key needs the development team |
+| A key may have leaked (seen by someone who should not have) | treat it as a security incident: tell the information officer and the development team the same day. Changing a key needs the development team |
+| The audit reviewer finds something nobody can explain (section 10) | the same: an incident, reported to the information officer that day |
 | A laptop or phone with access was stolen | for a consultant, an administrator sets them to Suspended (Consultants > Manage > Status) or resets their password and two-step sign-in - each signs out all their sessions at once. For a manager or administrator, ask the development team |
 
 The audit log (administrators: Audit log in the menu) shows who did what and when - lockouts, blocked
 sign-in addresses, wrong passwords when showing an ID number, every full ID number viewed, imports,
 reports exported, changes to clients and accounts. It cannot be edited, not even by an administrator.
+
+## 10. If the development team also runs the server
+
+Then the same few people build the system **and** can reach the server, the database and the keys. Nothing
+in the application changes - every check above still applies - but nobody is checking the developers any
+more unless it is set up on purpose. These rules do that:
+
+1. **Production data never comes to a development machine.** No copy of the production database, no
+   export, no screenshot of a client "to debug one thing" - reproduce problems with fake data, as the
+   README already requires for the workbook.
+2. **A development machine never connects to the production database.** Server work happens on the
+   server, logged in with a personal account.
+3. **Production keys stay on the server and in the vault** (section 4). At least one key holder is not a
+   developer, and that person holds the offline copy.
+4. **Developers do not use administrator accounts in the application.** The production administrator
+   accounts belong to the business people who run the work. A developer who needs an account for support
+   gets the lowest role that is enough, under their own name.
+5. **Every release is checked by a second person** (section 5.1) before it goes live.
+6. **The audit reviewer reads the audit log every month** - the most important rule here, because the
+   audit log records developers like everyone else and nobody can edit it. In Audit log, check at least:
+   - *Client ID number viewed* by anyone on the development team, and by anyone with an unusual number;
+   - *Two-step sign-in reset*, *Password reset by an administrator*, *Account unlocked*,
+     *Client ID number corrected*;
+   - *Account locked after failed sign-ins* and *Sign-in attempts blocked* - someone guessing passwords;
+   - *Too many ID numbers viewed* (the hourly limit was hit) and *Wrong password before showing an ID
+     number*.
+
+   Ask about anything that has no reason behind it. Note the date of each review.
+
+## 11. When someone joins or leaves
+
+**Joins:** add them to section 0 only for the roles they need; they get their own server login and
+their own application account, never someone else's.
+
+**Leaves** (including students or interns at the end of their time) - the same day:
+
+1. Disable their application account (for a consultant: Consultants > Manage > Status; for a manager or
+   administrator: ask the development team, see section 9).
+2. Remove their server login and any SSH keys, VPN or remote-desktop access.
+3. Change `DB_PASSWORD` (in PostgreSQL and in the settings file) and restart, if they ever knew it.
+4. If they were a key holder: name a new one in section 0 and hand over the vault access and the offline
+   copy. If they may have kept a copy of a key, treat it as a possible leak (section 9).
+5. Update section 0.
