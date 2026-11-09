@@ -125,7 +125,10 @@ Open http://localhost:5173 and sign in with the admin email and password from yo
 
 ## Running in production
 
-For IT. Nothing secret is in the repository: a server is configured only with environment variables.
+For IT. Start with `docs/it-handover.md`: the order to set things up, the database and proxy, the keys,
+first start-up, updates and what to do when something goes wrong. This section is the reference it points to.
+
+Nothing secret is in the repository: a server is configured only with environment variables.
 If one is missing or a setting is unsafe, the backend **refuses to start** and names the problem.
 
 Build the jar from the `backend` folder:
@@ -250,6 +253,7 @@ git push
 
 ## Documents
 
+- `docs/it-handover.md` - installing and running the application, for IT
 - `docs/api-auth-consultants-clients.md` - API contract between backend and frontend
 - `docs/SRS-v1.docx` - requirements specification and technical architecture
 - `docs/spreadsheet-business-breakdown.docx` - analysis of the original Excel workbook
