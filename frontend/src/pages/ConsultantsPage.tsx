@@ -4,6 +4,7 @@ import {
   accounts,
   detailOf,
   isStale,
+  mfa,
   type Consultant,
   type ConsultantStatus,
   type PageResponse,
@@ -38,6 +39,7 @@ function ManagePanel({ consultant, isAdmin, onChanged, onClose }: PanelProps) {
   const [temp, setTemp] = useState('');
   const [tempError, setTempError] = useState<string | undefined>();
   const [handedOver, setHandedOver] = useState<string | null>(null);
+  const [confirmMfaReset, setConfirmMfaReset] = useState(false);
   const id = consultant.id;
 
   useEffect(() => {
@@ -130,6 +132,27 @@ function ManagePanel({ consultant, isAdmin, onChanged, onClose }: PanelProps) {
       setNotice({
         kind: 'error',
         text: detailOf(err) ?? 'Could not unlock the account.',
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resetMfa() {
+    if (busy || !login) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      await mfa.reset(login.id);
+      setConfirmMfaReset(false);
+      setNotice({
+        kind: 'ok',
+        text: 'Two-step sign-in reset. The consultant was signed out and sets up a new authenticator app at their next sign-in.',
+      });
+    } catch (err) {
+      setNotice({
+        kind: 'error',
+        text: detailOf(err) ?? 'Could not reset two-step sign-in.',
       });
     } finally {
       setBusy(false);
@@ -243,6 +266,37 @@ function ManagePanel({ consultant, isAdmin, onChanged, onClose }: PanelProps) {
                   <br />
                   <span className="cn-secret">{handedOver}</span>
                 </p>
+              )}
+
+              <h3>Two-step sign-in</h3>
+              <p className="ac-hint">
+                Only when the consultant lost their phone and their recovery codes. Check who you
+                are talking to first: they are signed out now and set up a new authenticator app at
+                their next sign-in.
+              </p>
+              {confirmMfaReset ? (
+                <div className="cn-actions">
+                  <button type="button" className="btn primary" onClick={resetMfa} disabled={busy}>
+                    Yes, reset two-step sign-in
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => setConfirmMfaReset(false)}
+                    disabled={busy}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setConfirmMfaReset(true)}
+                  disabled={busy}
+                >
+                  Reset two-step sign-in
+                </button>
               )}
             </>
           )}

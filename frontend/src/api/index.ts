@@ -38,6 +38,8 @@ export type { AuditEntry, AuditFilter } from './audit';
 export { catalogue } from './catalogue';
 export type { Employer, Product } from './catalogue';
 export { detailOf, isStale } from './errors';
+export { mfa, mfaPending } from './mfa';
+export type { MfaEnabled, MfaSetup } from './mfa';
 
 export const features = {
   import: true,
@@ -63,6 +65,7 @@ export type {
   ConsultantStatus,
   MoveRequest,
   MoveResult,
+  MfaStatus,
   NewClient,
   PageResponse,
   Role,

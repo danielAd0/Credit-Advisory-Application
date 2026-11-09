@@ -19,6 +19,7 @@ import EmployersPage from './pages/EmployersPage';
 import ProductsPage from './pages/ProductsPage';
 import ReportsPage from './pages/ReportsPage';
 import ReassignPage from './pages/ReassignPage';
+import TwoStepPage from './pages/TwoStepPage';
 
 const managers: Role[] = ['ADMIN', 'MANAGER'];
 
@@ -29,6 +30,7 @@ export default function App() {
         <Routes>
           <Route path="login" element={<LoginPage />} />
           <Route element={<RequireAuth />}>
+            <Route path="two-step" element={<TwoStepPage />} />
             <Route path="change-password" element={<ChangePasswordPage />} />
             <Route element={<Layout />}>
               <Route index element={<Dashboard />} />

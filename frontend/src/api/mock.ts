@@ -1,4 +1,5 @@
 import { ApiError, STALE_VERSION } from './http';
+import { mockMfaSignedIn, mockMfaSignedOut, mockMfaStatus } from './mockMfaState';
 import type {
   AssignmentEntry,
   CaseDetail,
@@ -97,6 +98,7 @@ function mockSession(email: string): Session {
     roles: [role],
     consultant: mine,
     mustChangePassword: sessionStorage.getItem(MUST_CHANGE) === 'yes',
+    mfa: mockMfaStatus(),
   };
 }
 
@@ -111,6 +113,7 @@ export async function login(email: string, password: string): Promise<Session> {
   if (!email || !password || password === 'wrong') throw new ApiError(401, 'Sign-in failed.');
   sessionStorage.setItem(KEY, email);
   if (email.toLowerCase().startsWith('new')) sessionStorage.setItem(MUST_CHANGE, 'yes');
+  mockMfaSignedIn();
   return mockSession(email);
 }
 
@@ -128,6 +131,7 @@ export async function changePassword(r: ChangePasswordRequest): Promise<void> {
 export async function logout(): Promise<void> {
   sessionStorage.removeItem(KEY);
   sessionStorage.removeItem(MUST_CHANGE);
+  mockMfaSignedOut();
 }
 
 export async function listClientsPage(

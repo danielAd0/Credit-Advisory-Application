@@ -1,12 +1,19 @@
 export type Role = 'ADMIN' | 'MANAGER' | 'CONSULTANT';
 export type ConsultantStatus = 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
 
+/**
+ * Where this session stands with the second sign-in step (contract section 2, "Two-step sign-in").
+ * SETUP_REQUIRED and CODE_REQUIRED: only the two-step screen works until it is done.
+ */
+export type MfaStatus = 'NOT_REQUIRED' | 'SETUP_REQUIRED' | 'CODE_REQUIRED' | 'VERIFIED';
+
 export interface Session {
   id: number;
   email: string;
   roles: Role[];
   consultant: { id: number; consultantCode: string; fullName: string } | null;
   mustChangePassword: boolean;
+  mfa: MfaStatus;
 }
 
 export interface PageResponse<T> {

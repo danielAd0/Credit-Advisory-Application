@@ -13,6 +13,7 @@ export interface Problem {
 }
 
 export const PASSWORD_CHANGE_REQUIRED = 'urn:credit-advisory:auth:password-change-required';
+export const MFA_REQUIRED = 'urn:credit-advisory:auth:mfa-required';
 export const STALE_VERSION = 'urn:credit-advisory:conflict:stale-version';
 
 export class ApiError extends Error {
@@ -124,6 +125,11 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
   if (!res.ok) {
     const problem = await readProblem(res);
+    // Password right but the authenticator code not entered yet: everything else is refused.
+    if (res.status === 403 && problem?.type === MFA_REQUIRED) {
+      window.location.assign('/two-step');
+      throw new ApiError(403, 'Enter the code from your authenticator app first.', problem);
+    }
     // Until the password is changed, every other request is refused: send the person there.
     if (res.status === 403 && problem?.type === PASSWORD_CHANGE_REQUIRED) {
       window.location.assign('/change-password');
