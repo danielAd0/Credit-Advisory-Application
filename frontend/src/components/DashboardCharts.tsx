@@ -30,7 +30,6 @@ type Fmt = (n: number) => string;
 const count: Fmt = (n) => n.toLocaleString('en-ZA');
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-
 function niceMax(v: number): number {
   if (v <= 0) return 1;
   const p = 10 ** Math.floor(Math.log10(v));
@@ -94,7 +93,6 @@ function ChartCard({
   );
 }
 
-
 function Columns({
   bars,
   target,
@@ -151,7 +149,6 @@ function Columns({
   );
 }
 
-
 function Ranked({ bars, fmt = rand, axis = compact }: { bars: Bar[]; fmt?: Fmt; axis?: Fmt }) {
   const top = Math.max(1, ...bars.map((b) => b.value));
   return (
@@ -180,7 +177,6 @@ function Ranked({ bars, fmt = rand, axis = compact }: { bars: Bar[]; fmt?: Fmt; 
     </ol>
   );
 }
-
 
 function Paired({ bars }: { bars: Bar[] }) {
   const top = niceMax(Math.max(1, ...bars.flatMap((b) => [b.value, b.value2 ?? 0])));
@@ -246,7 +242,6 @@ type State =
       consultants: ConsultantsResponse;
       products: ProductsResponse;
     };
-
 
 export default function DashboardCharts() {
   const [state, setState] = useState<State>({ kind: 'loading' });
@@ -344,7 +339,7 @@ export default function DashboardCharts() {
 
   return (
     <section className="dc" aria-label="Charts">
-      <h2>Charts</h2>
+      <h2 className="sr-only">Charts</h2>
       <div className="dc-grid-cards">
         <ChartCard
           title="Quotation per week"

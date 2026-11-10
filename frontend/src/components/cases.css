@@ -22,7 +22,7 @@
 .cs-panel textarea:focus,
 .cs-status select:focus {
   outline: none;
-  border-color: var(--orange);
+  border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(255, 90, 0, 0.25);
 }
 .cs-sr {

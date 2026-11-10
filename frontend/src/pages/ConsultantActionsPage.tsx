@@ -18,7 +18,6 @@ import './capture.css';
 
 const MONEY = /^\d{1,10}(\.\d{1,2})?$/;
 
-
 function parseMoney(text: string): number | 'bad' | null {
   const t = text.trim().replace(/\s/g, '');
   if (t === '') return null;
@@ -53,7 +52,6 @@ const GROUPS = [
     codes: ['CASH_ADVANCE_LITE', 'GROCERY', 'HOUSING_ADMIN', 'VOLUNTARY_DISTRIBUTION'],
   },
 ];
-
 
 function groupProducts(products: Product[]) {
   const used = new Set<number>();
@@ -92,7 +90,6 @@ const NO_EXTRAS: Extras = {
   secondaryList: '',
   secondaryLoan: '',
 };
-
 
 function ClientPicker({ onPick }: { onPick: (c: ClientSummary) => void }) {
   const [text, setText] = useState('');
@@ -231,7 +228,6 @@ export default function ConsultantActionsPage() {
 
   const products = load.kind === 'ready' ? load.lists.products : [];
   const groups = useMemo(() => groupProducts(products), [products]);
-
 
   const lines = products.flatMap((p) => {
     const cents = parseMoney(amounts[p.id] ?? '');

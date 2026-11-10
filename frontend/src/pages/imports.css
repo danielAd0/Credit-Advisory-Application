@@ -78,7 +78,7 @@
 .wi-map select {
   height: 2.5rem;
   min-width: 14rem;
-  padding: 0.rem;
+  padding: 0rem;
   font: inherit;
   color: var(--ink);
   background: var(--surface);
@@ -95,7 +95,7 @@
 }
 
 .wi-tabs .btn[aria-pressed='true'] {
-  border-color: var(--orange);
+  border-color: var(--accent);
   background: #fff1e8;
 }
 

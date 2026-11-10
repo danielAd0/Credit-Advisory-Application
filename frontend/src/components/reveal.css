@@ -21,7 +21,7 @@
   cursor: pointer;
 }
 .rv-link:hover {
-  color: var(--orange);
+  color: var(--accent);
 }
 .rv-link:disabled {
   cursor: progress;
@@ -65,7 +65,7 @@
 }
 .rv-row input:focus {
   outline: none;
-  border-color: var(--orange);
+  border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(255, 90, 0, 0.25);
 }
 .rv-error {

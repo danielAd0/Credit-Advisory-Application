@@ -1,9 +1,8 @@
-import {ApiError} from "./http";
-import {clients,delay} from './mock';
-import type {Employer,Product} from "./admin";
-import type {CaptureLists,NewTransaction,SavedTransaction} from "./transactions";
-import type { ClientSummary } from "./types";
-
+import { ApiError } from './http';
+import { clients, delay } from './mock';
+import type { Employer, Product } from './admin';
+import type { CaptureLists, NewTransaction, SavedTransaction } from './transactions';
+import type { ClientSummary } from './types';
 
 const stamp = '2026-01-01T00:00:00Z';
 
@@ -25,34 +24,32 @@ const seed: [string, string, number | null, boolean][] = [
   ['POLICY_REPLACEMENT', 'Policy Replacement', null, false],
 ];
 
-const products : Product[] = seed.map(([code, name, price, banked], i) => ({
-    id : i + 1,
-    code,
+const products: Product[] = seed.map(([code, name, price, banked], i) => ({
+  id: i + 1,
+  code,
+  name,
+  standardPrice: price,
+  countsTowardQuotation: true,
+  countsTowardBanked: banked,
+  active: true,
+  displayOrder: (i + 1) * 10,
+  version: 0,
+  createdAt: stamp,
+  updatedAt: stamp,
+}));
+
+const employers: Employer[] = ['Phumelela Local', 'Matzikama Local', 'Sample Municipality'].map(
+  (name, i) => ({
+    id: i + 1,
     name,
-    standardPrice: price,
-    countsTowardQuotation: true,
-    countsTowardBanked: banked,
+    company: null,
+    employerType: null,
     active: true,
-    displayOrder: (i + 1) * 10,
     version: 0,
     createdAt: stamp,
     updatedAt: stamp,
-}));
-
-
-const employers : Employer[] = ['Phumelela Local', 'Matzikama Local', 'Sample Municipality'].map(
-    (name , i) => ({
-        id : i + 1,
-        name,
-        company : null,
-        employerType : null,
-        active : true,
-        version : 0,
-        createdAt : stamp,
-        updatedAt : stamp,
-    }),
+  }),
 );
-
 
 const problem = (status: number, code: string, detail: string) =>
   new ApiError(status, detail, { type: `urn:credit-advisory:${code}`, detail });
@@ -62,8 +59,9 @@ export async function lists(): Promise<CaptureLists> {
   return {
     products,
     employers,
-    paymentTerms: [{ id: 1, name: 'Once off payment' },
-        { id: 2, name: 'Within 12 months' }
+    paymentTerms: [
+      { id: 1, name: 'Once off payment' },
+      { id: 2, name: 'Within 12 months' },
     ],
     structures: [
       { id: 1, name: 'VITAL CREDIT' },
@@ -72,20 +70,18 @@ export async function lists(): Promise<CaptureLists> {
   };
 }
 
-
-export async function lookupClient(idNumber : string) : Promise<ClientSummary>{
-    await delay();
-    const found = clients.find((c) => c.idNumberMasked.endsWith(idNumber.slice(-4)));
-    if(!found) throw problem(404, 'client:not-found', 'No client found with this ID number.');
-    return found;
+export async function lookupClient(idNumber: string): Promise<ClientSummary> {
+  await delay();
+  const found = clients.find((c) => c.idNumberMasked.endsWith(idNumber.slice(-4)));
+  if (!found) throw problem(404, 'client:not-found', 'No client found with this ID number.');
+  return found;
 }
 
 const saved = new Map<string, SavedTransaction>();
 
 let nextId = 1000;
 
-const cents = (n : number) => Math.round(n * 100);
-
+const cents = (n: number) => Math.round(n * 100);
 
 export async function save(t: NewTransaction, key: string): Promise<SavedTransaction> {
   await delay(400);

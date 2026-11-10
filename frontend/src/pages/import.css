@@ -35,9 +35,9 @@
   font-weight: 700;
 }
 .imp-steps li.is-current .imp-step-num {
-  background: var(--orange);
-  border-color: var(--orange);
-  color: var(--on-orange);
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
 }
 .imp-steps li.is-done {
   color: var(--ink);
@@ -101,16 +101,16 @@
 }
 .imp-drop:hover,
 .imp-drop.is-dragging {
-  border-color: var(--orange);
+  border-color: var(--accent);
   background: #fff7f2;
   color: var(--ink);
 }
 .imp-drop:focus-within {
-  outline: 3px solid var(--orange);
+  outline: 3px solid var(--accent);
   outline-offset: 2px;
 }
 .imp-drop svg {
-  color: var(--orange);
+  color: var(--accent);
 }
 .imp-file {
   position: absolute;
@@ -138,7 +138,7 @@
   width: 1.25rem;
   height: 1.25rem;
   border: 2.5px solid #e2e2e2;
-  border-top-color: var(--orange);
+  border-top-color: var(--accent);
   border-radius: 50%;
   animation: imp-spin 0.8s linear infinite;
 }
@@ -191,7 +191,7 @@
   border-color: var(--err-line);
 }
 .imp-stat.warn {
-  border-color: var(--orange);
+  border-color: var(--accent);
 }
 .imp-stat-value {
   font-family: var(--serif);

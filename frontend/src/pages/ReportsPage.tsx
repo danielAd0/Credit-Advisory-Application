@@ -29,7 +29,6 @@ const day = (iso: string) => new Date(iso).toLocaleDateString('en-ZA');
 
 type Tab = 'summary' | 'consultants' | 'products' | 'budget';
 
-
 function useReport<T>(load: () => Promise<T>, deps: unknown[]) {
   const [state, setState] = useState<{ value: T | null; error: string | null; key: string }>({
     value: null,
@@ -49,7 +48,6 @@ function useReport<T>(load: () => Promise<T>, deps: unknown[]) {
     return () => {
       live = false;
     };
-
   }, [key]);
   const current = state.key === key;
   return { value: current ? state.value : null, error: current ? state.error : null };
@@ -61,8 +59,6 @@ interface GridRow {
   cells: number[];
   total: number;
 }
-
-
 
 function DayGrid({
   firstColumn,
@@ -125,7 +121,6 @@ function DayGrid({
     </div>
   );
 }
-
 
 function Download({ path }: { path: string }) {
   if (!features.reportExport) return null;

@@ -18,7 +18,7 @@
   cursor: pointer;
 }
 .ca-link:hover {
-  color: var(--orange);
+  color: var(--accent);
 }
 .ca-link.danger {
   color: #a32014;
@@ -30,7 +30,7 @@
   margin: 0 0 1rem;
   background: #fff1e8;
   color: #7a2a00;
-  border-color: var(--orange);
+  border-color: var(--accent);
 }
 .ca-dialog {
   width: min(92vw, 460px);
@@ -67,7 +67,7 @@
 }
 .ca-dialog input:focus {
   outline: none;
-  border-color: var(--orange);
+  border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(255, 90, 0, 0.25);
 }
 .ca-hint {

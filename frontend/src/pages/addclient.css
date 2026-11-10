@@ -46,7 +46,7 @@
 .ac-field input:focus,
 .ac-field select:focus {
   outline: none;
-  border-color: var(--orange);
+  border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(255, 90, 0, 0.25);
 }
 .ac-field input[aria-invalid='true'] {

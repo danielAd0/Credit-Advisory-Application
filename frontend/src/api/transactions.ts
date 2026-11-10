@@ -3,7 +3,6 @@ import { listEmployers, listProducts, type Employer, type Product } from './admi
 import type { ClientSummary } from './types';
 import * as mockTransactions from './mockTransactions';
 
-
 export interface Option {
   id: number;
   name: string;
@@ -33,7 +32,6 @@ export interface SavedLine {
   countsTowardBanked: boolean;
 }
 
-
 export interface SavedTransaction {
   id: number;
   clientId: number;
@@ -44,7 +42,6 @@ export interface SavedTransaction {
   quotationTotal: number;
   bankedTotal: number;
 }
-
 
 export interface CaptureLists {
   products: Product[];
@@ -71,13 +68,11 @@ const real = {
     };
   },
 
-
   lookupClient: (idNumber: string) =>
     api<ClientSummary>('/api/clients/lookup', {
       method: 'POST',
       body: JSON.stringify({ idNumber }),
     }),
-
 
   save: (t: NewTransaction, key: string) =>
     api<SavedTransaction>('/api/transactions', {

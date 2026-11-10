@@ -24,7 +24,7 @@
   margin-top: 1.25rem;
   padding: 1.25rem;
   background: var(--surface);
-  border: 1px solid var(--orange);
+  border: 1px solid var(--accent);
   border-radius: 12px;
   max-width: 720px;
 }
@@ -89,7 +89,7 @@
   font-size: 1.1rem;
   padding: 0.5rem 0.75rem;
   background: #fff7f0;
-  border: 1px dashed var(--orange);
+  border: 1px dashed var(--accent);
   border-radius: 8px;
   display: inline-block;
   user-select: all;

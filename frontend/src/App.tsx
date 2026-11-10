@@ -5,6 +5,7 @@ import RequireAuth from './auth/RequireAuth';
 import { RequireRole } from './auth/RequireRole';
 import Layout from './components/Layout';
 import ChangePasswordPage from './pages/ChangePasswordPage';
+import ChartsPage from './pages/ChartsPage';
 import AuditLogPage from './pages/AuditLogPage';
 import AddClientPage from './pages/AddClientPage';
 import ClientDetailPage from './pages/ClientDetailPage';
@@ -61,6 +62,14 @@ export default function App() {
                 element={
                   <RequireRole roles={['ADMIN']}>
                     <AuditLogPage />
+                  </RequireRole>
+                }
+              />
+              <Route
+                path="charts"
+                element={
+                  <RequireRole roles={managers}>
+                    <ChartsPage />
                   </RequireRole>
                 }
               />

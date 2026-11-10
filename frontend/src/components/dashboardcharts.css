@@ -1,6 +1,5 @@
 .dc {
   margin-top: 2rem;
-  max-width: 900px;
 }
 .dc h2 {
   margin: 0 0 0.75rem;
@@ -8,14 +7,15 @@
 }
 .dc-grid-cards {
   display: grid;
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 30rem), 1fr));
+  gap: 1.25rem;
 }
 .dc-card {
   margin: 0;
   padding: 1.25rem;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 14px;
 }
 
 .dc-card figcaption {
@@ -46,8 +46,6 @@
 .dc-toggle:hover {
   border-color: var(--ink);
 }
-
-
 
 .dc-cols {
   display: grid;
@@ -100,18 +98,18 @@
 .dc-col {
   position: relative;
   width: min(100%, 24px);
-  background: color-mix(in srgb, var(--orange) 45%, #fff);
+  background: color-mix(in srgb, var(--accent) 45%, #fff);
   border-radius: 4px 4px 0 0;
   outline-offset: 2px;
 }
 
 .dc-col.now {
-  background: var(--orange);
+  background: var(--accent);
 }
 
 .dc-col:hover,
 .dc-col:focus-visible {
-  background: var(--orange-hover);
+  background: var(--accent-hover);
 }
 
 .dc-x {
@@ -157,8 +155,6 @@
   background: var(--surface);
 }
 
-
-
 .dc-rank {
   display: grid;
   gap: 0.6rem;
@@ -190,14 +186,14 @@
   display: block;
   height: 14px;
   min-width: 2px;
-  background: var(--orange);
+  background: var(--accent);
   border-radius: 0 4px 4px 0;
   outline-offset: 2px;
 }
 
 .dc-hbar:hover,
 .dc-hbar:focus-visible {
-  background: var(--orange-hover);
+  background: var(--accent-hover);
 }
 
 .dc-val {
@@ -206,8 +202,6 @@
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
-
-
 
 .dc-tip {
   position: absolute;
@@ -242,8 +236,6 @@
   transform: none;
 }
 
-
-
 .dc-table {
   width: 100%;
   border-collapse: collapse;
@@ -269,8 +261,6 @@
   }
 }
 
-
-
 .dc-colwrap.pair {
   gap: 2px;
 }
@@ -280,12 +270,12 @@
 }
 
 .dc-col.two {
-  background: #2a78d6;
+  background: #3b5578;
 }
 
 .dc-col.two:hover,
 .dc-col.two:focus-visible {
-  background: #5594e3;
+  background: #5d7699;
 }
 
 .dc-legend {
@@ -300,10 +290,10 @@
   width: 0.7rem;
   height: 0.7rem;
   margin-right: 0.3rem;
-  background: var(--orange);
+  background: var(--accent);
   border-radius: 2px;
 }
 
 .dc-key.two {
-  background: #2a78d6;
+  background: #3b5578;
 }
