@@ -63,6 +63,7 @@ interface GridRow {
 }
 
 
+
 function DayGrid({
   firstColumn,
   rows,
@@ -299,7 +300,7 @@ function Products({ week, manager }: { week: string; manager: boolean }) {
     data
       .listConsultants()
       .then((r) => live && setPeople(r))
-      .catch(() => undefined);
+      .catch(() => undefined); // the filter is optional
     return () => {
       live = false;
     };
@@ -311,7 +312,7 @@ function Products({ week, manager }: { week: string; manager: boolean }) {
   return (
     <>
       {manager && (
-        <div className="ac-field rp-filter">
+        <div className="rp-pick">
           <label htmlFor="rp-consultant">Consultant</label>
           <select
             id="rp-consultant"
