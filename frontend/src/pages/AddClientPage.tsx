@@ -3,41 +3,47 @@ import { Link } from 'react-router-dom';
 import { ApiError, data, detailOf, type ClientSummary, type ConsultantSummary } from '../api';
 import { clientName } from '../api/names';
 import { hasAnyRole, useSession } from '../auth/useAuth';
+import ClientDetailsFields from '../components/ClientDetailsFields';
+import {
+  EMPTY_DETAILS,
+  detailsPayload,
+  validateDetails,
+  type DetailsValues,
+} from '../components/clientDetails';
 import './addclient.css';
 
-interface Form {
+interface Form extends DetailsValues {
   firstName: string;
   lastName: string;
   idNumber: string;
   email: string;
-  phone: string;
+  /** The chosen consultant's id as text, or empty for none. */
   consultantId: string;
 }
 
 const EMPTY: Form = {
+  ...EMPTY_DETAILS,
   firstName: '',
   lastName: '',
   idNumber: '',
   email: '',
-  phone: '',
   consultantId: '',
 };
 
 type Errors = Partial<Record<keyof Form, string>>;
 
 function validate(v: Form): Errors {
-  const e: Errors = {};
+  const e: Errors = validateDetails(v);
   if (!v.firstName.trim()) e.firstName = 'Enter the first name.';
   if (!v.lastName.trim()) e.lastName = 'Enter the last name.';
   if (!/^\d{13}$/.test(v.idNumber)) e.idNumber = 'The ID number must be exactly 13 digits.';
   if (v.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.email))
     e.email = 'That email address does not look right.';
-  if (v.phone && !/^\+?[\d\s]{9,15}$/.test(v.phone))
-    e.phone = 'Use 9 to 15 digits, for example 082 000 0000.';
   return e;
 }
 
 function explain(err: unknown): string {
+  // The server says exactly what is wrong (invalid ID number, duplicate, ...) and its text is safe to show.
   const detail = detailOf(err);
   if (detail) return detail;
   if (err instanceof ApiError) {
@@ -45,9 +51,11 @@ function explain(err: unknown): string {
       return 'A client with that ID number already exists. Search for them on the Clients page instead.';
     if (err.status === 403) return 'You do not have permission to add clients.';
     if (err.status === 400)
-      return 'The server rejected some of the details. Check that the ID number is a valid South African ID number and that the phone number is valid.';
+      return 'The server rejected some of the details. Check that the ID number is a valid South African ID number and that the phone numbers are valid.';
+    if (err.status === 404)
+      return 'That employer or product quotation no longer exists. Refresh the page and choose again.';
     if (err.status === 422)
-      return 'That consultant cannot take new clients right now. Choose another one.';
+      return 'That consultant, employer or product quotation cannot be chosen right now. Choose another one.';
   }
   return 'Could not save the client. Try again.';
 }
@@ -63,22 +71,26 @@ export default function AddClientPage() {
   const [saved, setSaved] = useState<ClientSummary | null>(null);
 
   useEffect(() => {
-    if (!isManager) return;
+    if (!isManager) return; // a consultant's new clients are always assigned to themselves
     let current = true;
     data
       .listConsultants()
       .then((r) => current && setConsultants(r.filter((c) => c.status === 'ACTIVE')))
-      .catch(() => undefined);
+      .catch(() => undefined); // the list is optional: the client can be saved unassigned
     return () => {
       current = false;
     };
   }, [isManager]);
 
-  const set = (key: keyof Form) => (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const raw = e.target.value;
-    const value = key === 'idNumber' ? raw.replace(/\D/g, '').slice(0, 13) : raw;
+  const change = (key: keyof Form, value: string) => {
     setValues((v) => ({ ...v, [key]: value }));
     setErrors((x) => ({ ...x, [key]: undefined }));
+  };
+
+  const set = (key: keyof Form) => (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    // The ID number accepts digits only, so a pasted space or dash cannot cause a rejection later.
+    const raw = e.target.value;
+    change(key, key === 'idNumber' ? raw.replace(/\D/g, '').slice(0, 13) : raw);
   };
 
   async function submit(e: FormEvent) {
@@ -90,15 +102,15 @@ export default function AddClientPage() {
     setSaving(true);
     try {
       const created = await data.createClient({
+        ...detailsPayload(values),
         firstName: values.firstName.trim(),
         lastName: values.lastName.trim(),
         idNumber: values.idNumber,
         email: values.email.trim(),
-        phone: values.phone.trim(),
         consultantId: isManager && values.consultantId ? Number(values.consultantId) : null,
       });
       setSaved(created);
-      setValues(EMPTY);
+      setValues(EMPTY); // clear the ID number from memory straight away
     } catch (err) {
       setFailure(explain(err));
     } finally {
@@ -135,7 +147,7 @@ export default function AddClientPage() {
   }
 
   const field = (
-    key: keyof Form,
+    key: 'firstName' | 'lastName' | 'idNumber' | 'email',
     label: string,
     extra: {
       type?: string;
@@ -196,10 +208,8 @@ export default function AddClientPage() {
           hint: '13 digits. Shown masked everywhere after saving.',
           required: true,
         })}
-        <div className="ac-row">
-          {field('email', 'Email', { type: 'email', inputMode: 'email', autoComplete: 'off' })}
-          {field('phone', 'Phone', { type: 'tel', inputMode: 'tel' })}
-        </div>
+        {field('email', 'Email', { type: 'email', inputMode: 'email', autoComplete: 'off' })}
+        <ClientDetailsFields idPrefix="ac" values={values} errors={errors} onChange={change} />
 
         {isManager && (
           <div className="ac-field">

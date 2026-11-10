@@ -1,4 +1,4 @@
-# Admin API – consultants, products, employers, client assignment
+# Admin API – consultants, products, employers, product quotations, client assignment
 
 Same conventions as `docs/api-auth-consultants-clients.md`: session cookie + `X-XSRF-TOKEN`,
 errors are ProblemDetail JSON (`type` = `urn:credit-advisory:<code>`), lists return
@@ -111,7 +111,45 @@ Audited as `EMPLOYER_MERGED` (with both names and the counts) and `EMPLOYER_REVI
 Frontend: an "Employers to review" list (`needsReview=true`), each with **Merge into…** (an employer picker
 plus a reason) and **Keep**.
 
-## 4. Assigning clients to consultants (MANAGER, ADMIN)
+## 4. Product quotations (read: any signed-in user · change: ADMIN)
+
+The **product quotation** on a client: the `C_BRANCHNAME` column of the old client spreadsheets. A list admins
+manage, so consultants pick it from a dropdown and the same one is never spelled two ways. V20 creates the table
+empty; admins fill it (or the launch load does, from the cleaned list).
+
+| Method | Path | Body |
+| --- | --- | --- |
+| GET | `/api/product-quotations?search=&active=&page=&size=` | – (sorted by name; `size` default 100, max 200) |
+| GET | `/api/product-quotations/{id}` | – |
+| POST | `/api/product-quotations` | `{ name }` (max 100) |
+| PATCH | `/api/product-quotations/{id}` | `{ name, version }` (rename) |
+| PATCH | `/api/product-quotations/{id}/active` | `{ active, version }` |
+
+```json
+{ "id": 3, "name": "Sample Branch North", "active": true, "version": 0,
+  "createdAt": "...", "updatedAt": "..." }
+```
+
+- Names are trimmed and inner spaces collapsed; uniqueness ignores capitals and spaces (the database enforces it too).
+- Never deleted, because clients point at them. **Deactivate** instead: clients that have it keep it (shown with
+  `"active": false` on the client), but it can no longer be chosen for a client.
+- A rename shows on every client that has it.
+- POST and both PATCHes are ADMIN only: a MANAGER or CONSULTANT gets `403`.
+
+| Status | type | When |
+| --- | --- | --- |
+| 409 | `product-quotation:duplicate-name` | another one has that name, ignoring capitals and spaces |
+| 409 | `conflict:stale-version` | someone else saved first |
+| 404 | `product-quotation:not-found` | no such id |
+| 400 | `validation:invalid-request` | blank name, or longer than 100 |
+
+Audited as `PRODUCT_QUOTATION_CREATED` (`name`), `PRODUCT_QUOTATION_UPDATED` (`from`, `to`, only when the name really
+changed), `PRODUCT_QUOTATION_ACTIVATED` / `PRODUCT_QUOTATION_DEACTIVATED` (`name`). Target type `PRODUCT_QUOTATION`.
+
+Frontend: the **Product quotations** page (ADMIN and MANAGER; only ADMIN sees Add and Edit), and the dropdown on
+the Add and Edit client forms (active ones only).
+
+## 5. Assigning clients to consultants (MANAGER, ADMIN)
 
 1. Find clients without a consultant: `GET /api/clients?unassigned=true`
 2. Find active consultants: `GET /api/consultants?status=ACTIVE`

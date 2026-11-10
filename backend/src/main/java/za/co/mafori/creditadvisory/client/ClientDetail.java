@@ -2,7 +2,6 @@ package za.co.mafori.creditadvisory.client;
 
 import java.time.Instant;
 import za.co.mafori.creditadvisory.common.idnumber.SaIdNumber;
-import za.co.mafori.creditadvisory.consultant.Consultant;
 
 /**
  * The single-client object (contract section 4): the list item plus the FULL ID
@@ -18,24 +17,33 @@ public record ClientDetail(
         String lastName,
         String email,
         String phone,
+        String workPhone,
+        String homePhone,
+        ClientListItem.NamedRef employer,
+        ClientListItem.NamedRef productQuotation,
+        String fileNumber,
+        String fileId,
+        PaymentMethod paymentMethod,
+        LatestSale latestSale,
         ClientListItem.ConsultantRef consultant,
         long version,
         Instant createdAt,
         Instant updatedAt) {
 
     /**
-     * Must be called inside a transaction (the consultant link is lazy).
+     * Must be called inside a transaction (the links are lazy).
      *
-     * @param idNumber the full ID number to include, or null to leave it out
+     * @param idNumber   the full ID number to include, or null to leave it out
+     * @param latestSale the client's most recent sale, or null if none
      */
-    public static ClientDetail from(Client client, SaIdNumber idNumber) {
-        Consultant c = client.getCurrentConsultant();
-        ClientListItem.ConsultantRef consultant = c == null
-                ? null
-                : new ClientListItem.ConsultantRef(c.getId(), c.getConsultantCode(), c.getFullName(), c.getStatus());
+    public static ClientDetail from(Client client, SaIdNumber idNumber, LatestSale latestSale) {
         return new ClientDetail(client.getId(), idNumber == null ? null : idNumber.value(), client.getIdNumberMasked(),
-                client.getFirstName(), client.getLastName(), client.getEmail(), client.getPhone(), consultant,
-                client.getVersion(), client.getCreatedAt(), client.getUpdatedAt());
+                client.getFirstName(), client.getLastName(), client.getEmail(), client.getPhone(),
+                client.getWorkPhone(), client.getHomePhone(), ClientListItem.employerRef(client.getEmployer()),
+                ClientListItem.quotationRef(client.getProductQuotation()), client.getFileNumber(),
+                client.getFileId(), client.getPaymentMethod(), latestSale,
+                ClientListItem.consultantRef(client.getCurrentConsultant()), client.getVersion(),
+                client.getCreatedAt(), client.getUpdatedAt());
     }
 
     /** Never print the full ID number, even by accident. */

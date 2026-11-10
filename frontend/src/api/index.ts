@@ -41,7 +41,7 @@ export type {
 export { audit } from './audit';
 export type { AuditEntry, AuditFilter } from './audit';
 export { catalogue } from './catalogue';
-export type { Employer, Product } from './catalogue';
+export type { Employer, Product, ProductQuotation } from './catalogue';
 export { detailOf, isStale } from './errors';
 export { mfa, mfaPending } from './mfa';
 export { ID_REVEAL_LIMIT, REAUTHENTICATION_REQUIRED, idReveal } from './idReveal';
@@ -64,17 +64,21 @@ export type {
   DashboardSummary,
   AssignmentEntry,
   ClientDetail,
+  ClientFields,
   ClientFilter,
   ClientSummary,
   ClientUpdate,
   ConsultantRef,
   ConsultantSummary,
   ConsultantStatus,
+  LatestSale,
   MoveRequest,
   MoveResult,
   MfaStatus,
+  NamedRef,
   NewClient,
   PageResponse,
+  PaymentMethod,
   Role,
   Session,
 } from './types';

@@ -35,13 +35,41 @@ export interface ConsultantSummary {
   updatedAt: string;
 }
 
+/** An employer or product quotation on a client. active is false once an admin deactivates it. */
+export interface NamedRef {
+  id: number;
+  name: string;
+  active: boolean;
+}
+
+/** Only DEBIT_ORDER for now ("DEBIT ORDER" in the old spreadsheets). */
+export type PaymentMethod = 'DEBIT_ORDER';
+
+/** Payment term and structure come from the client's most recent sale. */
+export interface LatestSale {
+  date: string;
+  paymentTerm: string | null;
+  structure: string | null;
+}
+
 export interface ClientSummary {
   id: number;
   idNumberMasked: string;
   firstName: string;
   lastName: string;
   email: string | null;
+  /** Cellphone. All phones come back in international form, e.g. +27821234567. */
   phone: string | null;
+  workPhone: string | null;
+  homePhone: string | null;
+  employer: NamedRef | null;
+  productQuotation: NamedRef | null;
+  /** Digits only, kept as text so leading zeros survive. */
+  fileNumber: string | null;
+  fileId: string | null;
+  paymentMethod: PaymentMethod | null;
+  /** null when the client has no sales yet. */
+  latestSale: LatestSale | null;
   consultant: {
     id: number;
     consultantCode: string;
@@ -73,20 +101,28 @@ export interface AssignmentEntry {
   batchId: string | null;
 }
 
-export interface NewClient {
+/** The fields the add and edit forms share. Empty text means none. */
+export interface ClientFields {
   firstName: string;
   lastName: string;
-  idNumber: string;
   email: string;
   phone: string;
+  workPhone: string;
+  homePhone: string;
+  employerId: number | null;
+  productQuotationId: number | null;
+  fileNumber: string;
+  fileId: string;
+  paymentMethod: PaymentMethod | null;
+}
+
+export interface NewClient extends ClientFields {
+  idNumber: string;
   consultantId: number | null;
 }
 
-export interface ClientUpdate {
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string;
+/** Every field is sent: an empty one clears it. */
+export interface ClientUpdate extends ClientFields {
   version: number;
   idNumber?: string;
   idNumberReason?: string;

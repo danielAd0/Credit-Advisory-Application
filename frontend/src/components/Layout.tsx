@@ -18,6 +18,7 @@ const nav: { to: string; label: string; roles: Role[]; enabled?: boolean }[] = [
   { to: '/consultants', label: 'Consultants', roles: ['ADMIN', 'MANAGER'] },
   { to: '/products', label: 'Products', roles: ['ADMIN', 'MANAGER'] },
   { to: '/employers', label: 'Employers', roles: ['ADMIN', 'MANAGER'] },
+  { to: '/product-quotations', label: 'Product quotations', roles: ['ADMIN', 'MANAGER'] },
   { to: '/audit-log', label: 'Audit log', roles: ['ADMIN'] },
   { to: '/reassign', label: 'Reassign clients', roles: ['ADMIN', 'MANAGER'] },
   {

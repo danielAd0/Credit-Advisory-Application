@@ -1,4 +1,9 @@
 /* Edit / remove on the Clients page. Classes start with "ca-". */
+/* The clients table has many columns: tighter cells, and it scrolls sideways on small screens. */
+.cl-table th,
+.cl-table td {
+  padding: 0.6rem 0.75rem;
+}
 .ca-actions {
   white-space: nowrap;
 }

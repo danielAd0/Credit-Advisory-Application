@@ -146,6 +146,9 @@ Every successful change below writes one row to `audit_logs` in the **same trans
 | `CASE_UPDATED`                   | case                         | `fields`: the names of the fields that changed; `fromStatus`, `toStatus` when the status changed. Never the title                     |
 | `CASE_NOTE_ADDED`                | case                         | `noteId`. Never the note text                                                                                                         |
 | `REPORT_EXPORTED` | - | `report`, `weekStarting`, `scope`, `consultantId` (see `docs/api-reports.md` section 7) |
+| `PRODUCT_QUOTATION_CREATED` | product quotation | `name` (see `docs/api-admin.md`) |
+| `PRODUCT_QUOTATION_UPDATED` | product quotation | `from`, `to` (old and new name) |
+| `PRODUCT_QUOTATION_ACTIVATED` / `PRODUCT_QUOTATION_DEACTIVATED` | product quotation | `name` |
 
 Entries only record that something changed when it really changed (renaming to the same name, or setting the status it already has, writes nothing). Audit rows cannot be updated or deleted - the database refuses. Admins read them with `GET /api/audit-logs` (section 8).
 
@@ -442,6 +445,14 @@ Used by `GET /api/clients` and `POST /api/clients/lookup`. Never contains the fu
   "lastName": "Mokoena",
   "email": "lerato.mokoena@example.com",
   "phone": "+27821234567",
+  "workPhone": "+27115551234",
+  "homePhone": null,
+  "employer": { "id": 12, "name": "SAMPLE MUNICIPALITY", "active": true },
+  "productQuotation": { "id": 3, "name": "Sample Branch North", "active": true },
+  "fileNumber": "0012345",
+  "fileId": "987",
+  "paymentMethod": null,
+  "latestSale": { "date": "2026-10-19", "paymentTerm": "Once off payment", "structure": "Vital" },
   "consultant": {
     "id": 4,
     "consultantCode": "C004",
@@ -476,6 +487,14 @@ Example with the number included:
   "lastName": "Mokoena",
   "email": "lerato.mokoena@example.com",
   "phone": "+27821234567",
+  "workPhone": "+27115551234",
+  "homePhone": null,
+  "employer": { "id": 12, "name": "SAMPLE MUNICIPALITY", "active": true },
+  "productQuotation": { "id": 3, "name": "Sample Branch North", "active": true },
+  "fileNumber": "0012345",
+  "fileId": "987",
+  "paymentMethod": null,
+  "latestSale": { "date": "2026-10-19", "paymentTerm": "Once off payment", "structure": "Vital" },
   "consultant": {
     "id": 4,
     "consultantCode": "C004",
@@ -488,8 +507,12 @@ Example with the number included:
 }
 ```
 
-- `email` and `phone` may be `null`.
-- `phone` is always returned in international format (`+27...`).
+- `email`, `phone`, `workPhone`, `homePhone`, `employer`, `productQuotation`, `fileNumber`, `fileId` and `paymentMethod` may be `null`.
+- `phone` (the cellphone), `workPhone` and `homePhone` are always returned in international format (`+27...`). Show them as `082 123 4567` if you like.
+- `employer` and `productQuotation` are `{ id, name, active }`. `active` is `false` when an admin has deactivated it since it was chosen: the client keeps it, but it is not offered for new choices.
+- `fileNumber` and `fileId` are the File number and File ID from the old spreadsheets (FILNO and FILEID). They are two different things. Digits only, sent and returned as **text**, so a leading `0` is kept.
+- `paymentMethod` is `null` (paid through the employer) or `"DEBIT_ORDER"`. A debit order client usually has no employer.
+- `latestSale` is the client's most recent sale (`date`, `paymentTerm`, `structure`, either name may be `null`), or `null` when the client has no sales yet. The Clients page shows its payment term and structure. It is read-only: it changes when sales are imported.
 - `consultant` is `null` when the client is unassigned.
 - The example numbers above are made up. Never use real client data in docs, tests or demos.
 
@@ -512,7 +535,7 @@ If department-level manager scope is confirmed later (SRS 4), MANAGER will be li
 **Query parameters**
 | Name | Example | Meaning | CONSULTANT may use? |
 |---|---|---|---|
-| `search` | `moko` | first or last name, partial, case-insensitive | yes |
+| `search` | `moko` | first or last name, partial, case-insensitive. A search of digits only (up to 20) also finds a client whose File number or File ID is **exactly** that | yes |
 | `consultantId` | `4` | only clients of this consultant | no - ignored |
 | `consultantStatus` | `INACTIVE` | only clients whose consultant has this status | no - ignored |
 | `unassigned` | `true` | only clients with no consultant | no - ignored |
@@ -599,6 +622,13 @@ Spaces and hyphens in `idNumber` are ignored.
   "lastName": "Mokoena",
   "email": "lerato.mokoena@example.com",
   "phone": "082 123 4567",
+  "workPhone": "011 555 1234",
+  "homePhone": null,
+  "employerId": 12,
+  "productQuotationId": 3,
+  "fileNumber": "0012345",
+  "fileId": "987",
+  "paymentMethod": null,
   "consultantId": 4
 }
 ```
@@ -610,6 +640,11 @@ Spaces and hyphens in `idNumber` are ignored.
 | `lastName`     | yes      | trimmed, not blank, max 100                                                                                                                                                                                                                                                                                                       |
 | `email`        | no       | valid email, max 254                                                                                                                                                                                                                                                                                                              |
 | `phone`        | no       | SA or international number, normalised to international format (same rules as the Excel import): `082 123 4567`, `0821234567` and `27821234567` all become `+27821234567`; `+` or `00` numbers are kept. Spaces, hyphens, dots and brackets are ignored. Anything else is `400` (`urn:credit-advisory:validation:invalid-phone`). |
+| `workPhone`, `homePhone` | no | same rules as `phone` |
+| `employerId` | no | an employer from `GET /api/employers`. Unknown: `404` (`urn:credit-advisory:employer:not-found`). Deactivated: `422` (`urn:credit-advisory:client:employer-not-active`) |
+| `productQuotationId` | no | a product quotation from `GET /api/product-quotations` (`docs/api-admin.md`). Unknown: `404` (`urn:credit-advisory:product-quotation:not-found`). Deactivated: `422` (`urn:credit-advisory:client:product-quotation-not-active`) |
+| `fileNumber`, `fileId` | no | digits only, 1 to 20, as text (`"0012345"`). Spaces around it are trimmed; blank means none. Letters, dashes or more than 20 digits: `400` (`validation:invalid-request`, the field is named in `errors`) |
+| `paymentMethod` | no | `"DEBIT_ORDER"` or `null`. Anything else: `400` |
 | `consultantId` | no       | see assignment rules below                                                                                                                                                                                                                                                                                                        |
 
 **201 Created** - the **single client** object, with `Location: /api/clients/101`.
@@ -633,11 +668,11 @@ Spaces and hyphens in `idNumber` are ignored.
 **Errors**
 | Status | When |
 |---|---|
-| 400 | invalid fields (each listed in `errors`), invalid ID number, invalid phone |
+| 400 | invalid fields (each listed in `errors`), invalid ID number, invalid phone, bad File number or File ID, unknown `paymentMethod` |
 | 403 | CONSULTANT tried to assign to someone else, or has no consultant record |
-| 404 | `consultantId` does not exist |
+| 404 | `consultantId`, `employerId` or `productQuotationId` does not exist |
 | 409 | a client with this ID number already exists (`urn:credit-advisory:client:duplicate-id-number`) |
-| 422 | the chosen consultant is not ACTIVE |
+| 422 | the chosen consultant is not ACTIVE; the chosen employer or product quotation is deactivated |
 
 The `409` does **not** say which consultant has the existing client or show any of its details - the caller may not be allowed to know. A manager can find it with `POST /api/clients/lookup`.
 
@@ -645,7 +680,7 @@ The `409` does **not** say which consultant has the existing client or show any 
 
 **Who:** everyone signed in (scoped)
 
-**Request** - send **all four** editable fields as they should be afterwards (the edit form has them all), plus `version`:
+**Request** - send **every** editable field as it should be afterwards (the edit form has them all), plus `version`:
 
 ```json
 {
@@ -653,6 +688,13 @@ The `409` does **not** say which consultant has the existing client or show any 
   "lastName": "Mokoena",
   "email": "lerato.m@example.com",
   "phone": null,
+  "workPhone": "011 555 1234",
+  "homePhone": null,
+  "employerId": 12,
+  "productQuotationId": 3,
+  "fileNumber": "0012345",
+  "fileId": "987",
+  "paymentMethod": null,
   "version": 2
 }
 ```
@@ -660,8 +702,10 @@ The `409` does **not** say which consultant has the existing client or show any 
 | Field                   | Rules                                                      |
 | ----------------------- | ---------------------------------------------------------- |
 | `firstName`, `lastName` | required; same as create                                   |
-| `email`, `phone`        | same as create; `null`, blank or left out clears the value |
+| `email`, `phone`, `workPhone`, `homePhone`, `employerId`, `productQuotationId`, `fileNumber`, `fileId`, `paymentMethod` | same as create; `null`, blank or left out clears the value |
 | `version`               | required                                                   |
+
+An employer or product quotation that was deactivated after it was chosen may be sent back unchanged (it stays on the client). Choosing a **different** one that is deactivated is `422`.
 
 **200 OK** - the updated **single client** object, with `idNumber` `null` (an edit does not reveal the number).
 
@@ -669,9 +713,9 @@ The `409` does **not** say which consultant has the existing client or show any 
 
 - The ID number cannot be changed here. A manager or admin corrects it with `POST /api/clients/{id}/id-number-correction` (below).
 - The consultant cannot be changed here - use `POST /api/client-transfers`.
-- An audit entry `CLIENT_UPDATED` is written, listing which field names changed (not their values). Nothing changed, no entry.
+- An audit entry `CLIENT_UPDATED` is written, listing which field names changed (not their values): `firstName`, `lastName`, `email`, `phone`, `workPhone`, `homePhone`, `employer`, `productQuotation`, `fileNumber`, `fileId`, `paymentMethod`. Nothing changed, no entry.
 
-**Errors:** `400` invalid fields, `404` not found or not visible, `409` stale version.
+**Errors:** `400` invalid fields, `404` not found or not visible (or an unknown `employerId` / `productQuotationId`), `409` stale version, `422` a newly chosen employer or product quotation is deactivated.
 
 ### POST /api/clients/{id}/id-number-correction
 
@@ -716,7 +760,7 @@ Three endpoints change who a client belongs to:
 
 | Situation                                                             | Endpoint                                                           |
 | --------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| Client has **no** consultant yet (`GET /api/clients?unassigned=true`) | `POST /api/client-assignments` - see `docs/api-admin.md` section 4 |
+| Client has **no** consultant yet (`GET /api/clients?unassigned=true`) | `POST /api/client-assignments` - see `docs/api-admin.md` section 5 |
 | Client already has a consultant and must move                         | `POST /api/client-transfers` - below                               |
 | Client must no longer have **any** consultant                         | `POST /api/clients/{id}/unassign` - below                          |
 

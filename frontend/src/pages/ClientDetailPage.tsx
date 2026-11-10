@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ApiError, data, type AssignmentEntry, type ClientDetail } from '../api';
-import { clientName } from '../api/names';
+import { clientName, phoneForDisplay } from '../api/names';
 import ClientCases from '../components/ClientCases';
 import RevealIdNumber from '../components/RevealIdNumber';
 import { hasAnyRole, useSession } from '../auth/useAuth';
@@ -9,6 +9,10 @@ import './clientdetail.css';
 
 const dateTime = (iso: string) =>
   new Date(iso).toLocaleString('en-ZA', { dateStyle: 'medium', timeStyle: 'short' });
+
+const date = (iso: string) => new Date(iso).toLocaleDateString('en-ZA', { dateStyle: 'medium' });
+
+const NONE = <span className="muted">Not provided</span>;
 
 const CHANGE_LABEL: Record<AssignmentEntry['changeType'], string> = {
   IMPORT: 'Imported',
@@ -130,16 +134,24 @@ export default function ClientDetailPage() {
             <dt>Last name</dt>
             <dd>{c.lastName}</dd>
             <dt>Email</dt>
-            <dd>{c.email ?? <span className="muted">Not provided</span>}</dd>
-            <dt>Phone</dt>
-            <dd>{c.phone ?? <span className="muted">Not provided</span>}</dd>
+            <dd>{c.email ?? NONE}</dd>
+            <dt>Cellphone</dt>
+            <dd>{c.phone ? phoneForDisplay(c.phone) : NONE}</dd>
+            <dt>Work telephone</dt>
+            <dd>{c.workPhone ? phoneForDisplay(c.workPhone) : NONE}</dd>
+            <dt>Home telephone</dt>
+            <dd>{c.homePhone ? phoneForDisplay(c.homePhone) : NONE}</dd>
+            <dt>File number</dt>
+            <dd className={c.fileNumber ? 'mono' : undefined}>{c.fileNumber ?? NONE}</dd>
+            <dt>File ID</dt>
+            <dd className={c.fileId ? 'mono' : undefined}>{c.fileId ?? NONE}</dd>
             <dt>Added</dt>
             <dd>{dateTime(c.createdAt)}</dd>
           </dl>
         </section>
 
         <section className="cd-card" aria-labelledby="cd-work">
-          <h2 id="cd-work">Consultant</h2>
+          <h2 id="cd-work">Work and sales</h2>
           <dl>
             <dt>Current consultant</dt>
             <dd>
@@ -151,6 +163,38 @@ export default function ClientDetailPage() {
               ) : (
                 <span className="muted">Unassigned</span>
               )}
+            </dd>
+            <dt>Client employer</dt>
+            <dd>
+              {c.employer ? (
+                <>
+                  {c.employer.name}
+                  {!c.employer.active && <span className="muted"> (deactivated)</span>}
+                </>
+              ) : (
+                NONE
+              )}
+            </dd>
+            <dt>Pays by</dt>
+            <dd>{c.paymentMethod === 'DEBIT_ORDER' ? 'Debit order' : 'Through the employer'}</dd>
+            <dt>Product quotation</dt>
+            <dd>
+              {c.productQuotation ? (
+                <>
+                  {c.productQuotation.name}
+                  {!c.productQuotation.active && <span className="muted"> (deactivated)</span>}
+                </>
+              ) : (
+                NONE
+              )}
+            </dd>
+            <dt>Payment term</dt>
+            <dd>{c.latestSale?.paymentTerm ?? <span className="muted">None yet</span>}</dd>
+            <dt>Structure</dt>
+            <dd>{c.latestSale?.structure ?? <span className="muted">None yet</span>}</dd>
+            <dt>Latest sale</dt>
+            <dd>
+              {c.latestSale ? date(c.latestSale.date) : <span className="muted">No sales yet</span>}
             </dd>
             <dt>Last updated</dt>
             <dd>{dateTime(c.updatedAt)}</dd>

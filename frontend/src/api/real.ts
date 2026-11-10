@@ -7,6 +7,7 @@ import type {
   ChangePasswordRequest,
   DashboardSummary,
   ClientDetail,
+  ClientFields,
   ClientFilter,
   ClientSummary,
   ClientUpdate,
@@ -43,6 +44,21 @@ export async function getClient(id: number): Promise<ClientDetail> {
   return client;
 }
 
+/** The shared client fields as the server wants them: empty text becomes null. */
+const fieldsBody = (f: ClientFields) => ({
+  firstName: f.firstName,
+  lastName: f.lastName,
+  email: f.email || null,
+  phone: f.phone || null,
+  workPhone: f.workPhone || null,
+  homePhone: f.homePhone || null,
+  employerId: f.employerId,
+  productQuotationId: f.productQuotationId,
+  fileNumber: f.fileNumber || null,
+  fileId: f.fileId || null,
+  paymentMethod: f.paymentMethod,
+});
+
 export async function createClient(c: NewClient): Promise<ClientSummary> {
   const { idNumber: _drop, ...client } = await api<ClientSummary & { idNumber?: string }>(
     '/api/clients',
@@ -50,10 +66,7 @@ export async function createClient(c: NewClient): Promise<ClientSummary> {
       method: 'POST',
       body: JSON.stringify({
         idNumber: c.idNumber,
-        firstName: c.firstName,
-        lastName: c.lastName,
-        email: c.email || null,
-        phone: c.phone || null,
+        ...fieldsBody(c),
         consultantId: c.consultantId,
       }),
     },
@@ -80,13 +93,7 @@ export async function updateClient(id: number, u: ClientUpdate): Promise<ClientS
       `/api/clients/${id}`,
       {
         method: 'PATCH',
-        body: JSON.stringify({
-          firstName: u.firstName,
-          lastName: u.lastName,
-          email: u.email || null,
-          phone: u.phone || null,
-          version,
-        }),
+        body: JSON.stringify({ ...fieldsBody(u), version }),
       },
     );
     return client;
