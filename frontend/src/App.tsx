@@ -17,6 +17,7 @@ import ImportPage from './pages/ImportPage';
 import LoginPage from './pages/LoginPage';
 import EmployersPage from './pages/EmployersPage';
 import ProductsPage from './pages/ProductsPage';
+import ConsultantActionsPage from './pages/ConsultantActionsPage';
 import ReportsPage from './pages/ReportsPage';
 import ReassignPage from './pages/ReassignPage';
 import TwoStepPage from './pages/TwoStepPage';
@@ -63,6 +64,7 @@ export default function App() {
                 }
               />
               <Route path="reports" element={<ReportsPage />} />
+              <Route path="consultant-actions" element={<ConsultantActionsPage />} />
               <Route path="products" element={<ProductsPage />} />
               <Route path="employers" element={<EmployersPage />} />
               <Route

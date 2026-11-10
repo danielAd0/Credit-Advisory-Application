@@ -11,7 +11,6 @@ interface Form {
   idNumber: string;
   email: string;
   phone: string;
-  /** The chosen consultant's id as text, or empty for none. */
   consultantId: string;
 }
 
@@ -39,7 +38,6 @@ function validate(v: Form): Errors {
 }
 
 function explain(err: unknown): string {
-  // The server says exactly what is wrong (invalid ID number, duplicate, ...) and its text is safe to show.
   const detail = detailOf(err);
   if (detail) return detail;
   if (err instanceof ApiError) {
@@ -65,19 +63,18 @@ export default function AddClientPage() {
   const [saved, setSaved] = useState<ClientSummary | null>(null);
 
   useEffect(() => {
-    if (!isManager) return; // a consultant's new clients are always assigned to themselves
+    if (!isManager) return;
     let current = true;
     data
       .listConsultants()
       .then((r) => current && setConsultants(r.filter((c) => c.status === 'ACTIVE')))
-      .catch(() => undefined); // the list is optional: the client can be saved unassigned
+      .catch(() => undefined);
     return () => {
       current = false;
     };
   }, [isManager]);
 
   const set = (key: keyof Form) => (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    // The ID number accepts digits only, so a pasted space or dash cannot cause a rejection later.
     const raw = e.target.value;
     const value = key === 'idNumber' ? raw.replace(/\D/g, '').slice(0, 13) : raw;
     setValues((v) => ({ ...v, [key]: value }));
@@ -101,7 +98,7 @@ export default function AddClientPage() {
         consultantId: isManager && values.consultantId ? Number(values.consultantId) : null,
       });
       setSaved(created);
-      setValues(EMPTY); // clear the ID number from memory straight away
+      setValues(EMPTY);
     } catch (err) {
       setFailure(explain(err));
     } finally {

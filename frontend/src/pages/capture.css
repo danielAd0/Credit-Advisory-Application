@@ -1,0 +1,276 @@
+.ca {
+  max-width: 1100px;
+}
+
+
+.ca-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20rem;
+  gap: 1rem;
+  align-items: start;
+  margin-top: 1.25rem;
+}
+
+.ca-main {
+  display: grid;
+  gap: 1rem;
+}
+
+
+.ca-card,
+.ca-summary {
+  padding: 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+
+.ca-card h2,
+.ca-summary h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.1rem;
+}
+
+
+.ca-summary {
+  position: sticky;
+  top: 1rem;
+}
+
+
+.ca-summary dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.25rem 0.75rem;
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+}
+
+
+.ca-summary dt {
+  color: var(--muted);
+}
+
+
+.ca-summary dd {
+  margin: 0;
+  text-align: right;
+}
+
+.ca-picker label,
+.ca-field label {
+  display: block;
+  margin-bottom: 0.3rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+
+.ca-picker input,
+.ca-field input,
+.ca-field select {
+  width: 100%;
+  height: 2.6rem;
+  padding: 0 0.75rem;
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+
+.ca-picker input:focus,
+.ca-field input:focus,
+.ca-field select:focus {
+  outline: none;
+  border-color: var(--orange);
+  box-shadow: 0 0 0 3px rgba(255, 90, 0, 0.25);
+}
+
+.ca-field input[aria-invalid='true'] {
+  border-color: var(--err-line);
+}
+
+.ca-field {
+  margin-top: 0.75rem;
+}
+
+.ca-hint,
+.ca-err {
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+}
+
+.ca-hint {
+  color: var(--muted);
+}
+
+.ca-err {
+  color: var(--err-ink);
+}
+
+.ca-results {
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.ca-results li + li {
+  border-top: 1px solid var(--line);
+}
+
+.ca-results button {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.6rem 0.8rem;
+  font: inherit;
+  text-align: left;
+  color: var(--ink);
+  background: var(--surface);
+  border: 0;
+  cursor: pointer;
+}
+
+.ca-results button:hover,
+.ca-results button:focus-visible {
+  background: #fff1e8;
+  outline: none;
+}
+
+.ca-client {
+  display: grid;
+  gap: 0.5rem;
+  justify-items: start;
+}
+
+.ca-client p {
+  margin: 0;
+}
+
+.ca-date {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+  margin-top: 0;
+}
+
+.ca-date label {
+  flex-basis: 100%;
+  margin-bottom: 0;
+}
+
+.ca-date input {
+  width: auto;
+  min-width: 11rem;
+}
+
+.ca-group {
+  margin: 1rem 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.ca-group legend {
+  padding: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.ca-products {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: 0 1rem;
+}
+
+.ca-money {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+
+.ca-money input {
+  flex: 1;
+  text-align: right;
+}
+
+.ca-lines {
+  margin: 0 0 0.75rem;
+  padding: 0;
+  list-style: none;
+  font-size: 0.9rem;
+}
+
+.ca-lines li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.ca-totals {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0.75rem 0 0;
+}
+
+.ca-totals span {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.ca-totals strong {
+  font-size: 1.15rem;
+}
+
+.ca-submit {
+  width: 100%;
+  margin-top: 0.75rem;
+}
+
+.ca-done {
+  max-width: 34rem;
+}
+
+.ca-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
+.ca-actions .btn {
+  text-decoration: none;
+  display: inline-block;
+}
+
+@media (max-width: 1000px) {
+
+  .ca-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ca-summary {
+    position: static;
+  }
+}
+
+@media (max-width: 560px) {
+  .ca-results button {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.1rem;
+  }
+}

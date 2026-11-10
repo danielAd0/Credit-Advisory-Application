@@ -30,6 +30,14 @@ export type {
   SummaryResponse,
   WeekListItem,
 } from './reports';
+export { transactions } from './transactions';
+export type {
+  CaptureLists,
+  NewTransaction,
+  Option,
+  SavedLine,
+  SavedTransaction,
+} from './transactions';
 export { audit } from './audit';
 export type { AuditEntry, AuditFilter } from './audit';
 export { catalogue } from './catalogue';

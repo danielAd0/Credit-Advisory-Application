@@ -9,6 +9,11 @@ const nav: { to: string; label: string; roles: Role[]; enabled?: boolean }[] = [
     label: 'Clients',
     roles: ['ADMIN', 'MANAGER', 'CONSULTANT'],
   },
+  {
+    to: '/consultant-actions',
+    label: 'Consultant actions',
+    roles: ['ADMIN', 'MANAGER', 'CONSULTANT'],
+  },
   { to: '/reports', label: 'Reports', roles: ['ADMIN', 'MANAGER', 'CONSULTANT'] },
   { to: '/consultants', label: 'Consultants', roles: ['ADMIN', 'MANAGER'] },
   { to: '/products', label: 'Products', roles: ['ADMIN', 'MANAGER'] },
