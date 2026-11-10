@@ -187,7 +187,7 @@ export async function budget(week: string): Promise<BudgetResponse> {
     });
   return {
     weekStarting: week,
-    structures: ['Structure A', 'Structure B'].map((name, n) => {
+    structures: ['VITAL CREDIT', 'MAFORI CREDIT'].map((name, n) => {
       const days = DAYS.map((d) => ({
         dayOfWeek: d,
         entryCount: d <= 5 ? 1 + ((d + n) % 2) : 0,
