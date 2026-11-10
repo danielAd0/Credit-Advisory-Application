@@ -1,4 +1,5 @@
 import { ApiError, STALE_VERSION } from './http';
+import { mockEmployerRef, mockQuotationRef } from './mockCatalogue';
 import { mockMfaSignedIn, mockMfaSignedOut, mockMfaStatus } from './mockMfaState';
 import type {
   AssignmentEntry,
@@ -9,6 +10,7 @@ import type {
   DashboardSummary,
   PageResponse,
   ClientDetail,
+  ClientFields,
   ClientFilter,
   ClientSummary,
   ClientUpdate,
@@ -64,8 +66,21 @@ const link = (c: ConsultantSummary) => ({
   status: c.status,
 });
 
+// Same ids and names as the mock employers and product quotations in mockCatalogue.ts.
+// Written out here because that file imports this one.
+const mockEmployers = [
+  { id: 1, name: 'Sample Municipality', active: true },
+  { id: 2, name: 'Example Hospital', active: true },
+  { id: 3, name: 'Demo Mining Co', active: true },
+];
+const mockQuotations = [
+  { id: 1, name: 'Sample Branch North', active: true },
+  { id: 2, name: 'Sample Branch South', active: true },
+];
+
 export const clients: ClientSummary[] = Array.from({ length: 8 }, (_, i) => {
   const c = i === 7 ? null : consultants[i % 3];
+  const debitOrder = i === 5;
   return {
     id: i + 1,
     idNumberMasked: `*********${String(i + 1).padStart(4, '0')}`,
@@ -73,6 +88,21 @@ export const clients: ClientSummary[] = Array.from({ length: 8 }, (_, i) => {
     lastName: `Client ${String(i + 1).padStart(2, '0')}`,
     email: `client${i + 1}@example.com`,
     phone: `+2782000000${i + 1}`,
+    workPhone: i % 2 === 0 ? `+2711555000${i + 1}` : null,
+    homePhone: i % 3 === 0 ? `+2712555000${i + 1}` : null,
+    employer: debitOrder || i === 7 ? null : mockEmployers[i % 3],
+    productQuotation: i === 7 ? null : mockQuotations[i % 2],
+    fileNumber: `00${1000 + i}`,
+    fileId: i === 7 ? null : String(5000 + i),
+    paymentMethod: debitOrder ? 'DEBIT_ORDER' : null,
+    latestSale:
+      i >= 6
+        ? null
+        : {
+            date: `2026-10-${String(10 + i).padStart(2, '0')}`,
+            paymentTerm: 'Once off payment',
+            structure: 'Vital',
+          },
     consultant: c && link(c),
     version: 0,
     createdAt: when(20 - i),
@@ -141,8 +171,13 @@ export async function listClientsPage(
 ): Promise<PageResponse<ClientSummary>> {
   await delay();
   const q = (filter.search ?? '').trim().toLowerCase();
+  // Like the server: a search of digits only also matches a File number or File ID exactly.
+  const fileReference = /^[0-9]{1,20}$/.test(q) ? q : null;
   const all = clients.filter((c) => {
-    if (q && !`${c.firstName} ${c.lastName}`.toLowerCase().includes(q)) return false;
+    const byName = `${c.firstName} ${c.lastName}`.toLowerCase().includes(q);
+    const byFile =
+      fileReference !== null && (c.fileNumber === fileReference || c.fileId === fileReference);
+    if (q && !byName && !byFile) return false;
     if (filter.unassigned && c.consultant) return false;
     if (filter.consultantId !== undefined && c.consultant?.id !== filter.consultantId) return false;
     return true;
@@ -168,6 +203,36 @@ export async function getClient(id: number): Promise<ClientDetail> {
   return { ...c };
 }
 
+/** Phones as the server stores them: 082 123 4567 becomes +27821234567. */
+function mockPhone(raw: string): string | null {
+  const compact = raw.replace(/[\s.()-]/g, '');
+  if (!compact) return null;
+  if (/^0\d{9}$/.test(compact)) return `+27${compact.slice(1)}`;
+  if (/^\+[1-9]\d{7,14}$/.test(compact)) return compact;
+  throw new ApiError(400, 'Not a valid phone number.', {
+    type: 'urn:credit-advisory:validation:invalid-phone',
+    detail:
+      'Not a valid phone number. Use a South African number such as 082 123 4567, or an international number starting with +.',
+  });
+}
+
+/** The shared fields, checked like the server does. current is the client being edited. */
+function mockFields(f: ClientFields, current: ClientSummary | null) {
+  return {
+    firstName: f.firstName.trim(),
+    lastName: f.lastName.trim(),
+    email: f.email.trim() || null,
+    phone: mockPhone(f.phone),
+    workPhone: mockPhone(f.workPhone),
+    homePhone: mockPhone(f.homePhone),
+    employer: mockEmployerRef(f.employerId, current?.employer?.id),
+    productQuotation: mockQuotationRef(f.productQuotationId, current?.productQuotation?.id),
+    fileNumber: f.fileNumber.trim() || null,
+    fileId: f.fileId.trim() || null,
+    paymentMethod: f.paymentMethod,
+  };
+}
+
 export async function createClient(c: NewClient): Promise<ClientSummary> {
   await delay(500);
   const masked = `*********${c.idNumber.slice(-4)}`;
@@ -177,10 +242,8 @@ export async function createClient(c: NewClient): Promise<ClientSummary> {
   const created: ClientSummary = {
     id: nextId++,
     idNumberMasked: masked,
-    firstName: c.firstName.trim(),
-    lastName: c.lastName.trim(),
-    email: c.email.trim() || null,
-    phone: c.phone.trim() || null,
+    ...mockFields(c, null),
+    latestSale: null,
     consultant: target ? link(target) : null,
     version: 0,
     createdAt: now,
@@ -215,10 +278,7 @@ export async function updateClient(id: number, u: ClientUpdate): Promise<ClientS
     }
     c.idNumberMasked = masked;
   }
-  c.firstName = u.firstName.trim();
-  c.lastName = u.lastName.trim();
-  c.email = u.email.trim() || null;
-  c.phone = u.phone.trim() || null;
+  Object.assign(c, mockFields(u, c));
   c.version += 1;
   c.updatedAt = new Date().toISOString();
   return { ...c };

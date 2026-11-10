@@ -58,11 +58,16 @@ const ACTIONS: Partial<Record<string, string>> = {
   EMPLOYER_REVIEWED: 'Employer reviewed',
   PRODUCT_CREATED: 'Product created',
   PRODUCT_UPDATED: 'Product updated',
+  PRODUCT_QUOTATION_CREATED: 'Product quotation created',
+  PRODUCT_QUOTATION_UPDATED: 'Product quotation renamed',
+  PRODUCT_QUOTATION_ACTIVATED: 'Product quotation activated',
+  PRODUCT_QUOTATION_DEACTIVATED: 'Product quotation deactivated',
 };
 
 const KEYS: Partial<Record<string, string>> = {
   consultantCode: 'Code',
   fullName: 'Name',
+  name: 'Name',
   email: 'Email',
   roles: 'Roles',
   from: 'From',
@@ -86,7 +91,20 @@ const KEYS: Partial<Record<string, string>> = {
   recoveryCodes: 'Recovery codes',
 };
 
-const TARGETS = ['CLIENT', 'USER', 'CONSULTANT', 'CASE', 'IMPORT_JOB', 'EMPLOYER', 'PRODUCT'];
+const TARGETS = [
+  'CLIENT',
+  'USER',
+  'CONSULTANT',
+  'CASE',
+  'IMPORT_JOB',
+  'EMPLOYER',
+  'PRODUCT',
+  'PRODUCT_QUOTATION',
+];
+
+/** PRODUCT_QUOTATION -> Product quotation. */
+const targetLabel = (t: string) =>
+  (t.charAt(0) + t.slice(1).toLowerCase()).replace('_job', '').replace(/_/g, ' ');
 
 function show(key: string, value: unknown): string {
   if (Array.isArray(value)) return value.join(', ');
@@ -113,9 +131,7 @@ function details(e: AuditEntry): string {
 }
 
 const target = (e: AuditEntry) =>
-  e.targetType
-    ? `${e.targetType.charAt(0) + e.targetType.slice(1).toLowerCase()}${e.targetId ? ` #${e.targetId}` : ''}`
-    : '-';
+  e.targetType ? `${targetLabel(e.targetType)}${e.targetId ? ` #${e.targetId}` : ''}` : '-';
 
 const startOf = (date: string, addDays = 0) => {
   if (!date) return undefined;
@@ -198,7 +214,7 @@ export default function AuditLogPage() {
             <option value="">Anything</option>
             {TARGETS.map((t) => (
               <option key={t} value={t}>
-                {t.charAt(0) + t.slice(1).toLowerCase().replace('_job', '')}
+                {targetLabel(t)}
               </option>
             ))}
           </select>

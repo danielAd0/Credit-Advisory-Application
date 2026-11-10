@@ -1,10 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError, data, detailOf, features, type ClientSummary, type PageResponse } from '../api';
-import { clientName } from '../api/names';
+import { clientName, phoneForDisplay } from '../api/names';
 import Pager from '../components/Pager';
 import { hasAnyRole, useSession } from '../auth/useAuth';
 import './clientsactions.css';
+
+/** An empty cell, so a missing value reads as missing rather than as a layout gap. */
+const Dash = () => (
+  <span className="muted" aria-label="none">
+    -
+  </span>
+);
 
 export default function ClientsPage() {
   const session = useSession();
@@ -96,7 +103,7 @@ export default function ClientsPage() {
       <div className="toolbar toolbar-actions">
         <input
           type="search"
-          placeholder="Search by name"
+          placeholder="Search by name, File number or File ID"
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
@@ -130,13 +137,18 @@ export default function ClientsPage() {
 
       {rows && rows.length > 0 && (
         <div className="table-wrap">
-          <table>
+          <table className="cl-table">
             <thead>
               <tr>
+                <th>Surname</th>
                 <th>Name</th>
-                <th>ID number</th>
-                <th>Consultant</th>
-                <th>Updated</th>
+                <th>Client employer</th>
+                <th>Work telephone</th>
+                <th>Home telephone</th>
+                <th>Product quotation</th>
+                <th>Payment term</th>
+                <th>Structure</th>
+                {isManager && <th>Consultant</th>}
                 <th>Actions</th>
               </tr>
             </thead>
@@ -145,12 +157,27 @@ export default function ClientsPage() {
                 <tr key={c.id}>
                   <td>
                     <Link className="row-link" to={`/clients/${c.id}`}>
-                      {clientName(c)}
+                      {c.lastName}
                     </Link>
                   </td>
-                  <td className="mono">{c.idNumberMasked}</td>
-                  <td>{c.consultant?.fullName ?? <span className="muted">Unassigned</span>}</td>
-                  <td>{new Date(c.updatedAt).toLocaleDateString('en-ZA')}</td>
+                  <td>{c.firstName}</td>
+                  <td>
+                    {c.employer ? (
+                      c.employer.name
+                    ) : c.paymentMethod === 'DEBIT_ORDER' ? (
+                      <span className="muted">Debit order</span>
+                    ) : (
+                      <Dash />
+                    )}
+                  </td>
+                  <td>{c.workPhone ? phoneForDisplay(c.workPhone) : <Dash />}</td>
+                  <td>{c.homePhone ? phoneForDisplay(c.homePhone) : <Dash />}</td>
+                  <td>{c.productQuotation?.name ?? <Dash />}</td>
+                  <td>{c.latestSale?.paymentTerm ?? <Dash />}</td>
+                  <td>{c.latestSale?.structure ?? <Dash />}</td>
+                  {isManager && (
+                    <td>{c.consultant?.fullName ?? <span className="muted">Unassigned</span>}</td>
+                  )}
                   <td className="ca-actions">
                     <Link
                       className="ca-link"

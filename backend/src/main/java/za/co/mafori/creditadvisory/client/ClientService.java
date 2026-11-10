@@ -20,6 +20,10 @@ import za.co.mafori.creditadvisory.common.phone.PhoneNumbers;
 import za.co.mafori.creditadvisory.common.web.ApiException;
 import za.co.mafori.creditadvisory.consultant.Consultant;
 import za.co.mafori.creditadvisory.consultant.ConsultantRepository;
+import za.co.mafori.creditadvisory.employer.Employer;
+import za.co.mafori.creditadvisory.employer.EmployerRepository;
+import za.co.mafori.creditadvisory.productquotation.ProductQuotation;
+import za.co.mafori.creditadvisory.productquotation.ProductQuotationRepository;
 import za.co.mafori.creditadvisory.transfer.ClientAssignmentHistory;
 import za.co.mafori.creditadvisory.transfer.ClientAssignmentHistoryRepository;
 import za.co.mafori.creditadvisory.user.UserAccountRepository;
@@ -47,15 +51,23 @@ public class ClientService {
     private final ConsultantRepository consultants;
     private final UserAccountRepository users;
     private final ClientAssignmentHistoryRepository history;
+    private final EmployerRepository employers;
+    private final ProductQuotationRepository productQuotations;
+    private final ClientLatestSales latestSales;
     private final IdNumberProtector protector;
     private final AuditLogWriter audit;
 
     public ClientService(ClientRepository clients, ConsultantRepository consultants, UserAccountRepository users,
-            ClientAssignmentHistoryRepository history, IdNumberProtector protector, AuditLogWriter audit) {
+            ClientAssignmentHistoryRepository history, EmployerRepository employers,
+            ProductQuotationRepository productQuotations, ClientLatestSales latestSales, IdNumberProtector protector,
+            AuditLogWriter audit) {
         this.clients = clients;
         this.consultants = consultants;
         this.users = users;
         this.history = history;
+        this.employers = employers;
+        this.productQuotations = productQuotations;
+        this.latestSales = latestSales;
         this.protector = protector;
         this.audit = audit;
     }
@@ -67,6 +79,10 @@ public class ClientService {
         SaIdNumber idNumber = parseIdNumber(request.idNumber());
         String email = blankToNull(request.email());
         String phone = normalisePhone(request.phone());
+        String workPhone = normalisePhone(request.workPhone());
+        String homePhone = normalisePhone(request.homePhone());
+        Employer employer = chooseEmployer(request.employerId(), null);
+        ProductQuotation productQuotation = chooseProductQuotation(request.productQuotationId(), null);
         Consultant consultant = chooseConsultant(caller, request.consultantId());
 
         ProtectedIdNumber stored = protector.protect(idNumber);
@@ -78,7 +94,9 @@ public class ClientService {
 
         Client client = new Client(stored.lookupHash(), stored.encrypted(), stored.last4(),
                 request.firstName(), request.lastName());
-        client.updateContactDetails(email, phone);
+        client.updateContactDetails(email, phone, workPhone, homePhone);
+        client.updateWorkDetails(employer, productQuotation, request.fileNumber(), request.fileId(),
+                request.paymentMethod());
         client.assignTo(consultant);
         clients.saveAndFlush(client);
 
@@ -88,7 +106,8 @@ public class ClientService {
         }
         audit.record("CLIENT_CREATED", "CLIENT", client.getId(),
                 meta("consultantId", consultant == null ? null : consultant.getId()));
-        return ClientDetail.from(client, idNumber);
+        // A new client has no sales yet.
+        return ClientDetail.from(client, idNumber, null);
     }
 
     // ---------- view ----------
@@ -106,10 +125,11 @@ public class ClientService {
     public Optional<ClientDetail> view(AppUserPrincipal caller, long id, boolean includeIdNumber) {
         Optional<Client> visible = findVisible(caller, id);
         if (!includeIdNumber) {
-            return visible.map(client -> ClientDetail.from(client, null));
+            return visible.map(client -> ClientDetail.from(client, null, latestSales.forClient(client.getId())));
         }
         visible.ifPresent(client -> audit.record("CLIENT_VIEWED", "CLIENT", client.getId(), meta()));
-        return visible.map(client -> ClientDetail.from(client, protector.decrypt(client.getIdNumberEncrypted())));
+        return visible.map(client -> ClientDetail.from(client, protector.decrypt(client.getIdNumberEncrypted()),
+                latestSales.forClient(client.getId())));
     }
 
     // ---------- lookup by ID number ----------
@@ -133,7 +153,8 @@ public class ClientService {
         // clients.
         audit.record("CLIENT_LOOKUP", "CLIENT", client.getId(),
                 meta("result", visible ? "found" : "not-visible"));
-        return visible ? Optional.of(ClientListItem.from(client)) : Optional.empty();
+        return visible ? Optional.of(ClientListItem.from(client, latestSales.forClient(client.getId())))
+                : Optional.empty();
     }
 
     // ---------- update ----------
@@ -154,6 +175,11 @@ public class ClientService {
         String lastName = request.lastName().strip();
         String email = blankToNull(request.email());
         String phone = normalisePhone(request.phone());
+        String workPhone = normalisePhone(request.workPhone());
+        String homePhone = normalisePhone(request.homePhone());
+        Employer employer = chooseEmployer(request.employerId(), client.getEmployer());
+        ProductQuotation productQuotation = chooseProductQuotation(request.productQuotationId(),
+                client.getProductQuotation());
 
         // Which fields changed - the names only, never the values (contract section 1).
         List<String> changed = new ArrayList<>();
@@ -169,15 +195,39 @@ public class ClientService {
         if (!Objects.equals(phone, client.getPhone())) {
             changed.add("phone");
         }
+        if (!Objects.equals(workPhone, client.getWorkPhone())) {
+            changed.add("workPhone");
+        }
+        if (!Objects.equals(homePhone, client.getHomePhone())) {
+            changed.add("homePhone");
+        }
+        if (!sameEntry(employer, client.getEmployer() == null ? null : client.getEmployer().getId())) {
+            changed.add("employer");
+        }
+        if (!sameEntry(productQuotation,
+                client.getProductQuotation() == null ? null : client.getProductQuotation().getId())) {
+            changed.add("productQuotation");
+        }
+        if (!Objects.equals(request.fileNumber(), client.getFileNumber())) {
+            changed.add("fileNumber");
+        }
+        if (!Objects.equals(request.fileId(), client.getFileId())) {
+            changed.add("fileId");
+        }
+        if (request.paymentMethod() != client.getPaymentMethod()) {
+            changed.add("paymentMethod");
+        }
 
         client.rename(firstName, lastName);
-        client.updateContactDetails(email, phone);
+        client.updateContactDetails(email, phone, workPhone, homePhone);
+        client.updateWorkDetails(employer, productQuotation, request.fileNumber(), request.fileId(),
+                request.paymentMethod());
         clients.flush();
         if (!changed.isEmpty()) {
             audit.record("CLIENT_UPDATED", "CLIENT", client.getId(), meta("fields", changed));
         }
         // Without the full ID number: an edit is not a request to see it.
-        return Optional.of(ClientDetail.from(client, null));
+        return Optional.of(ClientDetail.from(client, null, latestSales.forClient(client.getId())));
     }
 
     // ---------- correct the ID number ----------
@@ -222,7 +272,7 @@ public class ClientService {
         audit.record("CLIENT_ID_NUMBER_CORRECTED", "CLIENT", client.getId(),
                 meta("fromLast4", fromLast4, "toLast4", stored.last4(), "reason", reason));
         // Without the full ID number, like an edit.
-        return Optional.of(ClientDetail.from(client, null));
+        return Optional.of(ClientDetail.from(client, null, latestSales.forClient(client.getId())));
     }
 
     // ---------- rules ----------
@@ -265,6 +315,52 @@ public class ClientService {
                     "Clients can only be assigned to an ACTIVE consultant.");
         }
         return consultant;
+    }
+
+    /**
+     * Null means no employer. A newly chosen employer must be active; the one the
+     * client already has may stay even if it was deactivated since.
+     */
+    private Employer chooseEmployer(Long requestedId, Employer current) {
+        if (requestedId == null) {
+            return null;
+        }
+        if (current != null && requestedId.equals(current.getId())) {
+            return current;
+        }
+        Employer employer = employers.findById(requestedId).orElseThrow(() -> ApiException.notFound(
+                "employer:not-found", "Employer " + requestedId + " does not exist."));
+        if (!Boolean.TRUE.equals(employer.isActive())) {
+            throw ApiException.unprocessable("client:employer-not-active", "Employer not active",
+                    "This employer has been deactivated. Choose another one.");
+        }
+        return employer;
+    }
+
+    /** Same rules as chooseEmployer, for the product quotation list. */
+    private ProductQuotation chooseProductQuotation(Long requestedId, ProductQuotation current) {
+        if (requestedId == null) {
+            return null;
+        }
+        if (current != null && requestedId.equals(current.getId())) {
+            return current;
+        }
+        ProductQuotation quotation = productQuotations.findById(requestedId).orElseThrow(() -> ApiException.notFound(
+                "product-quotation:not-found", "Product quotation " + requestedId + " does not exist."));
+        if (!quotation.isActive()) {
+            throw ApiException.unprocessable("client:product-quotation-not-active", "Product quotation not active",
+                    "This product quotation has been deactivated. Choose another one.");
+        }
+        return quotation;
+    }
+
+    /** True if both are "none", or both are the same entry. */
+    private static boolean sameEntry(Employer chosen, Long currentId) {
+        return Objects.equals(chosen == null ? null : chosen.getId(), currentId);
+    }
+
+    private static boolean sameEntry(ProductQuotation chosen, Long currentId) {
+        return Objects.equals(chosen == null ? null : chosen.getId(), currentId);
     }
 
     private static SaIdNumber parseIdNumber(String raw) {

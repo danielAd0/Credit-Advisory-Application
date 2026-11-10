@@ -1,14 +1,20 @@
 import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ApiError, data, detailOf, features, isStale } from '../api';
+import { ApiError, data, detailOf, features, isStale, type ClientSummary } from '../api';
 import { hasAnyRole, useSession } from '../auth/useAuth';
+import ClientDetailsFields from '../components/ClientDetailsFields';
+import {
+  detailsFrom,
+  detailsPayload,
+  validateDetails,
+  type DetailsValues,
+} from '../components/clientDetails';
 import './addclient.css';
 
-interface Form {
+interface Form extends DetailsValues {
   firstName: string;
   lastName: string;
   email: string;
-  phone: string;
   idNumber: string;
   idReason: string;
 }
@@ -16,7 +22,7 @@ interface Form {
 type Errors = Partial<Record<keyof Form, string>>;
 
 function validate(v: Form): Errors {
-  const e: Errors = {};
+  const e: Errors = validateDetails(v);
   if (!v.firstName.trim()) e.firstName = 'Enter the first name.';
   if (!v.lastName.trim()) e.lastName = 'Enter the last name.';
   if (v.idNumber && !/^\d{13}$/.test(v.idNumber))
@@ -24,8 +30,6 @@ function validate(v: Form): Errors {
   if (v.idNumber && !v.idReason.trim()) e.idReason = 'Say why the ID number is being corrected.';
   if (v.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.email))
     e.email = 'That email address does not look right.';
-  if (v.phone && !/^\+?[\d\s]{9,15}$/.test(v.phone))
-    e.phone = 'Use 9 to 15 digits, for example 082 000 0000.';
   return e;
 }
 
@@ -39,6 +43,8 @@ export default function EditClientPage() {
     id: number;
     masked: string;
     version: number;
+    /** For an employer or product quotation deactivated since it was chosen. */
+    refs: Pick<ClientSummary, 'employer' | 'productQuotation'>;
   } | null>(null);
   const [loadState, setLoadState] = useState<'ok' | 'missing' | 'failed'>('ok');
   const [values, setValues] = useState<Form | null>(null);
@@ -53,12 +59,17 @@ export default function EditClientPage() {
       .getClient(id)
       .then((c) => {
         if (!current) return;
-        setLoaded({ id, masked: c.idNumberMasked, version: c.version });
+        setLoaded({
+          id,
+          masked: c.idNumberMasked,
+          version: c.version,
+          refs: { employer: c.employer, productQuotation: c.productQuotation },
+        });
         setValues({
+          ...detailsFrom(c),
           firstName: c.firstName,
           lastName: c.lastName,
           email: c.email ?? '',
-          phone: c.phone ?? '',
           idNumber: '',
           idReason: '',
         });
@@ -108,11 +119,15 @@ export default function EditClientPage() {
   }
 
   const current = values;
-  const set = (key: keyof Form) => (e: ChangeEvent<HTMLInputElement>) => {
-    const value =
-      key === 'idNumber' ? e.target.value.replace(/\D/g, '').slice(0, 13) : e.target.value;
+  const change = (key: keyof Form, value: string) => {
     setValues({ ...current, [key]: value });
     setErrors((x) => ({ ...x, [key]: undefined }));
+  };
+  const set = (key: keyof Form) => (e: ChangeEvent<HTMLInputElement>) => {
+    change(
+      key,
+      key === 'idNumber' ? e.target.value.replace(/\D/g, '').slice(0, 13) : e.target.value,
+    );
   };
 
   async function submit(e: FormEvent) {
@@ -125,10 +140,10 @@ export default function EditClientPage() {
     setSaving(true);
     try {
       await data.updateClient(id, {
+        ...detailsPayload(current),
         firstName: current.firstName.trim(),
         lastName: current.lastName.trim(),
         email: current.email.trim(),
-        phone: current.phone.trim(),
         version: loaded.version,
         idNumber: canEditId && current.idNumber ? current.idNumber : undefined,
         idNumberReason: canEditId && current.idNumber ? current.idReason.trim() : undefined,
@@ -146,15 +161,17 @@ export default function EditClientPage() {
                   : err instanceof ApiError && err.status === 409
                     ? 'This client was changed by someone else, or that ID number belongs to another client. Go back, reopen the client and try again.'
                     : err instanceof ApiError && err.status === 400
-                      ? 'The server rejected some of the details. Check the email and phone number.'
-                      : 'Could not save the changes. Nothing was changed. Try again.')),
+                      ? 'The server rejected some of the details. Check the email and phone numbers.'
+                      : err instanceof ApiError && err.status === 422
+                        ? 'That employer or product quotation has been deactivated. Choose another one.'
+                        : 'Could not save the changes. Nothing was changed. Try again.')),
       );
       setSaving(false);
     }
   }
 
   const field = (
-    key: keyof Form,
+    key: 'firstName' | 'lastName' | 'email' | 'idNumber' | 'idReason',
     label: string,
     type = 'text',
     required = false,
@@ -217,10 +234,14 @@ export default function EditClientPage() {
             'Leave blank to keep the current ID number. The change is recorded with your name.',
           )}
         {canEditId && current.idNumber && field('idReason', 'Reason for the correction')}
-        <div className="ac-row">
-          {field('email', 'Email', 'email')}
-          {field('phone', 'Phone', 'tel')}
-        </div>
+        {field('email', 'Email', 'email')}
+        <ClientDetailsFields
+          idPrefix="ec"
+          values={current}
+          errors={errors}
+          onChange={change}
+          current={loaded.refs}
+        />
         <div className="ac-actions">
           <button type="submit" className="btn primary" disabled={saving}>
             {saving ? 'Saving...' : 'Save changes'}

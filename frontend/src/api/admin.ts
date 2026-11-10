@@ -63,6 +63,16 @@ export interface Employer {
   updatedAt: string;
 }
 
+/** A product quotation (the old spreadsheets' C_BRANCHNAME): a list admins manage. */
+export interface ProductQuotation {
+  id: number;
+  name: string;
+  active: boolean;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AssignClientsResult {
   batchId: string | null;
   assignedCount: number;
@@ -171,6 +181,25 @@ export const updateEmployer = (
 
 export const setEmployerActive = (id: number, active: boolean, version: number) =>
   api<Employer>(`/api/employers/${id}/active`, json('PATCH', { active, version }));
+
+// ---------- product quotations ----------
+
+/** GET /api/product-quotations - everyone signed in. Sorted by name. */
+export const listProductQuotations = (
+  params: { search?: string; active?: boolean; page?: number; size?: number } = {},
+) => api<PageResponse<ProductQuotation>>(`/api/product-quotations${query(params)}`);
+
+/** POST /api/product-quotations (ADMIN). */
+export const createProductQuotation = (input: { name: string }) =>
+  api<ProductQuotation>('/api/product-quotations', json('POST', input));
+
+/** PATCH /api/product-quotations/{id} (ADMIN): rename. */
+export const updateProductQuotation = (id: number, input: { name: string; version: number }) =>
+  api<ProductQuotation>(`/api/product-quotations/${id}`, json('PATCH', input));
+
+/** PATCH /api/product-quotations/{id}/active (ADMIN). */
+export const setProductQuotationActive = (id: number, active: boolean, version: number) =>
+  api<ProductQuotation>(`/api/product-quotations/${id}/active`, json('PATCH', { active, version }));
 
 // ---------- client assignment ----------
 

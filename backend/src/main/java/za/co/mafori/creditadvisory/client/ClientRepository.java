@@ -15,71 +15,81 @@ import za.co.mafori.creditadvisory.consultant.ConsultantStatus;
 
 public interface ClientRepository extends JpaRepository<Client, Long> {
 
-    /**
-     * Finds a client by the lookup hash of their ID number (never by the plain
-     * number).
-     */
-    Optional<Client> findByIdNumberHash(byte[] idNumberHash);
+        /**
+         * Finds a client by the lookup hash of their ID number (never by the plain
+         * number).
+         */
+        Optional<Client> findByIdNumberHash(byte[] idNumberHash);
 
-    boolean existsByIdNumberHash(byte[] idNumberHash);
+        boolean existsByIdNumberHash(byte[] idNumberHash);
 
-    /** One client with its consultant loaded - for the single-client endpoints. */
-    @EntityGraph(attributePaths = { "currentConsultant" })
-    Optional<Client> findWithCurrentConsultantById(Long id);
+        /**
+         * One client with its consultant, employer and product quotation loaded - for
+         * the single-client endpoints.
+         */
+        @EntityGraph(attributePaths = { "currentConsultant", "employer", "productQuotation" })
+        Optional<Client> findWithCurrentConsultantById(Long id);
 
-    /**
-     * GET /api/clients. Every filter is optional (null / false = no filter).
-     *
-     * @param searchPattern lower-case, escaped LIKE pattern matched against first,
-     *                      last and full name
-     */
-    @EntityGraph(attributePaths = { "currentConsultant" })
-    @Query(value = """
-            select c from Client c left join c.currentConsultant con
-            where (:consultantId is null or con.id = :consultantId)
-              and (:consultantStatus is null or con.status = :consultantStatus)
-              and (:unassignedOnly = false or con is null)
-              and (:searchPattern is null
-                   or lower(c.firstName) like :searchPattern escape '\\'
-                   or lower(c.lastName) like :searchPattern escape '\\'
-                   or lower(concat(c.firstName, ' ', c.lastName)) like :searchPattern escape '\\')
-            """, countQuery = """
-            select count(c) from Client c left join c.currentConsultant con
-            where (:consultantId is null or con.id = :consultantId)
-              and (:consultantStatus is null or con.status = :consultantStatus)
-              and (:unassignedOnly = false or con is null)
-              and (:searchPattern is null
-                   or lower(c.firstName) like :searchPattern escape '\\'
-                   or lower(c.lastName) like :searchPattern escape '\\'
-                   or lower(concat(c.firstName, ' ', c.lastName)) like :searchPattern escape '\\')
-            """)
-    Page<Client> search(@Param("searchPattern") String searchPattern,
-            @Param("consultantId") Long consultantId,
-            @Param("consultantStatus") ConsultantStatus consultantStatus,
-            @Param("unassignedOnly") boolean unassignedOnly,
-            Pageable pageable);
+        /**
+         * GET /api/clients. Every filter is optional (null / false = no filter).
+         *
+         * @param searchPattern lower-case, escaped LIKE pattern matched against first,
+         *                      last and full name
+         * @param fileReference the search when it is digits only, matched exactly
+         *                      against File number and File ID; otherwise null
+         */
+        @EntityGraph(attributePaths = { "currentConsultant", "employer", "productQuotation" })
+        @Query(value = """
+                        select c from Client c left join c.currentConsultant con
+                        where (:consultantId is null or con.id = :consultantId)
+                          and (:consultantStatus is null or con.status = :consultantStatus)
+                          and (:unassignedOnly = false or con is null)
+                          and (:searchPattern is null
+                               or lower(c.firstName) like :searchPattern escape '\\'
+                               or lower(c.lastName) like :searchPattern escape '\\'
+                               or lower(concat(c.firstName, ' ', c.lastName)) like :searchPattern escape '\\'
+                               or c.fileNumber = :fileReference
+                               or c.fileId = :fileReference)
+                        """, countQuery = """
+                        select count(c) from Client c left join c.currentConsultant con
+                        where (:consultantId is null or con.id = :consultantId)
+                          and (:consultantStatus is null or con.status = :consultantStatus)
+                          and (:unassignedOnly = false or con is null)
+                          and (:searchPattern is null
+                               or lower(c.firstName) like :searchPattern escape '\\'
+                               or lower(c.lastName) like :searchPattern escape '\\'
+                               or lower(concat(c.firstName, ' ', c.lastName)) like :searchPattern escape '\\'
+                               or c.fileNumber = :fileReference
+                               or c.fileId = :fileReference)
+                        """)
+        Page<Client> search(@Param("searchPattern") String searchPattern,
+                        @Param("fileReference") String fileReference,
+                        @Param("consultantId") Long consultantId,
+                        @Param("consultantStatus") ConsultantStatus consultantStatus,
+                        @Param("unassignedOnly") boolean unassignedOnly,
+                        Pageable pageable);
 
-    /** Dashboard: clients with no consultant at all. */
-    long countByCurrentConsultantIsNull();
+        /** Dashboard: clients with no consultant at all. */
+        long countByCurrentConsultantIsNull();
 
-    /**
-     * Dashboard: clients still assigned to a consultant whose status is not the
-     * given
-     * one (called with ACTIVE, so: clients whose consultant left or was suspended
-     * and
-     * who still need a handover).
-     */
-    @Query("select count(c) from Client c join c.currentConsultant con where con.status <> :status")
-    long countAssignedToConsultantNotIn(@Param("status") ConsultantStatus status);
+        /**
+         * Dashboard: clients still assigned to a consultant whose status is not the
+         * given
+         * one (called with ACTIVE, so: clients whose consultant left or was suspended
+         * and
+         * who still need a handover).
+         */
+        @Query("select count(c) from Client c join c.currentConsultant con where con.status <> :status")
+        long countAssignedToConsultantNotIn(@Param("status") ConsultantStatus status);
 
-    /**
-     * Loads clients and locks their rows until the transaction ends, so two
-     * transfers of the same
-     * client cannot run at the same time. Ordered by id so concurrent transfers
-     * lock in the same
-     * order and cannot deadlock.
-     */
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select c from Client c where c.id in :ids order by c.id")
-    List<Client> findAllByIdForUpdate(@Param("ids") Collection<Long> ids);
+        /**
+         * Loads clients and locks their rows until the transaction ends, so two
+         * transfers of the same
+         * client cannot run at the same time. Ordered by id so concurrent transfers
+         * lock in the same
+         * order and cannot deadlock.
+         */
+        @Lock(LockModeType.PESSIMISTIC_WRITE)
+        @Query("select c from Client c where c.id in :ids order by c.id")
+        List<Client> findAllByIdForUpdate(@Param("ids") Collection<Long> ids);
 }

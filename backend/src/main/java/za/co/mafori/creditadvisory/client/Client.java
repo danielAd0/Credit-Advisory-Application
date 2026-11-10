@@ -2,6 +2,8 @@ package za.co.mafori.creditadvisory.client;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -14,6 +16,8 @@ import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.time.Instant;
 import za.co.mafori.creditadvisory.consultant.Consultant;
+import za.co.mafori.creditadvisory.employer.Employer;
+import za.co.mafori.creditadvisory.productquotation.ProductQuotation;
 
 /**
  * A client. Maps to the clients table (V2).
@@ -56,9 +60,40 @@ public class Client {
     @Column(name = "email", length = 254)
     private String email;
 
-    /** International format, e.g. +2781234567 */
+    /** The cellphone. International format, e.g. +27821234567 */
     @Column(name = "phone", length = 20)
     private String phone;
+
+    /** Same format as phone (V20). */
+    @Column(name = "work_phone", length = 20)
+    private String workPhone;
+
+    /** Same format as phone (V20). */
+    @Column(name = "home_phone", length = 20)
+    private String homePhone;
+
+    /** Null when unknown, for example a debit-order client from the launch list. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "employer_id")
+    private Employer employer;
+
+    /** Picked from the list admins manage (V20). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "product_quotation_id")
+    private ProductQuotation productQuotation;
+
+    /** The old file number: digits only, kept as text so a leading 0 survives. */
+    @Column(name = "file_number", length = 20)
+    private String fileNumber;
+
+    /** The old file ID: digits only, kept as text. A different thing from the file number. */
+    @Column(name = "file_id", length = 20)
+    private String fileId;
+
+    /** Null means not recorded. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "payment_method", length = 20)
+    private PaymentMethod paymentMethod;
 
     /**
      * Null means unassigned. Change only through methods that also write assignment
@@ -103,12 +138,28 @@ public class Client {
     }
 
     /**
-     * Null clears a value. Email and phone must already be validated and
-     * normalised.
+     * Null clears a value. Every value must already be validated and normalised
+     * (ClientService).
      */
-    public void updateContactDetails(String newEmail, String newPhone) {
+    public void updateContactDetails(String newEmail, String newPhone, String newWorkPhone, String newHomePhone) {
         this.email = newEmail;
         this.phone = newPhone;
+        this.workPhone = newWorkPhone;
+        this.homePhone = newHomePhone;
+    }
+
+    /**
+     * Employer, product quotation, the old file references and the payment method.
+     * Null clears a value. ClientService checks that a newly chosen employer or
+     * product quotation is active.
+     */
+    public void updateWorkDetails(Employer newEmployer, ProductQuotation newProductQuotation, String newFileNumber,
+            String newFileId, PaymentMethod newPaymentMethod) {
+        this.employer = newEmployer;
+        this.productQuotation = newProductQuotation;
+        this.fileNumber = newFileNumber;
+        this.fileId = newFileId;
+        this.paymentMethod = newPaymentMethod;
     }
 
     /**
@@ -199,6 +250,36 @@ public class Client {
 
     public String getPhone() {
         return phone;
+    }
+
+    public String getWorkPhone() {
+        return workPhone;
+    }
+
+    public String getHomePhone() {
+        return homePhone;
+    }
+
+    /** May be null. Lazy: only call inside a transaction. */
+    public Employer getEmployer() {
+        return employer;
+    }
+
+    /** May be null. Lazy: only call inside a transaction. */
+    public ProductQuotation getProductQuotation() {
+        return productQuotation;
+    }
+
+    public String getFileNumber() {
+        return fileNumber;
+    }
+
+    public String getFileId() {
+        return fileId;
+    }
+
+    public PaymentMethod getPaymentMethod() {
+        return paymentMethod;
     }
 
     /** May be null. Lazy: only call inside a transaction. */

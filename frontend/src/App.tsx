@@ -16,6 +16,7 @@ import EditClientPage from './pages/EditClientPage';
 import ImportPage from './pages/ImportPage';
 import LoginPage from './pages/LoginPage';
 import EmployersPage from './pages/EmployersPage';
+import ProductQuotationsPage from './pages/ProductQuotationsPage';
 import ProductsPage from './pages/ProductsPage';
 import ReportsPage from './pages/ReportsPage';
 import ReassignPage from './pages/ReassignPage';
@@ -65,6 +66,14 @@ export default function App() {
               <Route path="reports" element={<ReportsPage />} />
               <Route path="products" element={<ProductsPage />} />
               <Route path="employers" element={<EmployersPage />} />
+              <Route
+                path="product-quotations"
+                element={
+                  <RequireRole roles={managers}>
+                    <ProductQuotationsPage />
+                  </RequireRole>
+                }
+              />
               <Route
                 path="reassign"
                 element={

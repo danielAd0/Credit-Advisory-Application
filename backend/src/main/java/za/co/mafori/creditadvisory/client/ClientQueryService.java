@@ -1,6 +1,8 @@
 package za.co.mafori.creditadvisory.client;
 
 import java.util.List;
+import java.util.Map;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
@@ -20,9 +22,11 @@ public class ClientQueryService {
     private static final int MAX_PAGE_SIZE = 100;
 
     private final ClientRepository clients;
+    private final ClientLatestSales latestSales;
 
-    public ClientQueryService(ClientRepository clients) {
+    public ClientQueryService(ClientRepository clients, ClientLatestSales latestSales) {
         this.clients = clients;
+        this.latestSales = latestSales;
     }
 
     /**
@@ -62,10 +66,24 @@ public class ClientQueryService {
 
         PageRequest pageable = PageRequest.of(safePage, safeSize,
                 Sort.by("lastName").and(Sort.by("firstName")).and(Sort.by("id")));
-        return PageResponse.of(
-                clients.search(LikePattern.contains(search), effectiveConsultantId, effectiveStatus,
-                        effectiveUnassigned, pageable),
-                ClientListItem::from);
+        Page<Client> found = clients.search(LikePattern.contains(search), fileReference(search),
+                effectiveConsultantId, effectiveStatus, effectiveUnassigned, pageable);
+        // Payment term and structure come from each client's latest sale: one query
+        // for the whole page.
+        Map<Long, LatestSale> latest = latestSales.forClients(found.getContent().stream().map(Client::getId).toList());
+        return PageResponse.of(found, client -> ClientListItem.from(client, latest.get(client.getId())));
+    }
+
+    /**
+     * A search of digits only may be a File number or File ID: those are matched
+     * exactly, next to the name search.
+     */
+    static String fileReference(String search) {
+        if (search == null) {
+            return null;
+        }
+        String trimmed = search.strip();
+        return trimmed.matches("[0-9]{1,20}") ? trimmed : null;
     }
 
     public static boolean seesAllClients(AppUserPrincipal caller) {
