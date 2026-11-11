@@ -7,6 +7,7 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.TemporalAdjusters;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -16,6 +17,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import za.co.mafori.creditadvisory.audit.AuditLogWriter;
@@ -40,6 +42,7 @@ public class SaleService {
     static final ZoneId BUSINESS_ZONE = ZoneId.of("Africa/Johannesburg");
 
     private final JdbcTemplate jdbc;
+    private final NamedParameterJdbcTemplate named;
     private final ClientRepository clients;
     private final ConsultantRepository consultants;
     private final AuditLogWriter audit;
@@ -47,6 +50,7 @@ public class SaleService {
     public SaleService(JdbcTemplate jdbc, ClientRepository clients, ConsultantRepository consultants,
             AuditLogWriter audit) {
         this.jdbc = jdbc;
+        this.named = new NamedParameterJdbcTemplate(jdbc);
         this.clients = clients;
         this.consultants = consultants;
         this.audit = audit;
@@ -69,7 +73,7 @@ public class SaleService {
 
     @Transactional(readOnly = true)
     public List<NamedOption> structures() {
-        return jdbc.query("select id, name from structures order by lower(name), id",
+        return jdbc.query("select id, name from structures where active order by lower(name), id",
                 (rs, n) -> new NamedOption(rs.getLong(1), rs.getString(2)));
     }
 
@@ -273,45 +277,95 @@ public class SaleService {
         if (id == null) {
             return null;
         }
-        if (jdbc.queryForList("select id from structures where id = ?", Long.class, id).isEmpty()) {
+        List<Boolean> active = jdbc.queryForList("select active from structures where id = ?", Boolean.class, id);
+        if (active.isEmpty()) {
             throw ApiException.notFound("structure:not-found", "Structure " + id + " does not exist.");
+        }
+        if (!Boolean.TRUE.equals(active.get(0))) {
+            throw ApiException.unprocessable("sale:structure-not-active", "Structure not active",
+                    "This structure is no longer used. Choose another one.");
         }
         return id;
     }
 
-    // ---------- reading a sale back ----------
+    // ---------- GET /api/transactions ----------
+
+    /** Most sales one list answers; the newest come first. */
+    static final int LIST_LIMIT = 200;
+
+    /**
+     * A client's sales, newest first: typed-in ones (also those an import has
+     * since replaced, marked replaced) and the live imported ones. Rows an
+     * import re-run superseded are left out, as in the reports.
+     */
+    @Transactional(readOnly = true)
+    public List<SavedSale> list(AppUserPrincipal caller, long clientId, LocalDate from, LocalDate to) {
+        if (from != null && to != null && from.isAfter(to)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "sale:invalid-date-range", "Invalid dates",
+                    "'from' must be on or before 'to'.");
+        }
+        clients.findWithCurrentConsultantById(clientId)
+                .filter(c -> ClientService.isVisibleTo(c, caller))
+                .orElseThrow(() -> ApiException.notFound("client:not-found",
+                        "Client " + clientId + " does not exist, or you do not have access to them."));
+        List<Long> ids = jdbc.queryForList("""
+                select t.id from client_transactions t
+                where t.client_id = ?
+                  and (t.import_job_id is null or t.superseded_by_import_job_id is null)
+                  and t.transaction_date >= coalesce(?::date, '-infinity'::date)
+                  and t.transaction_date <= coalesce(?::date, 'infinity'::date)
+                order by t.transaction_date desc, t.id desc
+                limit ?
+                """, Long.class, clientId, from, to, LIST_LIMIT);
+        return loadAll(ids);
+    }
+
+    // ---------- reading sales back ----------
 
     private SavedSale load(long saleId) {
-        List<SavedSale.Line> lines = jdbc.query("""
-                select l.product_id, p.name, l.amount, l.counts_toward_quotation, l.counts_toward_banked
-                from client_transaction_lines l join products p on p.id = l.product_id
-                where l.transaction_id = ?
-                order by p.display_order, p.id
-                """, (rs, n) -> new SavedSale.Line(rs.getLong(1), rs.getString(2), rs.getBigDecimal(3),
-                rs.getBoolean(4), rs.getBoolean(5)), saleId);
-        BigDecimal quotation = BigDecimal.ZERO.setScale(2);
-        BigDecimal banked = BigDecimal.ZERO.setScale(2);
-        for (SavedSale.Line line : lines) {
-            if (line.countsTowardQuotation()) {
-                quotation = quotation.add(line.amount());
-            }
-            if (line.countsTowardBanked()) {
-                banked = banked.add(line.amount());
-            }
+        return loadAll(List.of(saleId)).get(0);
+    }
+
+    /** The sales with these ids, in the same order, with two queries in all. */
+    private List<SavedSale> loadAll(List<Long> ids) {
+        if (ids.isEmpty()) {
+            return List.of();
         }
-        BigDecimal quotationTotal = quotation;
-        BigDecimal bankedTotal = banked;
-        return jdbc.queryForObject("""
+        Map<String, Object> params = Map.of("ids", ids);
+        Map<Long, List<SavedSale.Line>> linesBySale = new HashMap<>();
+        named.query("""
+                select l.transaction_id, l.product_id, p.name, l.amount, l.counts_toward_quotation,
+                       l.counts_toward_banked
+                from client_transaction_lines l join products p on p.id = l.product_id
+                where l.transaction_id in (:ids)
+                order by p.display_order, p.id
+                """, params, rs -> {
+            linesBySale.computeIfAbsent(rs.getLong(1), k -> new ArrayList<>()).add(new SavedSale.Line(rs.getLong(2),
+                    rs.getString(3), rs.getBigDecimal(4), rs.getBoolean(5), rs.getBoolean(6)));
+        });
+        Map<Long, SavedSale> byId = new HashMap<>();
+        named.query("""
                 select t.id, t.client_id, t.consultant_id, t.transaction_date, w.week_starting, t.day_of_week,
-                       t.superseded_by_import_job_id is not null
-                from client_transactions t join reporting_weeks w on w.id = t.reporting_week_id
-                where t.id = ?
-                """, (rs, n) -> {
-            long consultant = rs.getLong(3);
-            Long consultantId = rs.wasNull() ? null : consultant;
-            return new SavedSale(rs.getLong(1), rs.getLong(2), consultantId, rs.getObject(4, LocalDate.class),
-                    rs.getObject(5, LocalDate.class), rs.getInt(6), lines, quotationTotal, bankedTotal,
-                    rs.getBoolean(7));
-        }, saleId);
+                       t.superseded_by_import_job_id is not null, t.import_job_id is null
+                from client_transactions t left join reporting_weeks w on w.id = t.reporting_week_id
+                where t.id in (:ids)
+                """, params, rs -> {
+            long id = rs.getLong(1);
+            List<SavedSale.Line> lines = linesBySale.getOrDefault(id, List.of());
+            BigDecimal quotation = BigDecimal.ZERO.setScale(2);
+            BigDecimal banked = BigDecimal.ZERO.setScale(2);
+            for (SavedSale.Line line : lines) {
+                if (line.countsTowardQuotation()) {
+                    quotation = quotation.add(line.amount());
+                }
+                if (line.countsTowardBanked()) {
+                    banked = banked.add(line.amount());
+                }
+            }
+            byId.put(id, new SavedSale(id, rs.getLong(2), rs.getObject(3, Long.class),
+                    rs.getObject(4, LocalDate.class), rs.getObject(5, LocalDate.class),
+                    rs.getObject(6, Integer.class), lines, quotation, banked, rs.getBoolean(7), rs.getBoolean(8)));
+        });
+        return ids.stream().map(byId::get).toList();
     }
 }

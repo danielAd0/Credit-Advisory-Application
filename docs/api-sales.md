@@ -34,12 +34,16 @@ The consultant must be ACTIVE.
 **Who:** everyone signed in. **200** - the active payment terms, sorted by name:
 
 ```json
-[ { "id": 1, "name": "Once off payment" } ]
+[ { "id": 1, "name": "Once off payment" }, { "id": 3, "name": "Within 12 months" } ]
 ```
 
 ### GET /api/structures
 
-**Who:** everyone signed in. **200** - every structure, sorted by name: `[ { "id": 2, "name": "Vital" } ]`
+**Who:** everyone signed in. **200** - the active structures, sorted by name, spelled as in the weekly register:
+
+```json
+[ { "id": 3, "name": "MAFORI CREDIT" }, { "id": 2, "name": "VITAL CREDIT" } ]
+```
 
 ### POST /api/transactions
 
@@ -65,7 +69,7 @@ and answers `200` with the sale saved the first time.
   "paymentTermId": 1,
   "employerId": 12,
   "structureId": 2,
-  "primaryStructureBudgetList": "Vital",
+  "primaryStructureBudgetList": "VITAL CREDIT",
   "primaryStructureLoanAmount": 2500,
   "secondaryStructureBudgetList": null,
   "secondaryStructureLoanAmount": null
@@ -81,7 +85,7 @@ and answers `200` with the sale saved the first time.
 | `amountToClient`, `thirdPartySettlement`, the two loan amounts | optional; 0 or more |
 | `paymentTermId` | optional; an active payment term |
 | `employerId` | optional; an active employer |
-| `structureId` | optional; an existing structure |
+| `structureId` | optional; an active structure |
 | the two budget lists | optional; max 500, trimmed, blank means none. The budget report groups by these |
 
 **201 Created** (or **200** for a key used before):
@@ -100,12 +104,14 @@ and answers `200` with the sale saved the first time.
   ],
   "quotationTotal": 1800.50,
   "bankedTotal": 1500.00,
-  "replaced": false
+  "replaced": false,
+  "typedIn": true
 }
 ```
 
 `quotationTotal` and `bankedTotal` follow each product's "counts toward" settings, the same as the reports.
-`replaced` is `true` once that week's spreadsheet has been imported.
+`replaced` is `true` once that week's spreadsheet has been imported. `typedIn` is `false` for a sale from an
+import (only in `GET /api/transactions`). The response never holds an ID number or other client details.
 
 **Errors**
 
@@ -123,11 +129,25 @@ and answers `200` with the sale saved the first time.
 | 422 | `sale:date-in-future` | `transactionDate` after today |
 | 422 | `sale:consultant-required` | MANAGER / ADMIN, no `consultantId`, and the client has no consultant |
 | 422 | `sale:consultant-not-active` | the consultant is INACTIVE or SUSPENDED |
-| 422 | `sale:product-not-active`, `sale:employer-not-active`, `sale:payment-term-not-active` | a deactivated entry |
+| 422 | `sale:product-not-active`, `sale:employer-not-active`, `sale:payment-term-not-active`, `sale:structure-not-active` | a deactivated entry |
 
 **Audit:** `SALE_CAPTURED`, target `TRANSACTION` / the sale id, with `clientId`, `consultantId`, `transactionDate`
 and `products` (how many lines). Never amounts or client details. The import's `IMPORT_CONFIRMED` entry records
 `replacedTypedInSales`.
+
+### GET /api/transactions?clientId=&from=&to=
+
+**Who:** everyone signed in; a CONSULTANT only for their own clients (others are `404 client:not-found`).
+
+| Param | Rules |
+|---|---|
+| `clientId` | required |
+| `from`, `to` | optional dates (`2026-09-14`), both inclusive; `from` after `to` is `400 sale:invalid-date-range` |
+
+**200** - the client's sales, newest first, at most 200, each shaped like the POST answer above. It holds the
+typed-in sales (also those an import has since replaced, with `replaced: true`) and the live imported ones; rows a
+re-import superseded are left out, as in the reports. Imported sales from before V13 may have `weekStarting` and
+`dayOfWeek` null.
 
 ## 4. Not built yet
 

@@ -13,8 +13,8 @@ import za.co.mafori.creditadvisory.support.ApiTestBase;
 import za.co.mafori.creditadvisory.user.RoleName;
 
 /**
- * Sales typed in on the Consultant actions page: POST /api/transactions and its
- * dropdowns (docs/api-sales.md). The week of 14 Sept 2026 has no import.
+ * Sales typed in on the Consultant actions page: POST and GET
+ * /api/transactions and the dropdowns (docs/api-sales.md). The week of 14 Sept 2026 has no import.
  */
 class SaleApiTest extends ApiTestBase {
 
@@ -242,7 +242,55 @@ class SaleApiTest extends ApiTestBase {
 
     @Test
     void paymentTermsAndStructuresForTheDropdowns() {
-        assertThat(thandi.get("/api/payment-terms").texts("$[*].name")).contains("Once off payment");
-        assertThat(thandi.get("/api/structures").texts("$[*].name")).contains("Vital");
+        assertThat(thandi.get("/api/payment-terms").texts("$[*].name"))
+                .containsExactly("Once off payment", "Within 12 months");
+        assertThat(thandi.get("/api/structures").texts("$[*].name"))
+                .containsExactly("MAFORI CREDIT", "VITAL CREDIT");
+
+        jdbc.update("update structures set active = false where name = 'MAFORI CREDIT'");
+        assertThat(thandi.get("/api/structures").texts("$[*].name")).containsExactly("VITAL CREDIT");
+    }
+
+    @Test
+    void anInactiveStructureIsRefused() {
+        long mafori = count("select id from structures where name = 'MAFORI CREDIT'");
+        jdbc.update("update structures set active = false where id = ?", mafori);
+
+        ApiClient.Response refused = capture(thandi, newKey(),
+                body(thandisClient, TUESDAY, twoLines(), ",\"structureId\":" + mafori));
+        assertThat(refused.status()).isEqualTo(422);
+        assertThat(refused.text("$.type")).isEqualTo("urn:credit-advisory:sale:structure-not-active");
+    }
+
+    // ---------- reading back ----------
+
+    @Test
+    void aClientsSalesCanBeReadBack() {
+        long saved = capture(thandi, newKey(), body(thandisClient, TUESDAY, twoLines(), "")).number("$.id");
+        long earlier = capture(thandi, newKey(), body(thandisClient, "2026-09-01",
+                "{\"productId\":%d,\"amount\":100}".formatted(combo), "")).number("$.id");
+        capture(manager, newKey(), body(siphosClient, TUESDAY, twoLines(), ""));
+
+        ApiClient.Response all = thandi.get("/api/transactions?clientId=" + thandisClient);
+        assertThat(all.status()).as(all.body()).isEqualTo(200);
+        assertThat(all.size("$")).as("newest first, only this client").isEqualTo(2);
+        assertThat(all.number("$[0].id")).isEqualTo(saved);
+        assertThat(all.number("$[1].id")).isEqualTo(earlier);
+        assertThat(money(all, "$[0].quotationTotal")).isEqualTo(1800.5);
+        assertThat(money(all, "$[0].bankedTotal")).isEqualTo(1500.0);
+        assertThat(all.size("$[0].lines")).isEqualTo(2);
+        assertThat(all.value("$[0].typedIn")).isEqualTo(true);
+        assertThat(all.body()).doesNotContain("idNumber");
+
+        ApiClient.Response week = thandi.get(
+                "/api/transactions?clientId=" + thandisClient + "&from=2026-09-14&to=2026-09-20");
+        assertThat(week.size("$")).isEqualTo(1);
+        assertThat(week.number("$[0].id")).isEqualTo(saved);
+
+        assertThat(thandi.get("/api/transactions?clientId=" + thandisClient + "&from=2026-09-20&to=2026-09-14")
+                .text("$.type")).isEqualTo("urn:credit-advisory:sale:invalid-date-range");
+        assertThat(thandi.get("/api/transactions?clientId=" + siphosClient).status())
+                .as("someone else's client looks missing").isEqualTo(404);
+        assertThat(manager.get("/api/transactions?clientId=" + siphosClient).size("$")).isEqualTo(1);
     }
 }

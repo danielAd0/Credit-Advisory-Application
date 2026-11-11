@@ -41,6 +41,10 @@ export interface SavedTransaction {
   lines: SavedLine[];
   quotationTotal: number;
   bankedTotal: number;
+  /** True once that week's spreadsheet is imported: the imported rows count instead. */
+  replaced?: boolean;
+  /** False for a sale from a weekly register import (GET /api/transactions only). */
+  typedIn?: boolean;
 }
 
 export interface CaptureLists {
