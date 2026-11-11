@@ -112,11 +112,13 @@ export default function ClientsPage() {
           aria-label="Search clients"
           autoComplete="off"
         />
-        <Link className="btn primary" to="/clients/new">
-          Add client
-        </Link>
+        {!isManager && (
+          <Link className="btn primary" to="/clients/new">
+            Add client
+          </Link>
+        )}
         {isManager && features.import && (
-          <Link className="btn" to="/import">
+          <Link className="btn primary" to="/import">
             Import from Excel
           </Link>
         )}

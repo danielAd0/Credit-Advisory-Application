@@ -202,9 +202,7 @@ export default function AddClientPage() {
         {forSale ? (
           <>After saving, you go straight back to the sale with this client chosen.</>
         ) : (
-          <>
-            Enter one new client by hand. To add many at once, use <Link to="/import">Import</Link>.
-          </>
+          <>Enter the new client&rsquo;s details.</>
         )}
       </p>
 
