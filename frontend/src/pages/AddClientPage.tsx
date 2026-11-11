@@ -1,5 +1,5 @@
 import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ApiError, data, detailOf, type ClientSummary, type ConsultantSummary } from '../api';
 import { clientName } from '../api/names';
 import { hasAnyRole, useSession } from '../auth/useAuth';
@@ -63,6 +63,9 @@ function explain(err: unknown): string {
 export default function AddClientPage() {
   const session = useSession();
   const isManager = hasAnyRole(session, ['ADMIN', 'MANAGER']);
+  const navigate = useNavigate();
+  // Came from "No client found" on the Consultant actions page: go back there with this client.
+  const forSale = useSearchParams()[0].get('for') === 'sale';
   const [values, setValues] = useState<Form>(EMPTY);
   const [errors, setErrors] = useState<Errors>({});
   const [consultants, setConsultants] = useState<ConsultantSummary[]>([]);
@@ -109,8 +112,12 @@ export default function AddClientPage() {
         email: values.email.trim(),
         consultantId: isManager && values.consultantId ? Number(values.consultantId) : null,
       });
-      setSaved(created);
       setValues(EMPTY); // clear the ID number from memory straight away
+      if (forSale) {
+        navigate(`/consultant-actions?clientId=${created.id}`, { replace: true });
+        return;
+      }
+      setSaved(created);
     } catch (err) {
       setFailure(explain(err));
     } finally {
@@ -134,7 +141,10 @@ export default function AddClientPage() {
             .
           </p>
           <div className="ac-actions">
-            <button type="button" className="btn primary" onClick={() => setSaved(null)}>
+            <Link className="btn primary" to={`/consultant-actions?clientId=${saved.id}`}>
+              Capture a sale for this client
+            </Link>
+            <button type="button" className="btn" onClick={() => setSaved(null)}>
               Add another client
             </button>
             <Link className="btn" to="/clients">
@@ -189,7 +199,11 @@ export default function AddClientPage() {
     <div className="ac">
       <h1>Add client</h1>
       <p className="muted">
-        Enter one new client by hand. To add many at once, use <Link to="/import">Import</Link>.
+        {forSale ? (
+          <>After saving, you go straight back to the sale with this client chosen.</>
+        ) : (
+          <>Enter the new client&rsquo;s details.</>
+        )}
       </p>
 
       <form className="ac-card" onSubmit={submit} noValidate>
@@ -229,7 +243,7 @@ export default function AddClientPage() {
           <button type="submit" className="btn primary" disabled={saving}>
             {saving ? 'Saving...' : 'Save client'}
           </button>
-          <Link className="btn" to="/clients">
+          <Link className="btn" to={forSale ? '/consultant-actions' : '/clients'}>
             Cancel
           </Link>
         </div>

@@ -18,6 +18,23 @@ class UserAdminApiTest extends ApiTestBase {
     }
 
     @Test
+    void usersCanBeListedByRole() {
+        createUser("manager@test.local", null, RoleName.MANAGER);
+        createUser("boss@test.local", null, RoleName.MANAGER, RoleName.ADMIN);
+        ApiClient admin = signIn(ADMIN_EMAIL);
+
+        ApiClient.Response managers = admin.get("/api/users?role=MANAGER");
+        assertThat(managers.status()).as(managers.body()).isEqualTo(200);
+        assertThat(managers.texts("$.items[*].email")).containsExactly("boss@test.local", "manager@test.local");
+        assertThat(managers.number("$.totalItems")).isEqualTo(2);
+
+        ApiClient.Response searched = admin.get("/api/users?role=MANAGER&search=boss");
+        assertThat(searched.texts("$.items[*].email")).containsExactly("boss@test.local");
+
+        assertThat(admin.get("/api/users?role=NOBODY").status()).isEqualTo(400);
+    }
+
+    @Test
     void adminCreatesAConsultantLogin() {
         long consultantId = createConsultant("C001", "Thandi Test");
         ApiClient admin = signIn(ADMIN_EMAIL);
@@ -52,6 +69,55 @@ class UserAdminApiTest extends ApiTestBase {
                  "roles":["CONSULTANT"],"consultantId":%d}""".formatted(consultantId));
         assertThat(alreadyLinked.status()).isEqualTo(409);
         assertThat(alreadyLinked.text("$.type")).isEqualTo("urn:credit-advisory:user:consultant-already-linked");
+    }
+
+    @Test
+    void aLoginCannotBeBothManagerAndConsultant() {
+        long consultantId = createConsultant("C001", "Thandi Test");
+        long managerId = createUser("manager@test.local", null, RoleName.MANAGER);
+        long consultantUserId = createUser("thandi@test.local", consultantId, RoleName.CONSULTANT);
+        ApiClient admin = signIn(ADMIN_EMAIL);
+        String conflict = "urn:credit-advisory:user:manager-cannot-be-consultant";
+
+        ApiClient.Response bothRoles = admin.post("/api/users", """
+                {"email":"both@test.local","temporaryPassword":"Temp-Password-2026",
+                 "roles":["MANAGER","CONSULTANT"],"consultantId":%d}""".formatted(createConsultant("C002", "B")));
+        assertThat(bothRoles.status()).as(bothRoles.body()).isEqualTo(422);
+        assertThat(bothRoles.text("$.type")).isEqualTo(conflict);
+
+        ApiClient.Response managerWithLink = admin.post("/api/users", """
+                {"email":"linked@test.local","temporaryPassword":"Temp-Password-2026",
+                 "roles":["MANAGER"],"consultantId":%d}""".formatted(createConsultant("C003", "C")));
+        assertThat(managerWithLink.status()).isEqualTo(422);
+        assertThat(managerWithLink.text("$.type")).isEqualTo(conflict);
+
+        ApiClient.Response promote = admin.patch("/api/users/" + consultantUserId + "/roles", """
+                {"roles":["CONSULTANT","MANAGER"],"version":%d}""".formatted(userVersion(admin, consultantUserId)));
+        assertThat(promote.status()).isEqualTo(422);
+        assertThat(promote.text("$.type")).isEqualTo(conflict);
+
+        ApiClient.Response link = admin.patch("/api/users/" + managerId + "/consultant", """
+                {"consultantId":%d,"version":%d}""".formatted(createConsultant("C004", "D"),
+                userVersion(admin, managerId)));
+        assertThat(link.status()).isEqualTo(422);
+        assertThat(link.text("$.type")).isEqualTo(conflict);
+    }
+
+    @Test
+    void anOldManagerConsultantLoginCanBeSplitUp() {
+        // Accounts created before the rule may still hold both roles.
+        long consultantId = createConsultant("C001", "Thandi Test");
+        long mixedId = createUser("mixed@test.local", consultantId, RoleName.MANAGER, RoleName.CONSULTANT);
+        ApiClient admin = signIn(ADMIN_EMAIL);
+
+        ApiClient.Response dropConsultant = admin.patch("/api/users/" + mixedId + "/roles", """
+                {"roles":["MANAGER"],"version":%d}""".formatted(userVersion(admin, mixedId)));
+        assertThat(dropConsultant.status()).as(dropConsultant.body()).isEqualTo(200);
+
+        ApiClient.Response unlink = admin.patch("/api/users/" + mixedId + "/consultant", """
+                {"consultantId":null,"version":%d}""".formatted(userVersion(admin, mixedId)));
+        assertThat(unlink.status()).as(unlink.body()).isEqualTo(200);
+        assertThat(unlink.value("$.consultant")).isNull();
     }
 
     @Test

@@ -7,9 +7,18 @@ interface Props {
   value: string;
   onChange: (value: string) => void;
   error?: string;
+  /** Who receives the password, for the hint. */
+  recipient?: string;
 }
 
-export default function TempPassword({ id, label, value, onChange, error }: Props) {
+export default function TempPassword({
+  id,
+  label,
+  value,
+  onChange,
+  error,
+  recipient = 'consultant',
+}: Props) {
   const [show, setShow] = useState(false);
 
   return (
@@ -42,7 +51,7 @@ export default function TempPassword({ id, label, value, onChange, error }: Prop
       </div>
       <p id={`${id}-hint`} className={error ? 'ac-err' : 'ac-hint'}>
         {error ??
-          'At least 12 characters. Give it to the consultant in person; they must change it.'}
+          `At least 12 characters. Give it to the ${recipient} in person; they must change it.`}
       </p>
     </div>
   );

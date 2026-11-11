@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   ApiError,
   data,
@@ -102,6 +102,13 @@ const NO_EXTRAS: Extras = {
   secondaryLoan: '',
 };
 
+/**
+ * The sale's employer starts as the client's own employer. A deactivated employer is not in the
+ * dropdown, so it starts empty then.
+ */
+const employerOf = (c: ClientSummary): string =>
+  c.employer && c.employer.active ? String(c.employer.id) : '';
+
 function ClientPicker({ onPick }: { onPick: (c: ClientSummary) => void }) {
   const [text, setText] = useState('');
   const [results, setResults] = useState<ClientSummary[]>([]);
@@ -167,7 +174,10 @@ function ClientPicker({ onPick }: { onPick: (c: ClientSummary) => void }) {
       />
       {showing && state === 'searching' && <p className="ca-hint">Searching...</p>}
       {showing && state === 'none' && (
-        <p className="ca-hint">No client found. Clients are added on the Clients page.</p>
+        <p className="ca-hint">
+          No client found. <Link to="/clients/new?for=sale">Add a new client</Link> and you will
+          come straight back here.
+        </p>
       )}
       {showing && state === 'failed' && (
         <p className="ca-err" role="alert">
@@ -213,6 +223,12 @@ export default function ConsultantActionsPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState<SavedTransaction | null>(null);
   const [key, setKey] = useState(() => crypto.randomUUID());
+  const [notice, setNotice] = useState<string | null>(null);
+
+  // Opened from the Clients page ("Capture sale"): /consultant-actions?clientId=12.
+  // The internal client number only, never the ID number.
+  const [params] = useSearchParams();
+  const wanted = Number(params.get('clientId')) || null;
 
   useEffect(() => {
     let live = true;
@@ -241,7 +257,6 @@ export default function ConsultantActionsPage() {
     };
   }, [manager]);
 
-  // const products = load.kind === 'ready' ? load.lists.products : [];
   const products = useMemo(() => (load.kind === 'ready' ? load.lists.products : []), [load]);
   const groups = useMemo(() => groupProducts(products), [products]);
 
@@ -265,11 +280,32 @@ export default function ConsultantActionsPage() {
       setErrors((x) => ({ ...x, [name]: undefined }));
     };
 
-  const pickClient = (c: ClientSummary) => {
+  const pickClient = useCallback((c: ClientSummary) => {
     setClient(c);
     setConsultantId(c.consultant ? String(c.consultant.id) : '');
+    setExtras((x) => ({ ...x, employerId: employerOf(c) }));
     setErrors((x) => ({ ...x, client: undefined }));
+    setNotice(null);
+  }, []);
+
+  const changeClient = () => {
+    setClient(null);
+    setExtras((x) => ({ ...x, employerId: '' }));
   };
+
+  useEffect(() => {
+    if (!wanted) return;
+    let live = true;
+    data
+      .getClient(wanted)
+      .then((c) => live && pickClient(c))
+      .catch(
+        () => live && setNotice('That client could not be opened. Search for them below instead.'),
+      );
+    return () => {
+      live = false;
+    };
+  }, [wanted, pickClient]);
 
   function validate(): Errors {
     const e: Errors = {};
@@ -340,11 +376,11 @@ export default function ConsultantActionsPage() {
   function again(keepClient: boolean) {
     setSaved(null);
     setAmounts(prefill(products));
-    setExtras(NO_EXTRAS);
+    setExtras(keepClient && client ? { ...NO_EXTRAS, employerId: employerOf(client) } : NO_EXTRAS);
     setErrors({});
     setFailure(null);
     setKey(crypto.randomUUID());
-    if (!keepClient) setClient(null);
+    if (!keepClient) changeClient();
   }
 
   if (load.kind === 'loading') return <p className="center-msg">Loading...</p>;
@@ -385,7 +421,7 @@ export default function ConsultantActionsPage() {
               Banked total <strong>{rand(Math.round(saved.bankedTotal * 100))}</strong>
             </span>
           </p>
-          <div className="ca-actions">
+          <div className="ca-done-actions">
             <button type="button" className="btn primary" onClick={() => again(true)}>
               Capture another sale for this client
             </button>
@@ -417,7 +453,12 @@ export default function ConsultantActionsPage() {
     </div>
   );
 
-  const select = (name: keyof Extras, label: string, options: { id: number; name: string }[]) => (
+  const select = (
+    name: keyof Extras,
+    label: string,
+    options: { id: number; name: string }[],
+    hint?: string,
+  ) => (
     <div className="ca-field">
       <label htmlFor={`ca-${name}`}>{label}</label>
       <select id={`ca-${name}`} value={extras[name]} onChange={setExtra(name)}>
@@ -428,8 +469,12 @@ export default function ConsultantActionsPage() {
           </option>
         ))}
       </select>
+      {hint && <p className="ca-hint">{hint}</p>}
     </div>
   );
+
+  const employerFromClient =
+    client !== null && extras.employerId !== '' && extras.employerId === employerOf(client);
 
   const picked = (list: { id: number; name: string }[] | null, value: string) =>
     list?.find((o) => String(o.id) === value)?.name;
@@ -444,6 +489,11 @@ export default function ConsultantActionsPage() {
           {failure && (
             <p className="alert error" role="alert">
               {failure}
+            </p>
+          )}
+          {notice && !client && (
+            <p className="alert error" role="alert">
+              {notice}
             </p>
           )}
 
@@ -461,7 +511,7 @@ export default function ConsultantActionsPage() {
                   </span>
                 </p>
                 <RevealIdNumber clientId={client.id} masked={client.idNumberMasked} />
-                <button type="button" className="btn" onClick={() => setClient(null)}>
+                <button type="button" className="btn" onClick={changeClient}>
                   Change client
                 </button>
               </div>
@@ -552,7 +602,15 @@ export default function ConsultantActionsPage() {
               {lists.paymentTerms &&
                 lists.paymentTerms.length > 0 &&
                 select('paymentTermId', 'Payment term', lists.paymentTerms)}
-              {lists.employers.length > 0 && select('employerId', 'Employer', lists.employers)}
+              {lists.employers.length > 0 &&
+                select(
+                  'employerId',
+                  'Employer',
+                  lists.employers,
+                  employerFromClient
+                    ? "The client's employer. Change it only if this sale is for another one."
+                    : undefined,
+                )}
               {lists.structures &&
                 lists.structures.length > 0 &&
                 select('structureId', 'Structure', lists.structures)}

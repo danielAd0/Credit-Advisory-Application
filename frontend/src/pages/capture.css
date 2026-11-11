@@ -235,14 +235,15 @@
   max-width: 34rem;
 }
 
-.ca-actions {
+/* Not .ca-actions: clientsactions.css uses that name for the Clients table cell. */
+.ca-done-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.6rem;
   margin-top: 1rem;
 }
 
-.ca-actions .btn {
+.ca-done-actions .btn {
   text-decoration: none;
   display: inline-block;
 }

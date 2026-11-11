@@ -62,6 +62,7 @@ const ACTIONS: Partial<Record<string, string>> = {
   PRODUCT_QUOTATION_UPDATED: 'Product quotation renamed',
   PRODUCT_QUOTATION_ACTIVATED: 'Product quotation activated',
   PRODUCT_QUOTATION_DEACTIVATED: 'Product quotation deactivated',
+  SALE_CAPTURED: 'Sale typed in',
 };
 
 const KEYS: Partial<Record<string, string>> = {
@@ -89,6 +90,10 @@ const KEYS: Partial<Record<string, string>> = {
   hadMfa: 'Had two-step sign-in',
   remaining: 'Recovery codes left',
   recoveryCodes: 'Recovery codes',
+  clientId: 'Client #',
+  transactionDate: 'Date',
+  products: 'Products',
+  replacedTypedInSales: 'Typed-in sales replaced',
 };
 
 const TARGETS = [
@@ -100,6 +105,7 @@ const TARGETS = [
   'EMPLOYER',
   'PRODUCT',
   'PRODUCT_QUOTATION',
+  'TRANSACTION',
 ];
 
 /** PRODUCT_QUOTATION -> Product quotation. */

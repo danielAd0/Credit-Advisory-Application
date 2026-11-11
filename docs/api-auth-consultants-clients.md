@@ -146,6 +146,7 @@ Every successful change below writes one row to `audit_logs` in the **same trans
 | `CASE_UPDATED`                   | case                         | `fields`: the names of the fields that changed; `fromStatus`, `toStatus` when the status changed. Never the title                     |
 | `CASE_NOTE_ADDED`                | case                         | `noteId`. Never the note text                                                                                                         |
 | `REPORT_EXPORTED` | - | `report`, `weekStarting`, `scope`, `consultantId` (see `docs/api-reports.md` section 7) |
+| `SALE_CAPTURED` | transaction | `clientId`, `consultantId`, `transactionDate`, `products` (number of lines). Never amounts (see `docs/api-sales.md`) |
 | `PRODUCT_QUOTATION_CREATED` | product quotation | `name` (see `docs/api-admin.md`) |
 | `PRODUCT_QUOTATION_UPDATED` | product quotation | `from`, `to` (old and new name) |
 | `PRODUCT_QUOTATION_ACTIVATED` / `PRODUCT_QUOTATION_DEACTIVATED` | product quotation | `name` |
@@ -963,6 +964,7 @@ The password (and its hash) is never returned.
 
 - A user with the `CONSULTANT` role must be linked to a consultant record.
 - Only an ACTIVE consultant can be linked, and each consultant can have at most one login.
+- A login is a manager **or** a consultant, never both: `MANAGER` cannot be combined with the `CONSULTANT` role or a consultant link (`422 urn:credit-advisory:user:manager-cannot-be-consultant`). A manager who still has both from before this rule can drop `CONSULTANT` and then be unlinked.
 - The last enabled ADMIN cannot be disabled or lose the `ADMIN` role, so there is always someone who can manage users.
 - Emails are stored trimmed and lower-case, and must be unique.
 - Changing a user's roles, consultant link or enabled flag, or resetting their password, signs that user out of every open session (their next request returns `401`). This includes an admin editing their **own** roles. Unlocking does not sign anyone out.
@@ -973,6 +975,7 @@ The password (and its hash) is never returned.
 | Name | Example | Meaning |
 |---|---|---|
 | `search` | `thandi` | part of the email, case-insensitive |
+| `role` | `MANAGER` | only users with this role (`CONSULTANT`, `MANAGER` or `ADMIN`); left out, everyone |
 | `page`, `size` | `0`, `20` | paging (max size 100) |
 
 Sorted by `email`.

@@ -41,6 +41,10 @@ export interface SavedTransaction {
   lines: SavedLine[];
   quotationTotal: number;
   bankedTotal: number;
+  /** True once that week's spreadsheet is imported: the imported rows count instead. */
+  replaced?: boolean;
+  /** False for a sale from a weekly register import (GET /api/transactions only). */
+  typedIn?: boolean;
 }
 
 export interface SaleRow extends SavedTransaction {
@@ -66,19 +70,28 @@ export interface CaptureLists {
   structures: Option[] | null;
 }
 
+/** Every page of a list: the server sends at most 100 products or employers per page. */
+async function everyPage<T>(fetch: (page: number) => Promise<PageResponse<T>>): Promise<T[]> {
+  const first = await fetch(0);
+  const rest = await Promise.all(
+    Array.from({ length: Math.max(0, first.totalPages - 1) }, (_, i) => fetch(i + 1)),
+  );
+  return [first, ...rest].flatMap((p) => p.items);
+}
+
 const real = {
   async lists(): Promise<CaptureLists> {
     const [products, employers, terms, structures] = await Promise.allSettled([
-      listProducts({ active: true, size: 200 }),
-      listEmployers({ active: true, size: 500 }),
+      everyPage((page) => listProducts({ active: true, page, size: 100 })),
+      everyPage((page) => listEmployers({ active: true, page, size: 100 })),
       api<Option[]>('/api/payment-terms'),
       api<Option[]>('/api/structures'),
     ]);
 
     if (products.status === 'rejected') throw products.reason;
     return {
-      products: [...products.value.items].sort((a, b) => a.displayOrder - b.displayOrder),
-      employers: employers.status === 'fulfilled' ? employers.value.items : [],
+      products: [...products.value].sort((a, b) => a.displayOrder - b.displayOrder),
+      employers: employers.status === 'fulfilled' ? employers.value : [],
       paymentTerms: terms.status === 'fulfilled' ? terms.value : null,
       structures: structures.status === 'fulfilled' ? structures.value : null,
     };

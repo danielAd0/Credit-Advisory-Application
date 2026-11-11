@@ -51,11 +51,11 @@ public class UserService {
     // ---------- queries ----------
 
     @Transactional(readOnly = true)
-    public PageResponse<UserResponse> search(String search, int page, int size) {
+    public PageResponse<UserResponse> search(String search, RoleName role, int page, int size) {
         int safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
         PageRequest pageable = PageRequest.of(Math.max(page, 0), safeSize, Sort.by("email"));
         Instant now = Instant.now(clock);
-        return PageResponse.of(users.search(LikePattern.contains(search), pageable),
+        return PageResponse.of(users.search(LikePattern.contains(search), role, pageable),
                 user -> UserResponse.from(user, now));
     }
 
@@ -79,6 +79,7 @@ public class UserService {
                 ? null
                 : loadLinkableConsultant(request.consultantId(), null);
         requireConsultantLinkForRole(request.roles(), consultant);
+        requireManagerIsNotConsultant(request.roles(), consultant != null);
 
         UserAccount user = new UserAccount(email, passwordEncoder.encode(request.temporaryPassword()));
         for (RoleName name : request.roles()) {
@@ -107,6 +108,12 @@ public class UserService {
         List<String> oldRoles = sortedRoles(user);
 
         requireConsultantLinkForRole(wanted, user.getConsultant());
+        requireManagerIsNotConsultant(wanted, false);
+        if (!user.hasRole(RoleName.MANAGER)) {
+            // Becoming a manager while still linked to a consultant record is not allowed;
+            // an existing manager may still drop CONSULTANT and then be unlinked.
+            requireManagerIsNotConsultant(wanted, user.getConsultant() != null);
+        }
         if (user.isEnabled() && user.hasRole(RoleName.ADMIN) && !wanted.contains(RoleName.ADMIN)) {
             requireAnotherAdmin();
         }
@@ -141,6 +148,7 @@ public class UserService {
             requireConsultantLinkForRole(user.getRoleNames(), null);
             user.unlinkConsultant();
         } else {
+            requireManagerIsNotConsultant(user.getRoleNames(), true);
             user.linkConsultant(loadLinkableConsultant(request.consultantId(), user.getId()));
         }
         users.flush();
@@ -230,6 +238,18 @@ public class UserService {
         if (roleNames.contains(RoleName.CONSULTANT) && consultant == null) {
             throw ApiException.unprocessable("user:consultant-role-needs-link", "Consultant link required",
                     "Users with the CONSULTANT role must be linked to a consultant record.");
+        }
+    }
+
+    /**
+     * A login is either a manager or a consultant, never both: no MANAGER together
+     * with the CONSULTANT role or a link to a consultant record.
+     */
+    private static void requireManagerIsNotConsultant(Set<RoleName> roleNames, boolean linkedToConsultant) {
+        if (roleNames.contains(RoleName.MANAGER)
+                && (roleNames.contains(RoleName.CONSULTANT) || linkedToConsultant)) {
+            throw ApiException.unprocessable("user:manager-cannot-be-consultant", "Manager cannot be a consultant",
+                    "A login cannot be both a manager and a consultant. Use a separate email for each.");
         }
     }
 

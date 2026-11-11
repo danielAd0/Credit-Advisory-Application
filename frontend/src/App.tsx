@@ -12,15 +12,16 @@ import ClientDetailPage from './pages/ClientDetailPage';
 import ClientsPage from './pages/ClientsPage';
 import AddConsultantPage from './pages/AddConsultantPage';
 import ConsultantsPage from './pages/ConsultantsPage';
-import SalesHistoryPage from './pages/SalesHistoryPage';
 import Dashboard from './pages/Dashboard';
 import EditClientPage from './pages/EditClientPage';
 import ImportPage from './pages/ImportPage';
 import LoginPage from './pages/LoginPage';
+import ManagersPage from './pages/ManagersPage';
 import EmployersPage from './pages/EmployersPage';
 import ProductQuotationsPage from './pages/ProductQuotationsPage';
 import ProductsPage from './pages/ProductsPage';
 import ConsultantActionsPage from './pages/ConsultantActionsPage';
+import SalesHistoryPage from './pages/SalesHistoryPage';
 import ReportsPage from './pages/ReportsPage';
 import ReassignPage from './pages/ReassignPage';
 import TwoStepPage from './pages/TwoStepPage';
@@ -39,9 +40,23 @@ export default function App() {
             <Route element={<Layout />}>
               <Route index element={<Dashboard />} />
               <Route path="clients" element={<ClientsPage />} />
-              <Route path="clients/new" element={<AddClientPage />} />
+              <Route
+                path="clients/new"
+                element={
+                  <RequireRole roles={['CONSULTANT']}>
+                    <AddClientPage />
+                  </RequireRole>
+                }
+              />
               <Route path="clients/:id" element={<ClientDetailPage />} />
-              <Route path="clients/:id/edit" element={<EditClientPage />} />
+              <Route
+                path="clients/:id/edit"
+                element={
+                  <RequireRole roles={['CONSULTANT']}>
+                    <EditClientPage />
+                  </RequireRole>
+                }
+              />
               <Route
                 path="consultants"
                 element={
@@ -55,6 +70,14 @@ export default function App() {
                 element={
                   <RequireRole roles={['ADMIN']}>
                     <AddConsultantPage />
+                  </RequireRole>
+                }
+              />
+              <Route
+                path="managers"
+                element={
+                  <RequireRole roles={['ADMIN']}>
+                    <ManagersPage />
                   </RequireRole>
                 }
               />
@@ -75,7 +98,14 @@ export default function App() {
                 }
               />
               <Route path="reports" element={<ReportsPage />} />
-              <Route path="consultant-actions" element={<ConsultantActionsPage />} />
+              <Route
+                path="consultant-actions"
+                element={
+                  <RequireRole roles={['CONSULTANT']}>
+                    <ConsultantActionsPage />
+                  </RequireRole>
+                }
+              />
               <Route path="sales-history" element={<SalesHistoryPage />} />
               <Route path="products" element={<ProductsPage />} />
               <Route path="employers" element={<EmployersPage />} />

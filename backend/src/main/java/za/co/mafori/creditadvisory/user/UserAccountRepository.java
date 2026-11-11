@@ -48,19 +48,26 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, Long> 
 
     /**
      * GET /api/users. searchPattern is a lower-case, escaped LIKE pattern, or null
-     * for all.
+     * for all. role limits the result to users who have that role, or null for all.
      */
     @EntityGraph(attributePaths = { "consultant" })
     @Query(value = """
             select u from UserAccount u
-            where :searchPattern is null
-               or lower(u.email) like :searchPattern escape '\\'
+            where (:searchPattern is null
+                   or lower(u.email) like :searchPattern escape '\\')
+              and (:role is null
+                   or exists (select 1 from UserAccount u2 join u2.roles r
+                              where u2 = u and r.name = :role))
             """, countQuery = """
             select count(u) from UserAccount u
-            where :searchPattern is null
-               or lower(u.email) like :searchPattern escape '\\'
+            where (:searchPattern is null
+                   or lower(u.email) like :searchPattern escape '\\')
+              and (:role is null
+                   or exists (select 1 from UserAccount u2 join u2.roles r
+                              where u2 = u and r.name = :role))
             """)
-    Page<UserAccount> search(@Param("searchPattern") String searchPattern, Pageable pageable);
+    Page<UserAccount> search(@Param("searchPattern") String searchPattern, @Param("role") RoleName role,
+            Pageable pageable);
 
     /**
      * How many enabled users have this role - used to protect the last

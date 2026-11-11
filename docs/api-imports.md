@@ -266,7 +266,8 @@ Applies the whole import in **one transaction**: if anything fails, nothing is s
   "paymentTermsCreated": 0,
   "staleRows": 0,
   "replacedImportJobId": null,
-  "supersededTransactions": 0
+  "supersededTransactions": 0,
+  "replacedTypedInSales": 3
 }
 ```
 
@@ -280,7 +281,10 @@ What confirm does:
   consultant in the sheet.
 - writes a `CLIENT_CREATED` audit entry for **every** client it creates (`consultantId`, `importJobId`)
 - saves one sale per row, its product lines, and any extra columns; creates new employers, structures and payment terms
-- audits `IMPORT_CONFIRMED` (with `nameDifferencesAccepted`), and `WEEK_REPLACED` when replacing
+- **replaces the sales typed into the app for this week** (the spreadsheet wins; `docs/api-sales.md` section 1):
+  they are kept, marked as replaced, and no report counts them again. `replacedTypedInSales` says how many
+- audits `IMPORT_CONFIRMED` (with `nameDifferencesAccepted` and `replacedTypedInSales`), and `WEEK_REPLACED` when
+  replacing
 
 **Errors**
 
@@ -344,7 +348,8 @@ Returned by preview, `GET /api/imports/{id}`, consultant mappings and cancel.
   "blockers": ["UNMAPPED_CONSULTANTS"],
   "reconciliationStatus": "DIFFERENCES",
   "reportDifferences": 77,
-  "nameDifferences": 0
+  "nameDifferences": 0,
+  "typedInSales": 3
 }
 ```
 
@@ -353,6 +358,9 @@ Returned by preview, `GET /api/imports/{id}`, consultant mappings and cancel.
   `DUPLICATE` / `INVALID`.
 - `weekImportedByJobId`: another import already holds this week. `replaceRequired` is then `true` while previewed:
   confirming replaces the week (ADMIN, with a reason).
+- `typedInSales`: how many sales were typed into the app for this week (`docs/api-sales.md`). Confirming replaces
+  them with the spreadsheet's rows. **Never** a blocker, but show it next to the Confirm button, so whoever confirms
+  first checks that the spreadsheet has every sale of the week. `0` once the import is no longer previewed.
 - `reconciliationStatus` / `reportDifferences` (stage 4): how the workbook's own Report and Breakdown figures
   compare with the recalculated ones: `NOT_CHECKED` (the file has neither sheet), `MATCHED` or `DIFFERENCES`.
   **Never** a blocker; see section 8.
@@ -376,6 +384,9 @@ in the browser; the totals are in the summary.
 A week can only be imported once. Uploading a register for a week that already has a committed import gives a
 summary with `replaceRequired: true`. It can only be confirmed with a `replaceReason`. The earlier
 import's sales are kept but marked as replaced, so reports use the new ones.
+
+Sales typed into the app (`docs/api-sales.md`) are replaced the same way by the **first** import of their week,
+without a reason: that is the normal flow, not a correction. After that, the week takes no more typed-in sales.
 
 ## 8. Workbook check: the Report and Breakdown sheets (stage 4)
 

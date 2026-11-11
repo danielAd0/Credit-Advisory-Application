@@ -518,6 +518,10 @@ function ImportView({ initial, onBack }: { initial: ImportSummary; onBack: () =>
             {result.employersCreated > 0 &&
               `, and ${result.employersCreated} new employers were added`}
             .
+            {result.replacedTypedInSales > 0 &&
+              ` It replaced ${result.replacedTypedInSales} sale${
+                result.replacedTypedInSales === 1 ? '' : 's'
+              } typed into the app for this week.`}
           </p>
         )}
         {error && (
@@ -590,6 +594,14 @@ function ImportView({ initial, onBack }: { initial: ImportSummary; onBack: () =>
               <li key={b}>{BLOCKER_TEXT[b]}</li>
             ))}
           </ul>
+        )}
+
+        {previewed && job.typedInSales > 0 && (
+          <p className="alert error" role="status">
+            {job.typedInSales} sale{job.typedInSales === 1 ? ' was' : 's were'} typed into the app
+            for this week. Confirming replaces {job.typedInSales === 1 ? 'it' : 'them'} with this
+            spreadsheet, so check that the spreadsheet has every sale of the week first.
+          </p>
         )}
 
         {previewed && job.replaceRequired && (

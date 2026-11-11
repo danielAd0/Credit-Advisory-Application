@@ -1,4 +1,5 @@
 import { ApiError } from './http';
+<<<<<<< HEAD
 import { clients, consultants, delay } from './mock';
 import type { Employer, Product } from './admin';
 import type {
@@ -8,6 +9,12 @@ import type {
   SalesPage,
   SavedTransaction,
 } from './transactions';
+=======
+import { clients, delay } from './mock';
+import type { Product } from './admin';
+import { listEmployers } from './mockCatalogue';
+import type { CaptureLists, NewTransaction, SavedTransaction } from './transactions';
+>>>>>>> 67f1f4fd63a79c6616b2fdfc26360602e5567667
 import type { ClientSummary } from './types';
 
 const stamp = '2026-01-01T00:00:00Z';
@@ -44,24 +51,13 @@ const products: Product[] = seed.map(([code, name, price, banked], i) => ({
   updatedAt: stamp,
 }));
 
-const employers: Employer[] = ['Phumelela Local', 'Matzikama Local', 'Sample Municipality'].map(
-  (name, i) => ({
-    id: i + 1,
-    name,
-    company: null,
-    employerType: null,
-    active: true,
-    version: 0,
-    createdAt: stamp,
-    updatedAt: stamp,
-  }),
-);
-
 const problem = (status: number, code: string, detail: string) =>
   new ApiError(status, detail, { type: `urn:credit-advisory:${code}`, detail });
 
 export async function lists(): Promise<CaptureLists> {
   await delay();
+  // The same employers the mock clients point at, so a client's employer is in the dropdown.
+  const employers = (await listEmployers({ active: true, size: 100 })).items;
   return {
     products,
     employers,

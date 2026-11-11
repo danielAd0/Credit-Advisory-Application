@@ -29,9 +29,10 @@ public class UserController {
     @GetMapping
     public PageResponse<UserResponse> list(
             @RequestParam(required = false) String search,
+            @RequestParam(required = false) RoleName role,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return service.search(search, page, size);
+        return service.search(search, role, page, size);
     }
 
     @GetMapping("/{id}")

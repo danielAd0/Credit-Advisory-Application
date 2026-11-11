@@ -281,13 +281,15 @@ public class WeeklyImportService {
             blockers.add("NAME_DIFFERENCES");
         }
         var report = reconciliation.jobStatus(jobId);
+        // The spreadsheet wins: confirming replaces the sales typed in for this week.
+        int typedInSales = "PREVIEWED".equals(state) ? store.typedInSalesForWeek(job.weekStarting()) : 0;
         return new ImportSummary(job.id(), job.fileName(), job.fileDigest(), state, job.weekStarting(),
                 job.weekStarting().plusDays(6), job.uploadedByEmail(), job.createdAt(), job.expiresAt(),
                 job.committedAt(), job.totalRows(), job.newCount(), job.unchangedCount(), job.duplicateCount(),
                 job.invalidCount(), job.appliedCount(), issues.getOrDefault("ERROR", 0L),
                 issues.getOrDefault("WARNING", 0L), issues.getOrDefault("INFO", 0L), quotation, banked, days, unmapped,
                 weekImportedBy, weekImportedBy != null && "PREVIEWED".equals(state), blockers.isEmpty(), blockers,
-                report.status(), report.differences(), nameDifferences);
+                report.status(), report.differences(), nameDifferences, typedInSales);
     }
 
     private List<UnmappedConsultant> unmappedConsultants(long jobId) {
@@ -518,6 +520,8 @@ public class WeeklyImportService {
         if (replaced != null) {
             superseded = store.supersedeTransactions(replaced, job.id());
         }
+        // The spreadsheet wins over sales typed into the app for this week (V21).
+        int typedIn = store.supersedeTypedInSales(week.id(), job.id());
 
         Map<String, Long> employers = store.employersByName();
         Map<String, Long> structures = store.structuresByName();
@@ -591,13 +595,14 @@ public class WeeklyImportService {
                 n.newClients));
         audit.record("IMPORT_CONFIRMED", "IMPORT_JOB", job.id(), meta("weekStarting", job.weekStarting().toString(),
                 "transactions", n.transactions, "newClients", n.newClients, "assigned", n.assigned,
-                "replacesImportJobId", replaced, "nameDifferencesAccepted", nameDifferences));
+                "replacesImportJobId", replaced, "nameDifferencesAccepted", nameDifferences,
+                "replacedTypedInSales", typedIn));
         if (replaced != null) {
             audit.record("WEEK_REPLACED", "IMPORT_JOB", replaced, meta("replacedBy", job.id(), "reason", reason,
                     "supersededTransactions", superseded));
         }
         return new ConfirmResult(job.id(), week.id(), job.weekStarting(), n.transactions, n.lines, n.extras,
-                n.newClients, n.assigned, n.employers, n.structures, n.terms, n.stale, replaced, superseded);
+                n.newClients, n.assigned, n.employers, n.structures, n.terms, n.stale, replaced, superseded, typedIn);
     }
 
     private static final class Counters {

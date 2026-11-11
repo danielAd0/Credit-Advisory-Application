@@ -237,7 +237,7 @@ class ClientDetailsApiTest extends ApiTestBase {
         long clientId = created.number("$.id");
         long noSales = createClient("Test", "Nosales", thandiId);
         sale(clientId, "2026-01-05", null, null);
-        sale(clientId, "2026-02-02", "ONCE_OFF", "Vital");
+        sale(clientId, "2026-02-02", "ONCE_OFF", "VITAL CREDIT");
 
         ApiClient.Response page = admin.get("/api/clients");
 
@@ -250,10 +250,10 @@ class ClientDetailsApiTest extends ApiTestBase {
         assertThat(page.text("$.items[1].fileNumber")).isEqualTo("0012345");
         assertThat(page.text("$.items[1].latestSale.date")).isEqualTo("2026-02-02");
         assertThat(page.text("$.items[1].latestSale.paymentTerm")).isEqualTo("Once off payment");
-        assertThat(page.text("$.items[1].latestSale.structure")).isEqualTo("Vital");
+        assertThat(page.text("$.items[1].latestSale.structure")).isEqualTo("VITAL CREDIT");
 
         ApiClient.Response detail = thandi.get("/api/clients/" + clientId);
-        assertThat(detail.text("$.latestSale.structure")).isEqualTo("Vital");
+        assertThat(detail.text("$.latestSale.structure")).isEqualTo("VITAL CREDIT");
         assertThat(thandi.get("/api/clients/" + noSales).value("$.latestSale")).isNull();
     }
 
