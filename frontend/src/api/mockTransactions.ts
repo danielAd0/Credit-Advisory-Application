@@ -1,7 +1,7 @@
 import { ApiError } from './http';
-<<<<<<< HEAD
 import { clients, consultants, delay } from './mock';
-import type { Employer, Product } from './admin';
+import type { Product } from './admin';
+import { listEmployers } from './mockCatalogue';
 import type {
   CaptureLists,
   NewTransaction,
@@ -9,12 +9,6 @@ import type {
   SalesPage,
   SavedTransaction,
 } from './transactions';
-=======
-import { clients, delay } from './mock';
-import type { Product } from './admin';
-import { listEmployers } from './mockCatalogue';
-import type { CaptureLists, NewTransaction, SavedTransaction } from './transactions';
->>>>>>> 67f1f4fd63a79c6616b2fdfc26360602e5567667
 import type { ClientSummary } from './types';
 
 const stamp = '2026-01-01T00:00:00Z';
@@ -56,7 +50,7 @@ const problem = (status: number, code: string, detail: string) =>
 
 export async function lists(): Promise<CaptureLists> {
   await delay();
-  // The same employers the mock clients point at, so a client's employer is in the dropdown.
+
   const employers = (await listEmployers({ active: true, size: 100 })).items;
   return {
     products,
