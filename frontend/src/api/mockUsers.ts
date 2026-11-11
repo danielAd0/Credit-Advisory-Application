@@ -32,6 +32,10 @@ const people: UserAccount[] = [
     locked: true,
     lockedUntil: new Date(Date.now() + 15 * 60_000).toISOString(),
   }),
+  // Made before the manager/consultant rule: needs fixing on the Managers page.
+  staff(6, 'mixed.login@example.com', ['CONSULTANT', 'MANAGER'], {
+    consultant: { id: 99, consultantCode: 'C0099', fullName: 'Mixed Login', status: 'ACTIVE' },
+  }),
 ];
 
 const problem = (status: number, code: string, detail: string) =>
@@ -95,6 +99,11 @@ export async function createUser(input: {
     throw problem(409, 'user:duplicate-email', 'A user with this email already exists.');
   if (input.temporaryPassword.length < 12)
     throw problem(400, 'validation:weak-password', 'The password needs at least 12 characters.');
+  if (
+    input.roles.includes('MANAGER') &&
+    (input.roles.includes('CONSULTANT') || input.consultantId != null)
+  )
+    throw MIXED();
   const u = staff(Math.max(0, ...people.map((x) => x.id)) + 1, email, [...input.roles].sort(), {
     mustChangePassword: true,
     lastLoginAt: null,
@@ -103,10 +112,33 @@ export async function createUser(input: {
   return { ...u };
 }
 
+const MIXED = () =>
+  problem(
+    422,
+    'user:manager-cannot-be-consultant',
+    'A login cannot be both a manager and a consultant. Use a separate email for each.',
+  );
+
+export async function changeConsultant(id: number, consultantId: number | null, version: number) {
+  await delay();
+  const u = find(id);
+  requireVersion(u, version);
+  if (consultantId === null) {
+    if (u.roles.includes('CONSULTANT'))
+      throw problem(422, 'user:consultant-role-needs-link', 'Remove the CONSULTANT role first.');
+    u.consultant = null;
+  } else if (u.roles.includes('MANAGER')) {
+    throw MIXED();
+  }
+  return touch(u);
+}
+
 export async function changeRoles(id: number, roles: Role[], version: number) {
   await delay();
   const u = find(id);
   requireVersion(u, version);
+  if (roles.includes('MANAGER') && roles.includes('CONSULTANT')) throw MIXED();
+  if (roles.includes('MANAGER') && !u.roles.includes('MANAGER') && u.consultant) throw MIXED();
   if (u.enabled && u.roles.includes('ADMIN') && !roles.includes('ADMIN')) requireAnotherAdmin();
   u.roles = [...roles].sort();
   return touch(u);

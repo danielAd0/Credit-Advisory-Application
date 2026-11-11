@@ -41,7 +41,14 @@ export default function App() {
               <Route path="clients" element={<ClientsPage />} />
               <Route path="clients/new" element={<AddClientPage />} />
               <Route path="clients/:id" element={<ClientDetailPage />} />
-              <Route path="clients/:id/edit" element={<EditClientPage />} />
+              <Route
+                path="clients/:id/edit"
+                element={
+                  <RequireRole roles={['CONSULTANT']}>
+                    <EditClientPage />
+                  </RequireRole>
+                }
+              />
               <Route
                 path="consultants"
                 element={

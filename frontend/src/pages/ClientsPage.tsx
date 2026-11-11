@@ -179,20 +179,24 @@ export default function ClientsPage() {
                     <td>{c.consultant?.fullName ?? <span className="muted">Unassigned</span>}</td>
                   )}
                   <td className="ca-actions">
-                    <Link
-                      className="ca-link"
-                      to={`/consultant-actions?clientId=${c.id}`}
-                      aria-label={`Capture a sale for ${clientName(c)}`}
-                    >
-                      Capture sale
-                    </Link>
-                    <Link
-                      className="ca-link"
-                      to={`/clients/${c.id}/edit`}
-                      aria-label={`Edit ${clientName(c)}`}
-                    >
-                      Edit
-                    </Link>
+                    {!isManager && (
+                      <>
+                        <Link
+                          className="ca-link"
+                          to={`/consultant-actions?clientId=${c.id}`}
+                          aria-label={`Capture a sale for ${clientName(c)}`}
+                        >
+                          Capture sale
+                        </Link>
+                        <Link
+                          className="ca-link"
+                          to={`/clients/${c.id}/edit`}
+                          aria-label={`Edit ${clientName(c)}`}
+                        >
+                          Edit
+                        </Link>
+                      </>
+                    )}
                     {isManager && features.removeClient && c.consultant && (
                       <button
                         type="button"

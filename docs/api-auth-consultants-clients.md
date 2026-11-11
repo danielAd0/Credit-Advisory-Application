@@ -964,6 +964,7 @@ The password (and its hash) is never returned.
 
 - A user with the `CONSULTANT` role must be linked to a consultant record.
 - Only an ACTIVE consultant can be linked, and each consultant can have at most one login.
+- A login is a manager **or** a consultant, never both: `MANAGER` cannot be combined with the `CONSULTANT` role or a consultant link (`422 urn:credit-advisory:user:manager-cannot-be-consultant`). A manager who still has both from before this rule can drop `CONSULTANT` and then be unlinked.
 - The last enabled ADMIN cannot be disabled or lose the `ADMIN` role, so there is always someone who can manage users.
 - Emails are stored trimmed and lower-case, and must be unique.
 - Changing a user's roles, consultant link or enabled flag, or resetting their password, signs that user out of every open session (their next request returns `401`). This includes an admin editing their **own** roles. Unlocking does not sign anyone out.

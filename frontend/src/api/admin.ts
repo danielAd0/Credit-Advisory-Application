@@ -135,6 +135,10 @@ export const createUser = (input: {
 export const changeUserRoles = (id: number, roles: Role[], version: number) =>
   api<UserAccount>(`/api/users/${id}/roles`, json('PATCH', { roles, version }));
 
+/** PATCH /api/users/{id}/consultant (ADMIN) - link a consultant record, or null to unlink. */
+export const changeUserConsultant = (id: number, consultantId: number | null, version: number) =>
+  api<UserAccount>(`/api/users/${id}/consultant`, json('PATCH', { consultantId, version }));
+
 /** PATCH /api/users/{id}/enabled (ADMIN) - disabling signs the user out. */
 export const setUserEnabled = (id: number, enabled: boolean, version: number) =>
   api<UserAccount>(`/api/users/${id}/enabled`, json('PATCH', { enabled, version }));

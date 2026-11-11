@@ -20,6 +20,11 @@ const SIZE = 20;
 type Notice = { kind: 'ok' | 'error'; text: string } | null;
 
 const isAdmin = (u: UserAccount) => u.roles.includes('ADMIN');
+const isManager = (u: UserAccount) => u.roles.includes('MANAGER');
+
+/** Made before the rule that a login is a manager or a consultant, never both. */
+const isMixed = (u: UserAccount) =>
+  isManager(u) && (u.roles.includes('CONSULTANT') || u.consultant !== null);
 
 function accessLabel(u: UserAccount): string {
   return isAdmin(u) ? 'Manager + administrator' : 'Manager';
@@ -184,6 +189,7 @@ function ManagePanel({ user, isSelf, onChanged, onClose }: PanelProps) {
   const [admin, setAdmin] = useState(isAdmin(user));
   const [confirmDisable, setConfirmDisable] = useState(false);
   const [confirmMfaReset, setConfirmMfaReset] = useState(false);
+  const [confirmFix, setConfirmFix] = useState<'manager' | 'consultant' | null>(null);
   const [temp, setTemp] = useState('');
   const [tempError, setTempError] = useState<string | undefined>();
   const [handedOver, setHandedOver] = useState<string | null>(null);
@@ -220,6 +226,38 @@ function ManagePanel({ user, isSelf, onChanged, onClose }: PanelProps) {
         : 'Access changed. They were signed out and get the new access at their next sign-in.',
       'Could not change the access.',
     );
+  }
+
+  /** Drops the consultant side: the CONSULTANT role first, then the consultant link. */
+  async function keepAsManager() {
+    const done = await run(
+      async () => {
+        let u = user;
+        if (u.roles.includes('CONSULTANT'))
+          u = await users.changeRoles(
+            u.id,
+            u.roles.filter((r) => r !== 'CONSULTANT'),
+            u.version,
+          );
+        if (u.consultant) u = await users.changeConsultant(u.id, null, u.version);
+        return u;
+      },
+      'This login is now only a manager. They were signed out. If the consultant still works here, give them their own login under Team.',
+      'Could not remove the consultant side.',
+    );
+    if (done) setConfirmFix(null);
+  }
+
+  /** Drops MANAGER; the login stays a consultant (and an administrator, if it was one). */
+  async function keepAsConsultant() {
+    const roles: Role[] = user.roles.filter((r) => r !== 'MANAGER');
+    if (!roles.includes('CONSULTANT')) roles.push('CONSULTANT');
+    const done = await run(
+      () => users.changeRoles(user.id, roles, user.version),
+      'This login is now only a consultant and was signed out. Give the manager a login with their own email.',
+      'Could not remove the manager access.',
+    );
+    if (done) setConfirmFix(null);
   }
 
   async function setEnabled(enabled: boolean) {
@@ -272,156 +310,232 @@ function ManagePanel({ user, isSelf, onChanged, onClose }: PanelProps) {
         </p>
       )}
 
-      <dl className="cn-facts">
-        <dt>Last sign-in</dt>
-        <dd>{signIn(user.lastLoginAt)}</dd>
-        <dt>Account</dt>
-        <dd>
-          {user.locked ? 'Locked after failed sign-ins' : 'Not locked'}
-          {user.mustChangePassword && ' · must choose a new password'}
-        </dd>
-        <dt>Created</dt>
-        <dd>{new Date(user.createdAt).toLocaleDateString('en-ZA')}</dd>
-      </dl>
-
-      <h3>Access</h3>
-      <form onSubmit={saveAccess} noValidate>
-        <div className="ac-field">
-          <label>
-            <input type="checkbox" checked={admin} onChange={(e) => setAdmin(e.target.checked)} />{' '}
-            Also an administrator
-          </label>
-          <p className="ac-hint">
-            Changing access signs the user out
-            {isSelf ? ', including you' : ''}. The last active administrator cannot lose it.
-          </p>
-        </div>
-        <button type="submit" className="btn" disabled={busy}>
-          Save access
-        </button>
-      </form>
-
-      <h3>Account</h3>
-      {user.locked && (
-        <button
-          type="button"
-          className="btn"
-          disabled={busy}
-          onClick={() =>
-            void run(() => users.unlock(user.id), 'The account is unlocked.', 'Could not unlock.')
-          }
-        >
-          Unlock account
-        </button>
-      )}
-      {user.enabled ? (
-        isSelf ? (
-          <p className="ac-hint">You cannot disable your own account.</p>
-        ) : confirmDisable ? (
-          <div className="cn-actions">
-            <button
-              type="button"
-              className="btn primary"
-              onClick={() => void setEnabled(false)}
-              disabled={busy}
-            >
-              Yes, disable this account
-            </button>
-            <button
-              type="button"
-              className="btn"
-              onClick={() => setConfirmDisable(false)}
-              disabled={busy}
-            >
-              Cancel
-            </button>
-          </div>
-        ) : (
-          <div className="cn-actions">
-            <button
-              type="button"
-              className="btn"
-              onClick={() => setConfirmDisable(true)}
-              disabled={busy}
-            >
-              Disable account
-            </button>
-          </div>
-        )
+      {!isManager(user) ? (
+        <p className="muted">
+          This login is no longer a manager. Manage the consultant under Team.
+        </p>
       ) : (
-        <div className="cn-actions">
-          <button
-            type="button"
-            className="btn primary"
-            onClick={() => void setEnabled(true)}
-            disabled={busy}
-          >
-            Enable account
-          </button>
-        </div>
-      )}
-
-      {!isSelf && (
         <>
-          <h3>Password</h3>
-          <form onSubmit={reset} noValidate>
-            <TempPassword
-              id="mg-reset"
-              label="New temporary password"
-              recipient="manager"
-              value={temp}
-              onChange={(v) => {
-                setTemp(v);
-                setTempError(undefined);
-                setHandedOver(null);
-              }}
-              error={tempError}
-            />
-            <button type="submit" className="btn" disabled={busy}>
-              Reset password
-            </button>
-          </form>
-          {handedOver && (
-            <p>
-              Give this to them in person. It is not shown again:
-              <br />
-              <span className="cn-secret">{handedOver}</span>
-            </p>
+          <dl className="cn-facts">
+            <dt>Last sign-in</dt>
+            <dd>{signIn(user.lastLoginAt)}</dd>
+            <dt>Account</dt>
+            <dd>
+              {user.locked ? 'Locked after failed sign-ins' : 'Not locked'}
+              {user.mustChangePassword && ' · must choose a new password'}
+            </dd>
+            <dt>Created</dt>
+            <dd>{new Date(user.createdAt).toLocaleDateString('en-ZA')}</dd>
+          </dl>
+
+          {isMixed(user) ? (
+            <>
+              <h3>Manager and consultant</h3>
+              <p className="alert error" role="status">
+                This login is both a manager and a consultant
+                {user.consultant
+                  ? ` (${user.consultant.fullName}, ${user.consultant.consultantCode})`
+                  : ''}
+                . That is no longer allowed: choose which one it stays. The other person needs a
+                login with their own email.
+              </p>
+              {confirmFix ? (
+                <div className="cn-actions">
+                  <button
+                    type="button"
+                    className="btn primary"
+                    disabled={busy}
+                    onClick={() =>
+                      void (confirmFix === 'manager' ? keepAsManager() : keepAsConsultant())
+                    }
+                  >
+                    {confirmFix === 'manager'
+                      ? 'Yes, keep only as manager'
+                      : 'Yes, keep only as consultant'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    disabled={busy}
+                    onClick={() => setConfirmFix(null)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <div className="cn-actions">
+                  <button
+                    type="button"
+                    className="btn"
+                    disabled={busy}
+                    onClick={() => setConfirmFix('manager')}
+                  >
+                    Keep as manager
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    disabled={busy}
+                    onClick={() => setConfirmFix('consultant')}
+                  >
+                    Keep as consultant
+                  </button>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <h3>Access</h3>
+              <form onSubmit={saveAccess} noValidate>
+                <div className="ac-field">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={admin}
+                      onChange={(e) => setAdmin(e.target.checked)}
+                    />{' '}
+                    Also an administrator
+                  </label>
+                  <p className="ac-hint">
+                    Changing access signs the user out
+                    {isSelf ? ', including you' : ''}. The last active administrator cannot lose it.
+                  </p>
+                </div>
+                <button type="submit" className="btn" disabled={busy}>
+                  Save access
+                </button>
+              </form>
+            </>
           )}
 
-          <h3>Two-step sign-in</h3>
-          <p className="ac-hint">
-            Only when they lost their phone and their recovery codes. Check who you are talking to
-            first: they are signed out now and set up a new authenticator app at their next sign-in.
-          </p>
-          {confirmMfaReset ? (
+          <h3>Account</h3>
+          {user.locked && (
+            <button
+              type="button"
+              className="btn"
+              disabled={busy}
+              onClick={() =>
+                void run(
+                  () => users.unlock(user.id),
+                  'The account is unlocked.',
+                  'Could not unlock.',
+                )
+              }
+            >
+              Unlock account
+            </button>
+          )}
+          {user.enabled ? (
+            isSelf ? (
+              <p className="ac-hint">You cannot disable your own account.</p>
+            ) : confirmDisable ? (
+              <div className="cn-actions">
+                <button
+                  type="button"
+                  className="btn primary"
+                  onClick={() => void setEnabled(false)}
+                  disabled={busy}
+                >
+                  Yes, disable this account
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setConfirmDisable(false)}
+                  disabled={busy}
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <div className="cn-actions">
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setConfirmDisable(true)}
+                  disabled={busy}
+                >
+                  Disable account
+                </button>
+              </div>
+            )
+          ) : (
             <div className="cn-actions">
               <button
                 type="button"
                 className="btn primary"
-                onClick={() => void resetMfa()}
+                onClick={() => void setEnabled(true)}
                 disabled={busy}
               >
-                Yes, reset two-step sign-in
-              </button>
-              <button
-                type="button"
-                className="btn"
-                onClick={() => setConfirmMfaReset(false)}
-                disabled={busy}
-              >
-                Cancel
+                Enable account
               </button>
             </div>
-          ) : (
-            <button
-              type="button"
-              className="btn"
-              onClick={() => setConfirmMfaReset(true)}
-              disabled={busy}
-            >
-              Reset two-step sign-in
-            </button>
+          )}
+
+          {!isSelf && (
+            <>
+              <h3>Password</h3>
+              <form onSubmit={reset} noValidate>
+                <TempPassword
+                  id="mg-reset"
+                  label="New temporary password"
+                  recipient="manager"
+                  value={temp}
+                  onChange={(v) => {
+                    setTemp(v);
+                    setTempError(undefined);
+                    setHandedOver(null);
+                  }}
+                  error={tempError}
+                />
+                <button type="submit" className="btn" disabled={busy}>
+                  Reset password
+                </button>
+              </form>
+              {handedOver && (
+                <p>
+                  Give this to them in person. It is not shown again:
+                  <br />
+                  <span className="cn-secret">{handedOver}</span>
+                </p>
+              )}
+
+              <h3>Two-step sign-in</h3>
+              <p className="ac-hint">
+                Only when they lost their phone and their recovery codes. Check who you are talking
+                to first: they are signed out now and set up a new authenticator app at their next
+                sign-in.
+              </p>
+              {confirmMfaReset ? (
+                <div className="cn-actions">
+                  <button
+                    type="button"
+                    className="btn primary"
+                    onClick={() => void resetMfa()}
+                    disabled={busy}
+                  >
+                    Yes, reset two-step sign-in
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => setConfirmMfaReset(false)}
+                    disabled={busy}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setConfirmMfaReset(true)}
+                  disabled={busy}
+                >
+                  Reset two-step sign-in
+                </button>
+              )}
+            </>
           )}
         </>
       )}
@@ -537,7 +651,7 @@ export default function ManagersPage() {
                 </tr>
               </thead>
               <tbody>
-                {result.items.map((u) => (
+                {result.items.filter(isManager).map((u) => (
                   <tr key={u.id}>
                     <td>
                       {u.email}
@@ -546,6 +660,12 @@ export default function ManagersPage() {
                     <td>{accessLabel(u)}</td>
                     <td>
                       <StateBadge user={u} />
+                      {isMixed(u) && (
+                        <>
+                          {' '}
+                          <span className="badge suspended">also a consultant</span>
+                        </>
+                      )}
                     </td>
                     <td>{signIn(u.lastLoginAt)}</td>
                     <td>

@@ -7,6 +7,7 @@ const real = {
   listUsers: admin.listUsers,
   createUser: admin.createUser,
   changeRoles: admin.changeUserRoles,
+  changeConsultant: admin.changeUserConsultant,
   setEnabled: admin.setUserEnabled,
   resetPassword: admin.resetPassword,
   unlock: (userId: number) =>
