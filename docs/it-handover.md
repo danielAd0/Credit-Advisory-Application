@@ -310,6 +310,7 @@ Everybody is signed out by a restart. Users are also signed out after 30 minutes
 | A user forgot their password | an administrator: Consultants > Manage > Reset password. Hand the temporary password over in person |
 | A user lost their phone and their recovery codes | an administrator: Consultants > Manage > Reset two-step sign-in. **Check who you are talking to first** - this is how an attacker would try to get in |
 | The same, for a **manager or administrator** account | an administrator: Managers > Manage (unlock, reset password, reset two-step sign-in, disable) |
+| The **only** administrator forgot their password, or lost their phone and recovery codes | nobody can fix it in the application, so IT does it with the database (break-glass). Steps below. To avoid needing them, keep **at least two** administrator accounts |
 | 20 failed sign-ins within 5 minutes from one network address | that address gets "too many attempts" for a few minutes, then works again by itself |
 | The application will not start: `Refusing to start in production` | the message names every setting to fix (section 5.2) |
 | The application will not start: database errors | is PostgreSQL running, does the firewall allow the app server, do `DB_URL`, user and password match, is the certificate valid for `sslmode=verify-full` |
@@ -318,6 +319,22 @@ Everybody is signed out by a restart. Users are also signed out after 30 minutes
 | A key may have leaked (seen by someone who should not have) | treat it as a security incident: tell the information officer and the development team the same day. Changing a key needs the development team |
 | The audit reviewer finds something nobody can explain (section 10) | the same: an incident, reported to the information officer that day |
 | A laptop or phone with access was stolen | for a consultant, an administrator sets them to Suspended (Consultants > Manage > Status) or resets their password and two-step sign-in - each signs out all their sessions at once. For a manager or administrator, an administrator disables the account or resets their password and two-step sign-in under Managers > Manage |
+
+**Break-glass: the only administrator is stuck.** Only for that case, and only after checking that it really is
+that person asking.
+
+1. Write down the date, who asked and who is doing this. Tell the information officer the same day: step 2
+   happens outside the application, so the audit log does not show it.
+2. As the database superuser, disable the stuck account (put in their email address):
+   `UPDATE users SET enabled = false WHERE lower(email) = lower('the-admin@example.co.za');`
+3. Add `FIRST_ADMIN_EMAIL` (a **different** email address, for example the person's second work address) and
+   `FIRST_ADMIN_PASSWORD` to the settings file and restart. With no enabled administrator left, the application
+   creates this one (audited `FIRST_ADMIN_CREATED`), exactly as in section 6.
+4. The person signs in with it straight away, sets up the authenticator and chooses a password.
+5. In the application they open Managers > Manage on the old account: enable it, reset its password and, if the
+   phone was lost, its two-step sign-in. These steps are audited.
+6. Remove `FIRST_ADMIN_EMAIL` and `FIRST_ADMIN_PASSWORD` from the settings file and restart. Keep the new
+   account as the second administrator, or disable it.
 
 The audit log (administrators: Audit log in the menu) shows who did what and when - lockouts, blocked
 sign-in addresses, wrong passwords when showing an ID number, every full ID number viewed, imports,

@@ -331,6 +331,38 @@ For the next **5 minutes** (`app.auth.password-confirmation-window`), `GET /api/
 | 400 | `password` missing; `urn:credit-advisory:auth:wrong-password` - wrong password, the session stays signed in |
 | 401 | not signed in; `urn:credit-advisory:auth:account-locked` - the account is locked (by this or earlier wrong passwords) and this session has been signed out |
 
+### Account recovery (FR-01) - decision
+
+**Decided:** there is no self-service "Forgot password" link. An administrator recovers accounts, in the
+application, after checking who is asking. A user who lost their phone can still sign in alone, with a recovery
+code.
+
+**Why:**
+
+- Self-service reset needs a channel the user proves they own, normally email. The application does not send
+  email (nothing is set up for it), and an email inbox is a weaker check than an administrator who knows the
+  people asking.
+- A reset link that reaches the wrong inbox hands over an account that can see client ID numbers. An administrator
+  reset is checked in person or by phone, and audited.
+- Two-step sign-in stays in force after every recovery: a new password alone never opens an account.
+
+**What exists:**
+
+| Problem | Who fixes it | How |
+|---|---|---|
+| Locked out (5 wrong passwords or codes) | nobody, or an admin | opens by itself after 15 minutes; an admin can unlock at once (`POST /api/users/{id}/unlock`) |
+| Forgot password | an admin | sets a temporary password (`POST /api/users/{id}/password-reset`); every session of the user is signed out and they must choose their own password at the next sign-in. Audited `USER_PASSWORD_RESET` |
+| Lost phone, still has recovery codes | the user, then an admin | signs in with a recovery code instead of the app's code (`POST /api/auth/mfa/recovery`). Each code works once. Audited `MFA_RECOVERY_CODE_USED`. A user cannot set up the app on a new phone themselves yet (`/setup` answers `409 mfa-already-set-up`), so they ask an admin for the MFA reset below |
+| Lost phone **and** recovery codes | an admin | resets two-step sign-in (`POST /api/users/{id}/mfa-reset`); the user sets up the app again at the next sign-in. Audited `MFA_RESET` |
+| The **only** administrator is stuck | IT, with the database | the break-glass steps in `it-handover.md` section 9. To avoid needing them, keep **at least two** administrator accounts |
+
+The administrator hands a temporary password over in person or reads it out on a call they started, never by
+email or chat. Before an MFA reset they check who they are talking to: whoever knows the password can set up the
+new authenticator.
+
+**Later:** if the business sets up email sending, a self-service reset can be added (a single-use link that expires
+in about 30 minutes, still followed by two-step sign-in). Nothing above would change.
+
 ---
 
 ## 3. Consultants
@@ -1075,7 +1107,7 @@ Disabling a user signs them out: their next request returns `401` (FR-18).
 
 ### POST /api/users/{id}/password-reset
 
-Sets a new temporary password and clears any lockout. Used when a user forgets their password, until password reset by email exists (FR-01). Every open session of that user is signed out, so a reset also locks out anyone who was using a stolen password. The user then has `mustChangePassword: true` again.
+Sets a new temporary password and clears any lockout. Used when a user forgets their password (FR-01: account recovery is done by an administrator, see "Account recovery" in section 2). Every open session of that user is signed out, so a reset also locks out anyone who was using a stolen password. The user then has `mustChangePassword: true` again.
 
 ```json
 { "temporaryPassword": "Reset-Password-2026" }
@@ -1420,6 +1452,5 @@ Every successful call writes an audit entry `CASE_VIEWED` (who and when - never 
 - **Bulk transfer limit:** draft says 500 clients per transfer (SRS 2) - to confirm.
 - **Session idle timeout:** draft says 30 minutes - to confirm.
 - **Manager scope:** all clients for now; department-level scope if departments are confirmed (SRS 4).
-- **Password reset (FR-01):** needs email sending (future). Until then an admin resets passwords.
 - **Case stages and fields (SRS 63):** cases have `OPEN` / `IN_PROGRESS` / `CLOSED` and a title for now. The business must define the real workflow stages, extra case fields, what a "credit record" holds, and any SLA targets.
 - **Reopening cases:** anyone who can see a case may reopen it for now. Should only managers be allowed to?
