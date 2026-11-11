@@ -181,6 +181,13 @@ export default function ClientsPage() {
                   <td className="ca-actions">
                     <Link
                       className="ca-link"
+                      to={`/consultant-actions?clientId=${c.id}`}
+                      aria-label={`Capture a sale for ${clientName(c)}`}
+                    >
+                      Capture sale
+                    </Link>
+                    <Link
+                      className="ca-link"
                       to={`/clients/${c.id}/edit`}
                       aria-label={`Edit ${clientName(c)}`}
                     >

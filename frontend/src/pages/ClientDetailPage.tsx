@@ -119,7 +119,10 @@ export default function ClientDetailPage() {
       {back}
       <h1>{clientName(c)}</h1>
       <RevealIdNumber key={c.id} clientId={c.id} masked={c.idNumberMasked} />
-      <p>
+      <p className="cd-buttons">
+        <Link className="btn primary" to={`/consultant-actions?clientId=${c.id}`}>
+          Capture a sale
+        </Link>
         <Link className="btn" to={`/clients/${c.id}/edit`}>
           Edit client
         </Link>

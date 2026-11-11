@@ -205,6 +205,7 @@ export async function preview(file: File, weekStarting?: string): Promise<Import
     replaceRequired: heldBy !== null,
     canConfirm: false,
     blockers: [],
+    typedInSales: heldBy === null ? 3 : 0,
   };
   const job: Job = { summary, rows, issues: ISSUES, mapped: new Map() };
   refresh(job);
@@ -317,6 +318,7 @@ export async function confirm(
     staleRows: 0,
     replacedImportJobId: s.weekImportedByJobId,
     supersededTransactions: 0,
+    replacedTypedInSales: s.typedInSales,
   };
 }
 

@@ -46,6 +46,19 @@ public class ReportService {
      */
     private static final long NO_CONSULTANT = -1L;
 
+    /**
+     * A week shows in the reports once its spreadsheet is imported, or as soon as
+     * a sale is typed in for it (V21: managers see the week as it happens). For
+     * a reporting_weeks row called w. Same rule as the views v_week_totals and
+     * v_week_daily_summary.
+     */
+    private static final String WEEK_HAS_SALES = """
+            (w.current_import_job_id is not null
+             or exists (select 1 from client_transactions x
+                        where x.reporting_week_id = w.id and x.import_job_id is null
+                          and x.superseded_by_import_job_id is null))
+            """;
+
     private final JdbcTemplate jdbc;
 
     public ReportService(JdbcTemplate jdbc) {
@@ -60,8 +73,6 @@ public class ReportService {
             return new WeekListResponse(ALL, jdbc.query("""
                     select t.week_starting, t.transaction_count, t.quotation_total, t.banked_total
                     from v_week_totals t
-                             join reporting_weeks w on w.id = t.reporting_week_id
-                    where w.current_import_job_id is not null
                     order by t.week_starting desc
                     """, (rs, n) -> new WeekListResponse.Week(
                     rs.getObject("week_starting", LocalDate.class),
@@ -77,7 +88,7 @@ public class ReportService {
                 from reporting_weeks w
                          left join v_transaction_totals tt
                                    on tt.reporting_week_id = w.id and tt.consultant_id = ?
-                where w.current_import_job_id is not null
+                where """ + WEEK_HAS_SALES + """
                 group by w.week_starting
                 order by w.week_starting desc
                 """, (rs, n) -> new WeekListResponse.Week(
@@ -92,7 +103,7 @@ public class ReportService {
     @Transactional(readOnly = true)
     public WeekSummaryResponse summary(AppUserPrincipal caller, String rawWeekStarting) {
         LocalDate monday = parseWeekStarting(rawWeekStarting);
-        long weekId = findImportedWeek(monday);
+        long weekId = findWeekWithSales(monday);
 
         if (seesEverything(caller)) {
             List<WeekSummaryResponse.Day> days = jdbc.query("""
@@ -180,7 +191,7 @@ public class ReportService {
     @Transactional(readOnly = true)
     public ConsultantReportResponse consultants(AppUserPrincipal caller, String rawWeekStarting) {
         LocalDate monday = parseWeekStarting(rawWeekStarting);
-        long weekId = findImportedWeek(monday);
+        long weekId = findWeekWithSales(monday);
 
         boolean all = seesEverything(caller);
         // A consultant only gets their own row.
@@ -256,7 +267,7 @@ public class ReportService {
     public ProductReportResponse products(AppUserPrincipal caller, String rawWeekStarting,
             Long requestedConsultantId) {
         LocalDate monday = parseWeekStarting(rawWeekStarting);
-        long weekId = findImportedWeek(monday);
+        long weekId = findWeekWithSales(monday);
 
         boolean all = seesEverything(caller);
         Long shownConsultantId;
@@ -330,7 +341,7 @@ public class ReportService {
     @Transactional(readOnly = true)
     public BudgetStructureReportResponse budgetStructures(String rawWeekStarting) {
         LocalDate monday = parseWeekStarting(rawWeekStarting);
-        long weekId = findImportedWeek(monday);
+        long weekId = findWeekWithSales(monday);
 
         List<StructureDayRow> rows = jdbc.query("""
                 select budget_structure, day_of_week, entry_count, loan_amount_total
@@ -394,15 +405,17 @@ public class ReportService {
         return date;
     }
 
-    /** The reporting week's id, if a register has been imported for it. */
-    private long findImportedWeek(LocalDate monday) {
+    /**
+     * The reporting week's id, if it has imported or typed-in sales
+     * (WEEK_HAS_SALES).
+     */
+    private long findWeekWithSales(LocalDate monday) {
         List<Long> ids = jdbc.queryForList("""
-                select id from reporting_weeks
-                where week_starting = ? and current_import_job_id is not null
-                """, Long.class, monday);
+                select w.id from reporting_weeks w
+                where w.week_starting = ? and """ + WEEK_HAS_SALES, Long.class, monday);
         if (ids.isEmpty()) {
             throw ApiException.notFound("report:week-not-found",
-                    "No weekly register has been imported for the week starting " + monday + ".");
+                    "No sales have been imported or typed in for the week starting " + monday + ".");
         }
         return ids.get(0);
     }

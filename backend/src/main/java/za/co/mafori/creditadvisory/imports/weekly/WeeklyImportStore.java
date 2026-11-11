@@ -569,6 +569,29 @@ public class WeeklyImportStore {
                 """, newJobId, oldJobId);
     }
 
+    /**
+     * Sales typed into the app for this week that still count: the import will
+     * replace them (V21, the spreadsheet wins).
+     */
+    public int typedInSalesForWeek(LocalDate weekStarting) {
+        Integer count = jdbc.queryForObject("""
+                select count(*) from client_transactions t join reporting_weeks w on w.id = t.reporting_week_id
+                where w.week_starting = ? and t.import_job_id is null and t.superseded_by_import_job_id is null
+                """, Integer.class, weekStarting);
+        return count == null ? 0 : count;
+    }
+
+    /**
+     * The import replaces the week's typed-in sales; kept, marked, left out of
+     * every report.
+     */
+    public int supersedeTypedInSales(long weekId, long newJobId) {
+        return jdbc.update("""
+                update client_transactions set superseded_by_import_job_id = ?
+                where reporting_week_id = ? and import_job_id is null and superseded_by_import_job_id is null
+                """, newJobId, weekId);
+    }
+
     public void setCurrentImport(long weekId, long jobId) {
         jdbc.update("update reporting_weeks set current_import_job_id = ? where id = ?", jobId, weekId);
     }

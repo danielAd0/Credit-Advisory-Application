@@ -146,6 +146,7 @@ Every successful change below writes one row to `audit_logs` in the **same trans
 | `CASE_UPDATED`                   | case                         | `fields`: the names of the fields that changed; `fromStatus`, `toStatus` when the status changed. Never the title                     |
 | `CASE_NOTE_ADDED`                | case                         | `noteId`. Never the note text                                                                                                         |
 | `REPORT_EXPORTED` | - | `report`, `weekStarting`, `scope`, `consultantId` (see `docs/api-reports.md` section 7) |
+| `SALE_CAPTURED` | transaction | `clientId`, `consultantId`, `transactionDate`, `products` (number of lines). Never amounts (see `docs/api-sales.md`) |
 | `PRODUCT_QUOTATION_CREATED` | product quotation | `name` (see `docs/api-admin.md`) |
 | `PRODUCT_QUOTATION_UPDATED` | product quotation | `from`, `to` (old and new name) |
 | `PRODUCT_QUOTATION_ACTIVATED` / `PRODUCT_QUOTATION_DEACTIVATED` | product quotation | `name` |
