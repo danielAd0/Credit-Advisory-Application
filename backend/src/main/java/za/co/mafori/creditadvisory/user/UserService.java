@@ -51,11 +51,11 @@ public class UserService {
     // ---------- queries ----------
 
     @Transactional(readOnly = true)
-    public PageResponse<UserResponse> search(String search, int page, int size) {
+    public PageResponse<UserResponse> search(String search, RoleName role, int page, int size) {
         int safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
         PageRequest pageable = PageRequest.of(Math.max(page, 0), safeSize, Sort.by("email"));
         Instant now = Instant.now(clock);
-        return PageResponse.of(users.search(LikePattern.contains(search), pageable),
+        return PageResponse.of(users.search(LikePattern.contains(search), role, pageable),
                 user -> UserResponse.from(user, now));
     }
 

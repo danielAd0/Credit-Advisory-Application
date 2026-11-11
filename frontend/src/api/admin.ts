@@ -118,9 +118,26 @@ export const changeConsultantStatus = (
   version: number,
 ) => api<Consultant>(`/api/consultants/${id}/status`, json('PATCH', { status, reason, version }));
 
-/** GET /api/users (ADMIN) - find a consultant's login, e.g. to reset the password. */
-export const listUsers = (params: { search?: string; page?: number; size?: number } = {}) =>
-  api<PageResponse<UserAccount>>(`/api/users${query(params)}`);
+/** GET /api/users (ADMIN) - optionally only users with one role. Sorted by email. */
+export const listUsers = (
+  params: { search?: string; role?: Role; page?: number; size?: number } = {},
+) => api<PageResponse<UserAccount>>(`/api/users${query(params)}`);
+
+/** POST /api/users (ADMIN) - a login with any roles; CONSULTANT also needs consultantId. */
+export const createUser = (input: {
+  email: string;
+  temporaryPassword: string;
+  roles: Role[];
+  consultantId?: number | null;
+}) => api<UserAccount>('/api/users', json('POST', input));
+
+/** PATCH /api/users/{id}/roles (ADMIN) - replaces the roles; signs the user out. */
+export const changeUserRoles = (id: number, roles: Role[], version: number) =>
+  api<UserAccount>(`/api/users/${id}/roles`, json('PATCH', { roles, version }));
+
+/** PATCH /api/users/{id}/enabled (ADMIN) - disabling signs the user out. */
+export const setUserEnabled = (id: number, enabled: boolean, version: number) =>
+  api<UserAccount>(`/api/users/${id}/enabled`, json('PATCH', { enabled, version }));
 
 /** POST /api/users/{id}/password-reset (ADMIN) - sets a new temporary password and unlocks. */
 export const resetPassword = (userId: number, temporaryPassword: string) =>

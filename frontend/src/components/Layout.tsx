@@ -38,7 +38,7 @@ const groups: { label: string; items: NavItem[] }[] = [
         to: '/consultant-actions',
         label: 'Consultant actions',
         icon: IconUserCheck,
-        roles: everyone,
+        roles: ['CONSULTANT'],
       },
       { to: '/reports', label: 'Reports', icon: IconChart, roles: everyone },
       { to: '/consultants', label: 'Team', icon: IconTeam, roles: managers },
@@ -55,6 +55,7 @@ const groups: { label: string; items: NavItem[] }[] = [
   {
     label: 'Administration',
     items: [
+      { to: '/managers', label: 'Managers', icon: IconUserCheck, roles: ['ADMIN'] },
       { to: '/audit-log', label: 'Audit log', icon: IconFile, roles: ['ADMIN'] },
       { to: '/reassign', label: 'Reassign clients', icon: IconSwap, roles: managers },
       {

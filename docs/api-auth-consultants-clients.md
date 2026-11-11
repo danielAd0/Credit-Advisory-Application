@@ -973,6 +973,7 @@ The password (and its hash) is never returned.
 | Name | Example | Meaning |
 |---|---|---|
 | `search` | `thandi` | part of the email, case-insensitive |
+| `role` | `MANAGER` | only users with this role (`CONSULTANT`, `MANAGER` or `ADMIN`); left out, everyone |
 | `page`, `size` | `0`, `20` | paging (max size 100) |
 
 Sorted by `email`.

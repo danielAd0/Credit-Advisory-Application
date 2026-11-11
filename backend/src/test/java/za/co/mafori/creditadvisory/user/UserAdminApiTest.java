@@ -18,6 +18,23 @@ class UserAdminApiTest extends ApiTestBase {
     }
 
     @Test
+    void usersCanBeListedByRole() {
+        createUser("manager@test.local", null, RoleName.MANAGER);
+        createUser("boss@test.local", null, RoleName.MANAGER, RoleName.ADMIN);
+        ApiClient admin = signIn(ADMIN_EMAIL);
+
+        ApiClient.Response managers = admin.get("/api/users?role=MANAGER");
+        assertThat(managers.status()).as(managers.body()).isEqualTo(200);
+        assertThat(managers.texts("$.items[*].email")).containsExactly("boss@test.local", "manager@test.local");
+        assertThat(managers.number("$.totalItems")).isEqualTo(2);
+
+        ApiClient.Response searched = admin.get("/api/users?role=MANAGER&search=boss");
+        assertThat(searched.texts("$.items[*].email")).containsExactly("boss@test.local");
+
+        assertThat(admin.get("/api/users?role=NOBODY").status()).isEqualTo(400);
+    }
+
+    @Test
     void adminCreatesAConsultantLogin() {
         long consultantId = createConsultant("C001", "Thandi Test");
         ApiClient admin = signIn(ADMIN_EMAIL);

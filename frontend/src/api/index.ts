@@ -6,6 +6,7 @@ const useMock = import.meta.env.VITE_USE_MOCK === 'true';
 export const data = useMock ? mock : real;
 export { ApiError } from './http';
 export { accounts } from './accounts';
+export { users } from './users';
 export type { Consultant, ConsultantAccount, UserAccount } from './accounts';
 export { imports } from './imports';
 export type {

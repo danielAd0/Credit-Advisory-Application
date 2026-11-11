@@ -16,6 +16,7 @@ import Dashboard from './pages/Dashboard';
 import EditClientPage from './pages/EditClientPage';
 import ImportPage from './pages/ImportPage';
 import LoginPage from './pages/LoginPage';
+import ManagersPage from './pages/ManagersPage';
 import EmployersPage from './pages/EmployersPage';
 import ProductQuotationsPage from './pages/ProductQuotationsPage';
 import ProductsPage from './pages/ProductsPage';
@@ -58,6 +59,14 @@ export default function App() {
                 }
               />
               <Route
+                path="managers"
+                element={
+                  <RequireRole roles={['ADMIN']}>
+                    <ManagersPage />
+                  </RequireRole>
+                }
+              />
+              <Route
                 path="audit-log"
                 element={
                   <RequireRole roles={['ADMIN']}>
@@ -74,7 +83,14 @@ export default function App() {
                 }
               />
               <Route path="reports" element={<ReportsPage />} />
-              <Route path="consultant-actions" element={<ConsultantActionsPage />} />
+              <Route
+                path="consultant-actions"
+                element={
+                  <RequireRole roles={['CONSULTANT']}>
+                    <ConsultantActionsPage />
+                  </RequireRole>
+                }
+              />
               <Route path="products" element={<ProductsPage />} />
               <Route path="employers" element={<EmployersPage />} />
               <Route

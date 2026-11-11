@@ -309,7 +309,7 @@ Everybody is signed out by a restart. Users are also signed out after 30 minutes
 | A user is locked out (5 wrong passwords or codes) | it opens again by itself after 15 minutes, or an administrator: Consultants > Manage > Unlock account |
 | A user forgot their password | an administrator: Consultants > Manage > Reset password. Hand the temporary password over in person |
 | A user lost their phone and their recovery codes | an administrator: Consultants > Manage > Reset two-step sign-in. **Check who you are talking to first** - this is how an attacker would try to get in |
-| The same, for a **manager or administrator** account | there is no screen for these accounts yet; the server supports it (`docs/api-admin.md`, `/api/users/{id}/...`). Ask the development team |
+| The same, for a **manager or administrator** account | an administrator: Managers > Manage (unlock, reset password, reset two-step sign-in, disable) |
 | 20 failed sign-ins within 5 minutes from one network address | that address gets "too many attempts" for a few minutes, then works again by itself |
 | The application will not start: `Refusing to start in production` | the message names every setting to fix (section 5.2) |
 | The application will not start: database errors | is PostgreSQL running, does the firewall allow the app server, do `DB_URL`, user and password match, is the certificate valid for `sslmode=verify-full` |
@@ -317,7 +317,7 @@ Everybody is signed out by a restart. Users are also signed out after 30 minutes
 | An ID-number key lost, no backup | stop the application and call the development team. The stored ID numbers cannot be recovered |
 | A key may have leaked (seen by someone who should not have) | treat it as a security incident: tell the information officer and the development team the same day. Changing a key needs the development team |
 | The audit reviewer finds something nobody can explain (section 10) | the same: an incident, reported to the information officer that day |
-| A laptop or phone with access was stolen | for a consultant, an administrator sets them to Suspended (Consultants > Manage > Status) or resets their password and two-step sign-in - each signs out all their sessions at once. For a manager or administrator, ask the development team |
+| A laptop or phone with access was stolen | for a consultant, an administrator sets them to Suspended (Consultants > Manage > Status) or resets their password and two-step sign-in - each signs out all their sessions at once. For a manager or administrator, an administrator disables the account or resets their password and two-step sign-in under Managers > Manage |
 
 The audit log (administrators: Audit log in the menu) shows who did what and when - lockouts, blocked
 sign-in addresses, wrong passwords when showing an ID number, every full ID number viewed, imports,
