@@ -16,7 +16,8 @@ import za.co.mafori.creditadvisory.common.web.PageResponse;
 
 /**
  * Product catalogue. Everyone signed in can read it (consultants pick products
- * when capturing a sale); only ADMIN can change it.
+ * when capturing a sale). MANAGER and ADMIN can add a product; only ADMIN can
+ * change or deactivate one.
  */
 @RestController
 @RequestMapping("/api/products")
@@ -43,7 +44,7 @@ public class ProductController {
     }
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public ResponseEntity<ProductResponse> create(@Valid @RequestBody CreateProductRequest request) {
         ProductResponse created = service.create(request);
         return ResponseEntity.created(URI.create("/api/products/" + created.id())).body(created);

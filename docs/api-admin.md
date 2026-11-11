@@ -36,7 +36,7 @@ Afterwards, use the existing endpoints:
 - `PATCH /api/consultants/{id}/status` `{ "status": "SUSPENDED", "reason": "...", "version": 0 }` – signs the consultant out
 - `PATCH /api/consultants/{id}` `{ "fullName": "...", "version": 0 }`
 
-## 2. Products (read: any signed-in user · change: ADMIN)
+## 2. Products (read: any signed-in user · add: MANAGER, ADMIN · change: ADMIN)
 
 Product = one column of the weekly register (Combo, IVC, Insurance, Mafori Card, …). The 15 products
 from the workbook are seeded by V6. **Codes never change** (the import maps columns by code) and products
@@ -52,6 +52,12 @@ are **never deleted** – deactivate them instead.
 
 `code` is normalised: `"funeral cover"` → `FUNERAL_COVER`. `standardPrice` may be `null` (negotiated).
 Errors: `409 product:duplicate-code`, `404 product:not-found`.
+
+- POST (add) is MANAGER or ADMIN. Both PATCHes (change, deactivate) are ADMIN only; anyone else gets `403`.
+  Every add is audited as `PRODUCT_CREATED`.
+- Changing a product's counts-toward settings does not change past sales: each sale line keeps its own copy
+  of the flags from the day it was saved (V6), so old weeks' totals stay the same.
+- Frontend: the **Products** page (ADMIN and MANAGER). Both see **Add product**; only ADMIN sees **Edit**.
 
 Product object:
 
@@ -111,9 +117,12 @@ Audited as `EMPLOYER_MERGED` (with both names and the counts) and `EMPLOYER_REVI
 Frontend: an "Employers to review" list (`needsReview=true`), each with **Merge into…** (an employer picker
 plus a reason) and **Keep**.
 
-## 4. Product quotations (read: any signed-in user · change: ADMIN)
+## 4. Product quotations, shown as "Branch" (read: any signed-in user · change: ADMIN)
 
-The **product quotation** on a client: the `C_BRANCHNAME` column of the old client spreadsheets. A list admins
+The **product quotation** on a client: the `C_BRANCHNAME` column of the old client spreadsheets. **The app calls
+it "Branch"** everywhere people see it (page, forms, Clients list, audit log, error messages) because that is what
+it is. The API paths, JSON fields, error codes, audit codes and database names keep `product_quotation`, so
+nothing that calls the API has to change. A list admins
 manage, so consultants pick it from a dropdown and the same one is never spelled two ways. V20 creates the table
 empty; admins fill it (or the launch load does, from the cleaned list).
 
@@ -146,8 +155,9 @@ empty; admins fill it (or the launch load does, from the cleaned list).
 Audited as `PRODUCT_QUOTATION_CREATED` (`name`), `PRODUCT_QUOTATION_UPDATED` (`from`, `to`, only when the name really
 changed), `PRODUCT_QUOTATION_ACTIVATED` / `PRODUCT_QUOTATION_DEACTIVATED` (`name`). Target type `PRODUCT_QUOTATION`.
 
-Frontend: the **Product quotations** page (ADMIN and MANAGER; only ADMIN sees Add and Edit), and the dropdown on
-the Add and Edit client forms (active ones only).
+Frontend: the **Branches** page at `/branches` (ADMIN and MANAGER; only ADMIN sees Add and Edit; the old
+`/product-quotations` address redirects there), and the **Branch** dropdown on the Add and Edit client forms
+(active ones only).
 
 ## 5. Assigning clients to consultants (MANAGER, ADMIN)
 

@@ -1,4 +1,4 @@
-import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { features, type Role } from './api';
 import { AuthProvider } from './auth/AuthContext';
 import RequireAuth from './auth/RequireAuth';
@@ -108,13 +108,15 @@ export default function App() {
               <Route path="products" element={<ProductsPage />} />
               <Route path="employers" element={<EmployersPage />} />
               <Route
-                path="product-quotations"
+                path="branches"
                 element={
                   <RequireRole roles={managers}>
                     <ProductQuotationsPage />
                   </RequireRole>
                 }
               />
+              {/* The old address, from before product quotations were renamed to branches. */}
+              <Route path="product-quotations" element={<Navigate to="/branches" replace />} />
               <Route
                 path="reassign"
                 element={

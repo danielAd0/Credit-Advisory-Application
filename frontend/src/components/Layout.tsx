@@ -45,8 +45,8 @@ const groups: { label: string; items: NavItem[] }[] = [
       { to: '/products', label: 'Products', icon: IconFolder, roles: managers },
       { to: '/employers', label: 'Employers', icon: IconBriefcase, roles: managers },
       {
-        to: '/product-quotations',
-        label: 'Product quotations',
+        to: '/branches',
+        label: 'Branches',
         icon: IconQuote,
         roles: managers,
       },

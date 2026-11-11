@@ -4,7 +4,7 @@ import { FILE_REFERENCE_MAX, type DetailsErrors, type DetailsValues } from './cl
 
 /**
  * The client fields the Add and Edit client forms share: phones, employer,
- * product quotation, payment method, File number and File ID. Consultants fill
+ * branch, payment method, File number and File ID. Consultants fill
  * these in, so everything that can be a dropdown is one, and the file fields
  * only take digits.
  */
@@ -24,7 +24,7 @@ interface Lists {
   failed: boolean;
 }
 
-/** The active employers and product quotations to choose from. */
+/** The active employers and branches to choose from. */
 function useActiveLists(): Lists | null {
   const [lists, setLists] = useState<Lists | null>(null);
   useEffect(() => {
@@ -152,7 +152,7 @@ export default function ClientDetailsFields({
 
       {lists?.failed && (
         <p className="alert error" role="alert">
-          Could not load the employer and product quotation lists. Refresh the page to choose them.
+          Could not load the employer and branch lists. Refresh the page to choose them.
         </p>
       )}
       <div className="ac-row">
@@ -181,7 +181,7 @@ export default function ClientDetailsFields({
       </div>
       {dropdown(
         'productQuotationId',
-        'Product quotation',
+        'Branch',
         options(lists?.quotations ?? [], current?.productQuotation ?? null),
         'None',
       )}

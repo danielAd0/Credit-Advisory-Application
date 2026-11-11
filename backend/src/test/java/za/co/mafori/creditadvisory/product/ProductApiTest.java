@@ -8,10 +8,14 @@ import za.co.mafori.creditadvisory.support.ApiClient;
 import za.co.mafori.creditadvisory.support.ApiTestBase;
 import za.co.mafori.creditadvisory.user.RoleName;
 
-/** /api/products - read by everyone, maintained by ADMIN. */
+/**
+ * /api/products - read by everyone, added by MANAGER or ADMIN, changed by
+ * ADMIN.
+ */
 class ProductApiTest extends ApiTestBase {
 
     private ApiClient admin;
+    private ApiClient manager;
     private ApiClient consultant;
 
     @BeforeEach
@@ -20,12 +24,18 @@ class ProductApiTest extends ApiTestBase {
         long consultantId = createConsultant("C001", "Thandi Test");
         createUser("consultant@test.local", consultantId, RoleName.CONSULTANT);
         consultant = signIn("consultant@test.local");
+        createUser("manager@test.local", null, RoleName.MANAGER);
+        manager = signIn("manager@test.local");
     }
 
     private ApiClient.Response createFuneralCover() {
         return admin.post("/api/products", """
                 {"code":"funeral cover","name":"Funeral Cover","standardPrice":99.50,
                  "countsTowardQuotation":true,"countsTowardBanked":false,"displayOrder":160}""");
+    }
+
+    private long count(String sql, Object... args) {
+        return jdbc.queryForObject(sql, Long.class, args);
     }
 
     @Test
@@ -80,6 +90,28 @@ class ProductApiTest extends ApiTestBase {
                 .doesNotContain("FUNERAL_COVER");
         assertThat(consultant.get("/api/products?active=false").texts("$.items[*].code"))
                 .containsExactly("FUNERAL_COVER");
+    }
+
+    @Test
+    void managerAddsAProductButCannotChangeIt() {
+        ApiClient.Response created = manager.post("/api/products", """
+                {"code":"legal cover","name":"Legal Cover","standardPrice":120,
+                 "countsTowardQuotation":true,"countsTowardBanked":true}""");
+
+        assertThat(created.status()).as(created.body()).isEqualTo(201);
+        assertThat(created.text("$.code")).isEqualTo("LEGAL_COVER");
+        assertThat(count("select count(*) from audit_logs where action = 'PRODUCT_CREATED' and target_id = ?",
+                String.valueOf(created.number("$.id")))).isEqualTo(1);
+
+        long id = created.number("$.id");
+        long version = created.number("$.version");
+        assertThat(manager.patch("/api/products/" + id, """
+                {"name":"Renamed","standardPrice":120,"countsTowardQuotation":true,
+                 "countsTowardBanked":true,"displayOrder":0,"version":%d}""".formatted(version)).status())
+                .as("editing stays ADMIN only").isEqualTo(403);
+        assertThat(manager.patch("/api/products/" + id + "/active", """
+                {"active":false,"version":%d}""".formatted(version)).status())
+                .as("deactivating stays ADMIN only").isEqualTo(403);
     }
 
     @Test

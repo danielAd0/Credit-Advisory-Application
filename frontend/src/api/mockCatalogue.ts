@@ -93,17 +93,16 @@ export function mockEmployerRef(id: number | null, currentId?: number | null): N
   return namedRef(e);
 }
 
-/** Same as mockEmployerRef, for product quotations. */
+/** Same as mockEmployerRef, for branches. */
 export function mockQuotationRef(id: number | null, currentId?: number | null): NamedRef | null {
   if (id === null) return null;
   const q = productQuotations.find((x) => x.id === id);
-  if (!q)
-    throw problem(404, 'product-quotation:not-found', `Product quotation ${id} does not exist.`);
+  if (!q) throw problem(404, 'product-quotation:not-found', `Branch ${id} does not exist.`);
   if (!q.active && id !== currentId)
     throw problem(
       422,
       'client:product-quotation-not-active',
-      'This product quotation has been deactivated. Choose another one.',
+      'This branch has been deactivated. Choose another one.',
     );
   return namedRef(q);
 }
@@ -256,7 +255,7 @@ export async function setEmployerActive(
   return { ...e };
 }
 
-// ---------- product quotations ----------
+// ---------- branches ----------
 
 export async function listProductQuotations(
   params: { search?: string; active?: boolean; page?: number; size?: number } = {},
@@ -280,7 +279,7 @@ export async function createProductQuotation(input: { name: string }): Promise<P
     throw problem(
       409,
       'product-quotation:duplicate-name',
-      `A product quotation called ${name} already exists.`,
+      `A branch called ${name} already exists.`,
     );
   const created = quotation(Math.max(0, ...productQuotations.map((x) => x.id)) + 1, name);
   productQuotations.push(created);
@@ -293,20 +292,16 @@ export async function updateProductQuotation(
 ): Promise<ProductQuotation> {
   await delay();
   const x = productQuotations.find((k) => k.id === id);
-  if (!x) throw problem(404, 'product-quotation:not-found', 'Product quotation not found.');
+  if (!x) throw problem(404, 'product-quotation:not-found', 'Branch not found.');
   if (x.version !== input.version)
-    throw problem(
-      409,
-      'conflict:stale-version',
-      'Someone else changed this product quotation first.',
-    );
+    throw problem(409, 'conflict:stale-version', 'Someone else changed this branch first.');
   const name = clean(input.name);
   if (name !== x.name) {
     if (duplicateQuotation(name, id))
       throw problem(
         409,
         'product-quotation:duplicate-name',
-        `A product quotation called ${name} already exists.`,
+        `A branch called ${name} already exists.`,
       );
     Object.assign(x, { name, version: x.version + 1, updatedAt: now() });
   }
@@ -320,13 +315,9 @@ export async function setProductQuotationActive(
 ): Promise<ProductQuotation> {
   await delay();
   const x = productQuotations.find((k) => k.id === id);
-  if (!x) throw problem(404, 'product-quotation:not-found', 'Product quotation not found.');
+  if (!x) throw problem(404, 'product-quotation:not-found', 'Branch not found.');
   if (x.version !== version)
-    throw problem(
-      409,
-      'conflict:stale-version',
-      'Someone else changed this product quotation first.',
-    );
+    throw problem(409, 'conflict:stale-version', 'Someone else changed this branch first.');
   if (x.active !== active) Object.assign(x, { active, version: x.version + 1, updatedAt: now() });
   return { ...x };
 }

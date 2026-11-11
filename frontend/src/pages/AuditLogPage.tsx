@@ -58,10 +58,10 @@ const ACTIONS: Partial<Record<string, string>> = {
   EMPLOYER_REVIEWED: 'Employer reviewed',
   PRODUCT_CREATED: 'Product created',
   PRODUCT_UPDATED: 'Product updated',
-  PRODUCT_QUOTATION_CREATED: 'Product quotation created',
-  PRODUCT_QUOTATION_UPDATED: 'Product quotation renamed',
-  PRODUCT_QUOTATION_ACTIVATED: 'Product quotation activated',
-  PRODUCT_QUOTATION_DEACTIVATED: 'Product quotation deactivated',
+  PRODUCT_QUOTATION_CREATED: 'Branch created',
+  PRODUCT_QUOTATION_UPDATED: 'Branch renamed',
+  PRODUCT_QUOTATION_ACTIVATED: 'Branch activated',
+  PRODUCT_QUOTATION_DEACTIVATED: 'Branch deactivated',
   SALE_CAPTURED: 'Sale typed in',
 };
 
@@ -108,8 +108,12 @@ const TARGETS = [
   'TRANSACTION',
 ];
 
-/** PRODUCT_QUOTATION -> Product quotation. */
+/** Shown names that differ from the code: product quotations are called branches in the app. */
+const TARGET_NAMES: Partial<Record<string, string>> = { PRODUCT_QUOTATION: 'Branch' };
+
+/** IMPORT_JOB -> Import, PRODUCT_QUOTATION -> Branch. */
 const targetLabel = (t: string) =>
+  TARGET_NAMES[t] ??
   (t.charAt(0) + t.slice(1).toLowerCase()).replace('_job', '').replace(/_/g, ' ');
 
 function show(key: string, value: unknown): string {

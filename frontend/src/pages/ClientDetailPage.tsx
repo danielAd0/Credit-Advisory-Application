@@ -182,7 +182,7 @@ export default function ClientDetailPage() {
             </dd>
             <dt>Pays by</dt>
             <dd>{c.paymentMethod === 'DEBIT_ORDER' ? 'Debit order' : 'Through the employer'}</dd>
-            <dt>Product quotation</dt>
+            <dt>Branch</dt>
             <dd>
               {c.productQuotation ? (
                 <>

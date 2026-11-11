@@ -32,11 +32,13 @@ const money = (n: number | null) =>
 
 interface PanelProps {
   product: Product | null;
+  /** ADMIN only. A MANAGER can add a product but not change or deactivate it. */
+  canEdit: boolean;
   onSaved: (p: Product, isNew: boolean) => void;
   onClose: () => void;
 }
 
-function ProductPanel({ product, onSaved, onClose }: PanelProps) {
+function ProductPanel({ product, canEdit, onSaved, onClose }: PanelProps) {
   const [v, setV] = useState<Form>(product ? toForm(product) : EMPTY);
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
@@ -68,6 +70,14 @@ function ProductPanel({ product, onSaved, onClose }: PanelProps) {
         ? await catalogue.updateProduct(current.id, { ...fields, version: current.version })
         : await catalogue.createProduct({ ...fields, code: v.code.trim() });
       onSaved(saved, !current);
+      if (!current && !canEdit) {
+        // A manager stays on an empty form: they cannot edit what they just added.
+        setV(EMPTY);
+        setOk(
+          `Added ${saved.name} (${saved.code}). Only an administrator can change or deactivate it.`,
+        );
+        return;
+      }
       setCurrent(saved);
       setV(toForm(saved));
       setOk('Saved.');
@@ -204,6 +214,7 @@ function ProductPanel({ product, onSaved, onClose }: PanelProps) {
 export default function ProductsPage() {
   const session = useSession();
   const isAdmin = hasAnyRole(session, ['ADMIN']);
+  const canAdd = hasAnyRole(session, ['ADMIN', 'MANAGER']);
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
   const [state, setState] = useState<'all' | 'active' | 'inactive'>('all');
@@ -245,7 +256,7 @@ export default function ProductsPage() {
     <>
       <div className="topbar-actions">
         <h1>Products</h1>
-        {isAdmin && (
+        {canAdd && (
           <button type="button" className="btn primary" onClick={() => setPanel({ product: null })}>
             Add product
           </button>
@@ -348,8 +359,9 @@ export default function ProductsPage() {
         <ProductPanel
           key={panel.product?.id ?? 'new'}
           product={panel.product}
+          canEdit={isAdmin}
           onSaved={(saved, isNew) => {
-            if (isNew) setPanel({ product: saved });
+            if (isNew && isAdmin) setPanel({ product: saved });
             setReload((n) => n + 1);
           }}
           onClose={() => setPanel(null)}

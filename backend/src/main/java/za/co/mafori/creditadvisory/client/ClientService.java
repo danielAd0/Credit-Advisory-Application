@@ -337,7 +337,7 @@ public class ClientService {
         return employer;
     }
 
-    /** Same rules as chooseEmployer, for the product quotation list. */
+    /** Same rules as chooseEmployer, for the branch list. */
     private ProductQuotation chooseProductQuotation(Long requestedId, ProductQuotation current) {
         if (requestedId == null) {
             return null;
@@ -346,10 +346,10 @@ public class ClientService {
             return current;
         }
         ProductQuotation quotation = productQuotations.findById(requestedId).orElseThrow(() -> ApiException.notFound(
-                "product-quotation:not-found", "Product quotation " + requestedId + " does not exist."));
+                "product-quotation:not-found", "Branch " + requestedId + " does not exist."));
         if (!quotation.isActive()) {
-            throw ApiException.unprocessable("client:product-quotation-not-active", "Product quotation not active",
-                    "This product quotation has been deactivated. Choose another one.");
+            throw ApiException.unprocessable("client:product-quotation-not-active", "Branch not active",
+                    "This branch has been deactivated. Choose another one.");
         }
         return quotation;
     }

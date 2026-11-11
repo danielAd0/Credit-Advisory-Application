@@ -11,7 +11,7 @@ import za.co.mafori.creditadvisory.common.web.ApiException;
 import za.co.mafori.creditadvisory.common.web.LikePattern;
 import za.co.mafori.creditadvisory.common.web.PageResponse;
 
-/** The product quotation list. Role checks live on the controller. */
+/** The branch list. Role checks live on the controller. */
 @Service
 public class ProductQuotationService {
 
@@ -64,7 +64,7 @@ public class ProductQuotationService {
     }
 
     /**
-     * An inactive product quotation stays on the clients that have it, but is no
+     * An inactive branch stays on the clients that have it, but is no
      * longer offered for new or edited clients.
      */
     @Transactional
@@ -82,13 +82,13 @@ public class ProductQuotationService {
 
     private ProductQuotation load(long id) {
         return quotations.findById(id).orElseThrow(() -> ApiException.notFound("product-quotation:not-found",
-                "Product quotation " + id + " does not exist."));
+                "Branch " + id + " does not exist."));
     }
 
     private void requireFreeName(String name, long excludeId) {
         if (quotations.nameTaken(name, excludeId)) {
             throw ApiException.conflict("product-quotation:duplicate-name", "Duplicate name",
-                    "A product quotation called " + name + " already exists.");
+                    "A branch called " + name + " already exists.");
         }
     }
 

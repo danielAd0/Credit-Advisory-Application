@@ -53,9 +53,9 @@ function explain(err: unknown): string {
     if (err.status === 400)
       return 'The server rejected some of the details. Check that the ID number is a valid South African ID number and that the phone numbers are valid.';
     if (err.status === 404)
-      return 'That employer or product quotation no longer exists. Refresh the page and choose again.';
+      return 'That employer or branch no longer exists. Refresh the page and choose again.';
     if (err.status === 422)
-      return 'That consultant, employer or product quotation cannot be chosen right now. Choose another one.';
+      return 'That consultant, employer or branch cannot be chosen right now. Choose another one.';
   }
   return 'Could not save the client. Try again.';
 }

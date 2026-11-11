@@ -147,7 +147,7 @@ export default function ClientsPage() {
                 <th>Client employer</th>
                 <th>Work telephone</th>
                 <th>Home telephone</th>
-                <th>Product quotation</th>
+                <th>Branch</th>
                 <th>Payment term</th>
                 <th>Structure</th>
                 {isManager && <th>Consultant</th>}

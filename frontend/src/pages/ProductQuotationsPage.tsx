@@ -22,15 +22,14 @@ function QuotationPanel({ quotation, justAdded, onSaved, onClose }: PanelProps) 
   const [busy, setBusy] = useState(false);
   const [current, setCurrent] = useState<ProductQuotation | null>(quotation);
 
-  const staleText =
-    'Someone else changed this product quotation. Close this panel, reopen it and try again.';
+  const staleText = 'Someone else changed this branch. Close this panel, reopen it and try again.';
 
   async function save(e: FormEvent) {
     e.preventDefault();
     if (busy) return;
     setError(null);
     setOk(null);
-    if (!name.trim()) return setError('Enter the product quotation name.');
+    if (!name.trim()) return setError('Enter the branch name.');
     setBusy(true);
     try {
       const saved = current
@@ -44,9 +43,7 @@ function QuotationPanel({ quotation, justAdded, onSaved, onClose }: PanelProps) 
       setName(saved.name);
       setOk('Saved.');
     } catch (err) {
-      setError(
-        isStale(err) ? staleText : (detailOf(err) ?? 'Could not save the product quotation.'),
-      );
+      setError(isStale(err) ? staleText : (detailOf(err) ?? 'Could not save the branch.'));
     } finally {
       setBusy(false);
     }
@@ -67,24 +64,19 @@ function QuotationPanel({ quotation, justAdded, onSaved, onClose }: PanelProps) 
       setCurrent(saved);
       setOk(
         saved.active
-          ? 'The product quotation is active.'
-          : 'The product quotation is deactivated. Clients that have it keep it, but it can no longer be chosen.',
+          ? 'The branch is active.'
+          : 'The branch is deactivated. Clients that have it keep it, but it can no longer be chosen.',
       );
     } catch (err) {
-      setError(
-        isStale(err) ? staleText : (detailOf(err) ?? 'Could not change the product quotation.'),
-      );
+      setError(isStale(err) ? staleText : (detailOf(err) ?? 'Could not change the branch.'));
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <section
-      className="cn-panel"
-      aria-label={current ? `Edit ${current.name}` : 'Add product quotation'}
-    >
-      <h2>{current ? `Edit ${current.name}` : 'Add product quotation'}</h2>
+    <section className="cn-panel" aria-label={current ? `Edit ${current.name}` : 'Add branch'}>
+      <h2>{current ? `Edit ${current.name}` : 'Add branch'}</h2>
       {error && (
         <p className="alert error" role="alert">
           {error}
@@ -112,7 +104,7 @@ function QuotationPanel({ quotation, justAdded, onSaved, onClose }: PanelProps) 
         </div>
         <div className="cn-actions">
           <button type="submit" className="btn primary" disabled={busy}>
-            {current ? 'Save changes' : 'Add product quotation'}
+            {current ? 'Save changes' : 'Add branch'}
           </button>
           {current && (
             <button type="button" className="btn" onClick={toggleActive} disabled={busy}>
@@ -128,7 +120,7 @@ function QuotationPanel({ quotation, justAdded, onSaved, onClose }: PanelProps) 
   );
 }
 
-/** The product quotation list (C_BRANCHNAME in the old spreadsheets). Admins manage it. */
+/** The branch list (C_BRANCHNAME in the old spreadsheets). Admins manage it. */
 export default function ProductQuotationsPage() {
   const session = useSession();
   const isAdmin = hasAnyRole(session, ['ADMIN']);
@@ -166,7 +158,7 @@ export default function ProductQuotationsPage() {
         setResult(r);
         setError(null);
       })
-      .catch(() => live && setError('Could not load product quotations.'));
+      .catch(() => live && setError('Could not load branches.'));
     return () => {
       live = false;
     };
@@ -175,20 +167,19 @@ export default function ProductQuotationsPage() {
   return (
     <>
       <div className="topbar-actions">
-        <h1>Product quotations</h1>
+        <h1>Branches</h1>
         {isAdmin && (
           <button
             type="button"
             className="btn primary"
             onClick={() => setPanel({ quotation: null, justAdded: false })}
           >
-            Add product quotation
+            Add branch
           </button>
         )}
       </div>
       <p className="muted">
-        The list consultants choose from on a client. Product quotations are deactivated, not
-        deleted.
+        The list consultants choose from on a client. Branches are deactivated, not deleted.
       </p>
 
       <div className="cn-filters">
@@ -196,7 +187,7 @@ export default function ProductQuotationsPage() {
           <input
             type="search"
             placeholder="Search by name"
-            aria-label="Search product quotations"
+            aria-label="Search branches"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -209,7 +200,7 @@ export default function ProductQuotationsPage() {
             setPageNo(0);
           }}
         >
-          <option value="all">All product quotations</option>
+          <option value="all">All branches</option>
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
         </select>
@@ -223,7 +214,7 @@ export default function ProductQuotationsPage() {
       {!error && result === null && <p className="muted">Loading...</p>}
       {result && result.items.length === 0 && (
         <p className="muted">
-          {query || state !== 'all' ? 'No product quotations found.' : 'No product quotations yet.'}
+          {query || state !== 'all' ? 'No branches found.' : 'No branches yet.'}
           {isAdmin && !query && state === 'all' && ' Add the first one with the button above.'}
         </p>
       )}

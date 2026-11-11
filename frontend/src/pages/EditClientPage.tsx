@@ -43,7 +43,7 @@ export default function EditClientPage() {
     id: number;
     masked: string;
     version: number;
-    /** For an employer or product quotation deactivated since it was chosen. */
+    /** For an employer or branch deactivated since it was chosen. */
     refs: Pick<ClientSummary, 'employer' | 'productQuotation'>;
   } | null>(null);
   const [loadState, setLoadState] = useState<'ok' | 'missing' | 'failed'>('ok');
@@ -163,7 +163,7 @@ export default function EditClientPage() {
                     : err instanceof ApiError && err.status === 400
                       ? 'The server rejected some of the details. Check the email and phone numbers.'
                       : err instanceof ApiError && err.status === 422
-                        ? 'That employer or product quotation has been deactivated. Choose another one.'
+                        ? 'That employer or branch has been deactivated. Choose another one.'
                         : 'Could not save the changes. Nothing was changed. Try again.')),
       );
       setSaving(false);
