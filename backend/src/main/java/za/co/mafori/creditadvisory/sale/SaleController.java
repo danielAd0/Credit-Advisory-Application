@@ -7,7 +7,10 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -24,10 +27,12 @@ public class SaleController {
 
     private final SaleService service;
     private final SaleHistoryService history;
+    private final SaleEditService edits;
 
-    public SaleController(SaleService service, SaleHistoryService history) {
+    public SaleController(SaleService service, SaleHistoryService history, SaleEditService edits) {
         this.service = service;
         this.history = history;
+        this.edits = edits;
     }
 
     @GetMapping("/api/payment-terms")
@@ -79,5 +84,29 @@ public class SaleController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "25") int size) {
         return history.history(caller, from, to, consultantId, page, size);
+    }
+
+    /** One sale with every field, for the edit form. */
+    @GetMapping("/api/transactions/{id}")
+    public SaleDetail detail(@AuthenticationPrincipal AppUserPrincipal caller, @PathVariable long id) {
+        return edits.detail(caller, id);
+    }
+
+    /** Changes a typed-in sale until its week's spreadsheet is imported. */
+    @PatchMapping("/api/transactions/{id}")
+    public SaleDetail edit(@AuthenticationPrincipal AppUserPrincipal caller, @PathVariable long id,
+            @Valid @RequestBody EditSaleRequest request) {
+        return edits.edit(caller, id, request);
+    }
+
+    /**
+     * Deletes a typed-in sale until its week's spreadsheet is imported; 204 when
+     * done.
+     */
+    @DeleteMapping("/api/transactions/{id}")
+    public ResponseEntity<Void> delete(@AuthenticationPrincipal AppUserPrincipal caller, @PathVariable long id,
+            @RequestParam long version) {
+        edits.delete(caller, id, version);
+        return ResponseEntity.noContent().build();
     }
 }

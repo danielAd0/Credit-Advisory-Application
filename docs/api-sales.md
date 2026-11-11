@@ -194,8 +194,84 @@ always adds up to the same figures there:
 `null` for an imported sale whose consultant name matched nobody. No ID number, full or masked: the client is shown by
 name and linked by `clientId`. Not audited (it shows no sensitive data), like the reports.
 
+### GET /api/transactions/{id}
+
+One sale with every field, to fill the edit form.
+
+**Who:** a CONSULTANT for sales recorded against their own consultant record; MANAGER and ADMIN for any sale.
+Someone else's sale, or one that does not exist: `404 sale:not-found`.
+
+**200:**
+
+```json
+{
+  "id": 9001, "clientId": 101, "consultantId": 4,
+  "transactionDate": "2026-09-15", "weekStarting": "2026-09-14", "dayOfWeek": 2,
+  "lines": [ { "productId": 1, "name": "Combo", "amount": 1500.00,
+               "countsTowardQuotation": true, "countsTowardBanked": true } ],
+  "quotationTotal": 1500.00, "bankedTotal": 1500.00,
+  "amountToClient": 5000.00, "thirdPartySettlement": null,
+  "paymentTermId": 1, "employerId": null, "structureId": 2,
+  "primaryStructureBudgetList": "Vital", "primaryStructureLoanAmount": 2500.00,
+  "secondaryStructureBudgetList": null, "secondaryStructureLoanAmount": null,
+  "typedIn": true, "replaced": false, "editable": true, "version": 0
+}
+```
+
+`editable` is true while the sale can still be changed or deleted (below): show the Edit and Delete buttons only then.
+
+### PATCH /api/transactions/{id}
+
+Changes a typed-in sale. A typed-in sale only stands in for the spreadsheet until its week is imported, so it can be
+changed until then and never after; from then on a mistake is fixed in the spreadsheet.
+
+**Who:** as for GET above. A CONSULTANT cannot move the sale to someone else
+(`403 sale:cannot-capture-for-others`); MANAGER and ADMIN can move it to another ACTIVE consultant.
+
+**Body:** the whole sale as it should be now: the same fields and rules as POST, without `clientId` (the client never
+changes: delete the sale and capture it again), plus the `version` from GET:
+
+```json
+{
+  "version": 0,
+  "transactionDate": "2026-09-16",
+  "lines": [ { "productId": 1, "amount": 1200 }, { "productId": 2, "amount": 100 } ],
+  "amountToClient": 4000
+}
+```
+
+| Field | Rules on top of POST |
+|---|---|
+| `version` | required. Someone else saved first: `409 conflict:stale-version` (reload and try again) |
+| `consultantId` | null or left out keeps the sale's consultant, even if they have since left |
+| `transactionDate` | not after today; may move to another week, but not into one whose spreadsheet is imported (`409 sale:week-already-imported`) |
+| `lines` | a product **already on the sale** may stay even if it has since been deactivated, and keeps the counts-toward flags it was saved with. A product **added** must be active and takes today's flags |
+| `employerId`, `paymentTermId`, `structureId` | the one the sale already has may stay even if deactivated; a newly chosen one must be active |
+
+**200** - the sale as GET returns it, with `version` one higher. Sending the sale back unchanged saves nothing and
+returns it as it is (same `version`, nothing audited).
+
+| Status | Type | When |
+|---|---|---|
+| 404 | `sale:not-found` | no such sale, or not the caller's |
+| 409 | `sale:imported` | the sale came from a weekly spreadsheet |
+| 409 | `sale:replaced` | its week's spreadsheet has been imported since |
+| 409 | `sale:week-already-imported` | the new date is in an imported week |
+| 409 | `conflict:stale-version` | someone else saved first |
+| 422 | `sale:date-in-future` and the POST ones | as for POST |
+
+Audited as `SALE_EDITED`: client, consultant, date, the names of the fields that changed, and both totals before and
+after.
+
+### DELETE /api/transactions/{id}?version=
+
+Deletes a typed-in sale, with the same who and the same "until its week is imported" rule as PATCH. `version` is
+required (missing: `400`; someone else saved first: `409 conflict:stale-version`).
+
+**204** - gone. The row and its lines are removed, so the reports and Sales history drop it straight away; the audit
+log keeps what it was (`SALE_DELETED`: client, consultant, date, number of products and both totals). Errors as for
+PATCH.
+
 ## 4. Not built yet
 
-- Changing or deleting a typed-in sale. Until then, a wrong sale is fixed in the spreadsheet, which replaces it
-  when the week is imported.
 - Capturing does not assign an unassigned client to the consultant, and does not fill in a client's employer.
