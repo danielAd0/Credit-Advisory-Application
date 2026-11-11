@@ -10,7 +10,7 @@
   margin: 1.25rem 0 1rem;
   padding: 1rem 1.25rem;
   background: var(--surface);
-  border: 1px soled var(--line);
+  border: 1px solid var(--line);
   border-radius: 12px;
 }
 
@@ -25,18 +25,26 @@
 }
 
 .ms-field input,
-.ms-filed select {
+.ms-field select {
+  box-sizing: border-box;
   height: 2.5rem;
   padding: 0 0.75rem;
   font: inherit;
   color: var(--ink);
-  background: var(--surface);
+  background-color: var(--surface);
   border: 1px solid var(--line);
   border-radius: 10px;
 }
 
 .ms-field select {
-  min-width: 14rem;
+  min-width: 16rem;
+  padding-right: 2.25rem;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%236b7280' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.85rem center;
 }
 
 .ms-field input:focus,
