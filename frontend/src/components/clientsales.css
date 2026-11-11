@@ -1,0 +1,36 @@
+.cds {
+  margin-top: 1rem;
+}
+
+.cds .table-wrap {
+  border: 0;
+  border-radius: 0;
+}
+
+.cds-table td {
+  vertical-align: top;
+}
+
+.cds-table td.cds-products {
+  min-width: 15rem;
+  white-space: normal;
+}
+
+.cds-lines {
+  display: grid;
+  gap: 0.15rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.9rem;
+}
+
+.cds-lines li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.cds-muted td {
+  color: var(--muted);
+}

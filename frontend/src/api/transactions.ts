@@ -41,9 +41,8 @@ export interface SavedTransaction {
   lines: SavedLine[];
   quotationTotal: number;
   bankedTotal: number;
-  /** True once that week's spreadsheet is imported: the imported rows count instead. */
+  weekStarting?: number;
   replaced?: boolean;
-  /** False for a sale from a weekly register import (GET /api/transactions only). */
   typedIn?: boolean;
 }
 
@@ -70,7 +69,6 @@ export interface CaptureLists {
   structures: Option[] | null;
 }
 
-/** Every page of a list: the server sends at most 100 products or employers per page. */
 async function everyPage<T>(fetch: (page: number) => Promise<PageResponse<T>>): Promise<T[]> {
   const first = await fetch(0);
   const rest = await Promise.all(
@@ -113,6 +111,10 @@ const real = {
     if (filter.consultantId !== undefined) q.set('consultantId', String(filter.consultantId));
     return api<SalesPage>(`/api/transactions?${q.toString()}`);
   },
+
+  /** One client's sales, newest first, at most 200. A consultant can only ask for their own clients. */
+  forClient: (clientId: number) =>
+    api<SavedTransaction[]>(`/api/transactions?clientId=${clientId}`),
 
   save: (t: NewTransaction, key: string) =>
     api<SavedTransaction>('/api/transactions', {

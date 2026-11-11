@@ -5,6 +5,7 @@ import { clientName, phoneForDisplay } from '../api/names';
 import ClientCases from '../components/ClientCases';
 import RevealIdNumber from '../components/RevealIdNumber';
 import { hasAnyRole, useSession } from '../auth/useAuth';
+import ClientSales from '../components/ClientSales';
 import './clientdetail.css';
 
 const dateTime = (iso: string) =>
@@ -207,6 +208,7 @@ export default function ClientDetailPage() {
         </section>
       </div>
 
+      <ClientSales clientId={c.id} />
       <ClientCases clientId={c.id} />
 
       {isManager && (

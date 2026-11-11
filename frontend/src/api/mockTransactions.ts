@@ -50,7 +50,7 @@ const problem = (status: number, code: string, detail: string) =>
 
 export async function lists(): Promise<CaptureLists> {
   await delay();
-  // The same employers the mock clients point at, so a client's employer is in the dropdown.
+
   const employers = (await listEmployers({ active: true, size: 100 })).items;
   return {
     products,
@@ -201,6 +201,8 @@ function samples(): SavedTransaction[] {
         lines,
         quotationTotal: sum((l) => l.countsTowardQuotation),
         bankedTotal: sum((l) => l.countsTowardBanked),
+        typedIn: i < 7,
+        replaced: i === 6,
       },
     ];
   });
@@ -232,4 +234,11 @@ export async function list(filter: SaleFilter, page: number, size = 25): Promise
     quotationTotal: total((t) => t.quotationTotal),
     bankedTotal: total((t) => t.bankedTotal),
   };
+}
+
+export async function forClient(clientId: number): Promise<SavedTransaction[]> {
+  await delay();
+  return [...samples(), ...saved.values()]
+    .filter((t) => t.clientId === clientId)
+    .sort((a, b) => b.transactionDate.localeCompare(a.transactionDate) || b.id - a.id);
 }
