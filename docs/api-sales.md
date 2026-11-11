@@ -149,6 +149,51 @@ typed-in sales (also those an import has since replaced, with `replaced: true`) 
 re-import superseded are left out, as in the reports. Imported sales from before V13 may have `weekStarting` and
 `dayOfWeek` null.
 
+### GET /api/transactions?from=&to=&consultantId=&page=&size=
+
+The **Sales history** page. Without `clientId` this is a different list from the one above: every sale in a date
+range, a page at a time, with the totals of the whole range.
+
+**Who:** everyone signed in. A CONSULTANT only ever gets the sales recorded against their own consultant record
+(a `consultantId` they send is ignored). MANAGER and ADMIN get everyone's and may filter by consultant.
+
+| Param | Rules |
+|---|---|
+| `from`, `to` | required dates (`2026-09-14`), both inclusive. Missing or not a date: `400`. `from` after `to`: `400 sale:invalid-date-range` |
+| `consultantId` | optional, MANAGER / ADMIN only. Unknown id: `404 consultant:not-found` |
+| `page`, `size` | default `0` and `25`; `size` at most 100 |
+
+Which sales, and their totals, come from `v_transaction_totals`, **the same as the Reports page**, so a week here
+always adds up to the same figures there:
+
+- typed-in and imported sales are both listed (`typedIn` tells them apart);
+- a typed-in sale the week's spreadsheet replaced is **left out** (the imported row counts instead), as are rows a
+  re-import superseded;
+- an imported sale's `quotationTotal` and `bankedTotal` are the spreadsheet's own figures, not the product rule.
+
+**200** - newest first:
+
+```json
+{
+  "items": [
+    {
+      "id": 9001, "clientId": 101, "consultantId": 4,
+      "transactionDate": "2026-09-15", "weekStarting": "2026-09-14", "dayOfWeek": 2,
+      "lines": [ { "productId": 1, "name": "Combo", "amount": 1500.00,
+                   "countsTowardQuotation": true, "countsTowardBanked": true } ],
+      "quotationTotal": 1500.00, "bankedTotal": 1500.00, "typedIn": true,
+      "clientName": "Thandi Mokoena", "consultantName": "Sipho Dlamini"
+    }
+  ],
+  "page": 0, "size": 25, "totalItems": 1, "totalPages": 1,
+  "quotationTotal": 1500.00, "bankedTotal": 1500.00
+}
+```
+
+`quotationTotal` and `bankedTotal` at the top are for the **whole range**, not only this page. `consultantName` is
+`null` for an imported sale whose consultant name matched nobody. No ID number, full or masked: the client is shown by
+name and linked by `clientId`. Not audited (it shows no sensitive data), like the reports.
+
 ## 4. Not built yet
 
 - Changing or deleting a typed-in sale. Until then, a wrong sale is fixed in the spreadsheet, which replaces it

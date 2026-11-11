@@ -23,9 +23,11 @@ import za.co.mafori.creditadvisory.auth.AppUserPrincipal;
 public class SaleController {
 
     private final SaleService service;
+    private final SaleHistoryService history;
 
-    public SaleController(SaleService service) {
+    public SaleController(SaleService service, SaleHistoryService history) {
         this.service = service;
+        this.history = history;
     }
 
     @GetMapping("/api/payment-terms")
@@ -54,11 +56,28 @@ public class SaleController {
     }
 
     /** A client's sales, newest first (at most 200), e.g. to confirm a save. */
-    @GetMapping("/api/transactions")
+    @GetMapping(value = "/api/transactions", params = "clientId")
     public List<SavedSale> list(@AuthenticationPrincipal AppUserPrincipal caller,
             @RequestParam long clientId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
         return service.list(caller, clientId, from, to);
+    }
+
+    /**
+     * The Sales history page: every sale between from and to (both required),
+     * newest first, a page
+     * at a time, with the totals of the whole range. Without clientId, so it does
+     * not clash with
+     * the list above.
+     */
+    @GetMapping(value = "/api/transactions", params = "!clientId")
+    public SaleHistoryPage history(@AuthenticationPrincipal AppUserPrincipal caller,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) Long consultantId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "25") int size) {
+        return history.history(caller, from, to, consultantId, page, size);
     }
 }
