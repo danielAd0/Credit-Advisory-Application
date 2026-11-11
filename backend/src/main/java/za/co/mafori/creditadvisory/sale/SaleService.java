@@ -3,7 +3,6 @@ package za.co.mafori.creditadvisory.sale;
 import static za.co.mafori.creditadvisory.audit.AuditLogWriter.meta;
 
 import java.math.BigDecimal;
-import java.sql.Types;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -18,7 +17,6 @@ import java.util.Set;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -320,85 +318,6 @@ public class SaleService {
                 limit ?
                 """, Long.class, clientId, from, to, LIST_LIMIT);
         return loadAll(ids);
-    }
-
-    // ---------- GET /api/transactions (Sales history) ----------
-
-    static final int MAX_PAGE_SIZE = 100;
-
-    /** Typed-in sales in the date range for the caller's scope; :from, :to, :consultantId may be null. */
-    private static final String HISTORY_WHERE = """
-            where t.import_job_id is null
-              and t.transaction_date >= coalesce(cast(:from as date), '-infinity'::date)
-              and t.transaction_date <= coalesce(cast(:to as date), 'infinity'::date)
-              and (cast(:consultantId as bigint) is null or t.consultant_id = :consultantId)
-            """;
-
-    /**
-     * Every sale typed in on the Consultant actions page (also those an import
-     * has since replaced, marked replaced), newest first, a page at a time,
-     * with the totals of all that match. A CONSULTANT sees only their own
-     * sales; MANAGER and ADMIN see everyone's, or one consultant's.
-     */
-    @Transactional(readOnly = true)
-    public SalesPage history(AppUserPrincipal caller, LocalDate from, LocalDate to, Long consultantId, int page,
-            int size) {
-        if (from != null && to != null && from.isAfter(to)) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "sale:invalid-date-range", "Invalid dates",
-                    "'from' must be on or before 'to'.");
-        }
-        Long scope = consultantId;
-        if (!ClientQueryService.seesAllClients(caller)) {
-            if (caller.consultantId() == null) {
-                throw new ApiException(HttpStatus.FORBIDDEN, "sale:no-consultant-record", "Not allowed",
-                        "Your login is not linked to a consultant record, so you have no sales.");
-            }
-            if (consultantId != null && !consultantId.equals(caller.consultantId())) {
-                throw new ApiException(HttpStatus.FORBIDDEN, "sale:cannot-view-others", "Not allowed",
-                        "Consultants can only see their own sales.");
-            }
-            scope = caller.consultantId();
-        }
-        int safePage = Math.max(page, 0);
-        int safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
-
-        MapSqlParameterSource params = new MapSqlParameterSource()
-                .addValue("from", from, Types.DATE)
-                .addValue("to", to, Types.DATE)
-                .addValue("consultantId", scope, Types.BIGINT);
-
-        Map<String, Object> totals = named.queryForMap("""
-                select coalesce(sum(l.amount) filter (where l.counts_toward_quotation), 0) as quotation,
-                       coalesce(sum(l.amount) filter (where l.counts_toward_banked), 0) as banked
-                from client_transactions t
-                left join client_transaction_lines l on l.transaction_id = t.id
-                """ + HISTORY_WHERE, params);
-        long totalItems = named.queryForObject("select count(*) from client_transactions t\n" + HISTORY_WHERE,
-                params, Long.class);
-
-        params.addValue("limit", safeSize, Types.INTEGER).addValue("offset", (long) safePage * safeSize,
-                Types.BIGINT);
-        List<Long> ids = new ArrayList<>();
-        Map<Long, String[]> names = new HashMap<>();
-        named.query("""
-                select t.id, c.first_name || ' ' || c.last_name, coalesce(k.full_name, 'Unassigned')
-                from client_transactions t
-                join clients c on c.id = t.client_id
-                left join consultants k on k.id = t.consultant_id
-                """ + HISTORY_WHERE + """
-                order by t.transaction_date desc, t.id desc
-                limit :limit offset :offset
-                """, params, rs -> {
-            ids.add(rs.getLong(1));
-            names.put(rs.getLong(1), new String[] {rs.getString(2), rs.getString(3)});
-        });
-        List<SalesPage.Row> items = loadAll(ids).stream()
-                .map(s -> new SalesPage.Row(s, names.get(s.id())[0], names.get(s.id())[1]))
-                .toList();
-
-        int totalPages = (int) ((totalItems + safeSize - 1) / safeSize);
-        return new SalesPage(items, safePage, safeSize, totalItems, totalPages,
-                ((BigDecimal) totals.get("quotation")).setScale(2), ((BigDecimal) totals.get("banked")).setScale(2));
     }
 
     // ---------- reading sales back ----------

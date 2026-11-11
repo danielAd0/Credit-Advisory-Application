@@ -54,22 +54,11 @@ public class SaleController {
     }
 
     /** A client's sales, newest first (at most 200), e.g. to confirm a save. */
-    @GetMapping(path = "/api/transactions", params = "clientId")
+    @GetMapping("/api/transactions")
     public List<SavedSale> list(@AuthenticationPrincipal AppUserPrincipal caller,
             @RequestParam long clientId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
         return service.list(caller, clientId, from, to);
-    }
-
-    /** The Sales history page: typed-in sales across clients, a page at a time, with totals. */
-    @GetMapping(path = "/api/transactions", params = "!clientId")
-    public SalesPage history(@AuthenticationPrincipal AppUserPrincipal caller,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
-            @RequestParam(required = false) Long consultantId,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "25") int size) {
-        return service.history(caller, from, to, consultantId, page, size);
     }
 }
