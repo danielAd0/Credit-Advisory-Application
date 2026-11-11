@@ -21,7 +21,7 @@ public final class WeeklyImportViews {
                         List<DaySummary> days, List<UnmappedConsultant> unmappedConsultants, Long weekImportedByJobId,
                         boolean replaceRequired, boolean canConfirm, List<String> blockers,
                         String reconciliationStatus, int reportDifferences,
-                        int nameDifferences) {
+                        int nameDifferences, int typedInSales) {
         }
 
         public record DaySummary(String sheetName, int dayOfWeek, LocalDate date, int rows, int rejected,
@@ -74,7 +74,7 @@ public final class WeeklyImportViews {
         public record ConfirmResult(long importJobId, long reportingWeekId, LocalDate weekStarting, int transactions,
                         int productLines, int extraValues, int newClients, int clientsAssigned, int employersCreated,
                         int structuresCreated, int paymentTermsCreated, int staleRows, Long replacedImportJobId,
-                        int supersededTransactions) {
+                        int supersededTransactions, int replacedTypedInSales) {
         }
 
         public record ConfirmRequest(

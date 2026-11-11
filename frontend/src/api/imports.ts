@@ -50,6 +50,8 @@ export interface ImportSummary {
   replaceRequired: boolean;
   canConfirm: boolean;
   blockers: ImportBlocker[];
+  /** Sales typed into the app for this week. Confirming replaces them: the spreadsheet wins. */
+  typedInSales: number;
 }
 
 export interface ImportHistoryItem {
@@ -108,6 +110,8 @@ export interface ConfirmResult {
   staleRows: number;
   replacedImportJobId: number | null;
   supersededTransactions: number;
+  /** Typed-in sales of this week that the import replaced. */
+  replacedTypedInSales: number;
 }
 
 function query(params: Record<string, string | number | undefined>): string {

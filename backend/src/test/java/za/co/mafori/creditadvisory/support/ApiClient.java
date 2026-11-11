@@ -94,10 +94,16 @@ public final class ApiClient {
     }
 
     public Response send(String method, String path, String json) {
+        return sendWithHeader(method, path, json, null, null);
+    }
+
+    /** Like send, plus one extra request header (e.g. Idempotency-Key). */
+    public Response sendWithHeader(String method, String path, String json, String headerName, String headerValue) {
         HttpRequest.BodyPublisher body = json == null
                 ? HttpRequest.BodyPublishers.noBody()
                 : HttpRequest.BodyPublishers.ofString(json);
-        return send(method, path, body, json == null ? null : "application/json");
+        Map<String, String> extra = headerName == null ? Map.of() : Map.of(headerName, headerValue);
+        return send(method, path, body, json == null ? null : "application/json", extra);
     }
 
     /**
@@ -117,14 +123,16 @@ public final class ApiClient {
         System.arraycopy(content, 0, body, head.length, content.length);
         System.arraycopy(tail, 0, body, head.length + content.length, tail.length);
         return send("POST", path, HttpRequest.BodyPublishers.ofByteArray(body),
-                "multipart/form-data; boundary=" + boundary);
+                "multipart/form-data; boundary=" + boundary, Map.of());
     }
 
-    private Response send(String method, String path, HttpRequest.BodyPublisher body, String contentType) {
+    private Response send(String method, String path, HttpRequest.BodyPublisher body, String contentType,
+            Map<String, String> extraHeaders) {
         HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(baseUrl + path)).method(method, body);
         if (contentType != null) {
             request.header("Content-Type", contentType);
         }
+        extraHeaders.forEach(request::header);
         if (!cookies.isEmpty()) {
             request.header("Cookie", cookies.entrySet().stream()
                     .map(cookie -> cookie.getKey() + "=" + cookie.getValue())

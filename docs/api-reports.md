@@ -23,7 +23,8 @@ The conventions of `docs/api-auth-consultants-clients.md` section 1 apply: sessi
 ### The week
 
 - `{weekStarting}` in a URL is the **Monday** of the week, written `yyyy-mm-dd`, for example `2026-09-14`.
-- A week only has reports once a weekly register has been imported **and confirmed** for it (`docs/api-imports.md`). Before that the week is `404`.
+- A week has reports once a weekly register has been imported **and confirmed** for it (`docs/api-imports.md`), or as soon as one sale has been typed in for it on the Consultant actions page (`docs/api-sales.md`). A week with neither is `404`.
+- Importing a week replaces its typed-in sales (the spreadsheet wins), so a sale is never counted twice.
 - When a week is imported again (a replacement), the reports show only the newest import. The replaced rows are kept in the database but never counted.
 
 ### Days
@@ -47,7 +48,7 @@ Amounts are numbers in rand with two decimals (`1900.00`). Quotation and Banked 
 | 400    | `urn:credit-advisory:report:invalid-week`   | `{weekStarting}` is not a date like `2026-09-14`, or not a Monday     |
 | 401    | `urn:credit-advisory:auth:unauthenticated`  | not signed in                                                         |
 | 403    | `urn:credit-advisory:auth:forbidden`        | budget by structure, called by a CONSULTANT                           |
-| 404    | `urn:credit-advisory:report:week-not-found` | no register imported for that week                                    |
+| 404    | `urn:credit-advisory:report:week-not-found` | no register imported and no sale typed in for that week               |
 | 404    | `urn:credit-advisory:consultant:not-found`  | products report, `?consultantId=` of a consultant that does not exist |
 
 Reports contain totals only: no client names, no ID numbers. Viewing them is not audited (like the dashboard); downloading one as a file is (section 7).
@@ -58,7 +59,7 @@ Reports contain totals only: no client names, no ID numbers. Viewing them is not
 
 **Who:** any signed-in user
 
-**Purpose:** the week picker - every week with an imported register, newest first, with its totals.
+**Purpose:** the week picker - every week with an imported register or typed-in sales, newest first, with its totals.
 
 **200 OK**
 

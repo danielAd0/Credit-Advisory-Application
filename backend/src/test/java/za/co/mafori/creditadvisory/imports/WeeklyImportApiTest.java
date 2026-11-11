@@ -108,6 +108,35 @@ class WeeklyImportApiTest extends ApiTestBase {
     }
 
     @Test
+    void theImportReplacesTheWeeksTypedInSales() {
+        // Business decision (10 Nov): the same sale is typed in AND in the spreadsheet,
+        // and the spreadsheet wins.
+        long client = createClient("Test", "Typedin", consultantOne);
+        long combo = jdbc.queryForObject("select id from products where code = 'COMBO'", Long.class);
+        ApiClient.Response typedIn = admin.sendWithHeader("POST", "/api/transactions", """
+                {"clientId":%d,"transactionDate":"2026-09-15","lines":[{"productId":%d,"amount":1500}]}"""
+                .formatted(client, combo), "Idempotency-Key", java.util.UUID.randomUUID().toString());
+        assertThat(typedIn.status()).as(typedIn.body()).isEqualTo(201);
+        long typedInId = typedIn.number("$.id");
+
+        ApiClient.Response preview = preview(admin);
+        long id = preview.number("$.id");
+        assertThat(preview.number("$.typedInSales")).as("the preview warns").isEqualTo(1);
+        assertThat(mapUnknownConsultant(id).status()).isEqualTo(200);
+
+        ApiClient.Response confirmed = confirm(admin, id, preview.text("$.fileDigest"), null);
+        assertThat(confirmed.status()).as(confirmed.body()).isEqualTo(200);
+        assertThat(confirmed.number("$.replacedTypedInSales")).isEqualTo(1);
+
+        assertThat(count("select count(*) from client_transactions where id = " + typedInId
+                + " and superseded_by_import_job_id = " + id)).as("kept, marked as replaced").isEqualTo(1);
+        assertThat(count("select transaction_count from v_week_totals where week_starting = date '2026-09-14'"))
+                .as("only the spreadsheet's rows count").isEqualTo(expected.totalRows());
+        assertThat(count("select count(*) from audit_logs where action = 'IMPORT_CONFIRMED'"
+                + " and metadata ->> 'replacedTypedInSales' = '1'")).isEqualTo(1);
+    }
+
+    @Test
     void confirmIsAllOrNothing() {
         ApiClient.Response preview = preview(admin);
         long id = preview.number("$.id");
