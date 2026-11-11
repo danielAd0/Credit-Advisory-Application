@@ -149,6 +149,34 @@ typed-in sales (also those an import has since replaced, with `replaced: true`) 
 re-import superseded are left out, as in the reports. Imported sales from before V13 may have `weekStarting` and
 `dayOfWeek` null.
 
+### GET /api/transactions?from=&to=&consultantId=&page=&size= (Sales history)
+
+Without `clientId`: the Sales history page.
+
+**Who:** everyone signed in. A CONSULTANT sees only their own sales; sending someone else's `consultantId` is
+`403 sale:cannot-view-others`, and a login with no consultant record is `403 sale:no-consultant-record`. MANAGER and
+ADMIN see every consultant's sales, or one consultant's with `consultantId`.
+
+| Param | Rules |
+|---|---|
+| `from`, `to` | optional dates, both inclusive; `from` after `to` is `400 sale:invalid-date-range` |
+| `consultantId` | optional; see above |
+| `page`, `size` | default `0` and `25`; `size` at most 100 |
+
+**200** - typed-in sales only (imported rows are left out; typed-in ones an import has since replaced stay in, with
+`replaced: true`), newest first:
+
+```json
+{
+  "items": [ { "...every field of a sale above...": "", "clientName": "Test Alpha", "consultantName": "Thandi Test" } ],
+  "page": 0, "size": 25, "totalItems": 1, "totalPages": 1,
+  "quotationTotal": 1800.50,
+  "bankedTotal": 1500.00
+}
+```
+
+`quotationTotal` and `bankedTotal` cover every sale that matched, not just this page.
+
 ## 4. Not built yet
 
 - Changing or deleting a typed-in sale. Until then, a wrong sale is fixed in the spreadsheet, which replaces it

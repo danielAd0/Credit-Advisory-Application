@@ -293,4 +293,46 @@ class SaleApiTest extends ApiTestBase {
                 .as("someone else's client looks missing").isEqualTo(404);
         assertThat(manager.get("/api/transactions?clientId=" + siphosClient).size("$")).isEqualTo(1);
     }
+
+    // ---------- Sales history ----------
+
+    @Test
+    void salesHistoryPagesEverySaleWithTotals() {
+        long thandis = capture(thandi, newKey(), body(thandisClient, TUESDAY, twoLines(), "")).number("$.id");
+        long earlier = capture(thandi, newKey(), body(thandisClient, "2026-09-01",
+                "{\"productId\":%d,\"amount\":100}".formatted(combo), "")).number("$.id");
+        long siphos = capture(manager, newKey(), body(siphosClient, "2026-09-16", twoLines(), "")).number("$.id");
+
+        ApiClient.Response all = manager.get("/api/transactions?from=2026-09-14&to=2026-09-20");
+        assertThat(all.status()).as(all.body()).isEqualTo(200);
+        assertThat(all.number("$.totalItems")).isEqualTo(2);
+        assertThat(all.number("$.totalPages")).isEqualTo(1);
+        assertThat(all.number("$.items[0].id")).as("newest first").isEqualTo(siphos);
+        assertThat(all.number("$.items[1].id")).isEqualTo(thandis);
+        assertThat(all.text("$.items[0].clientName")).isEqualTo("Test Bravo");
+        assertThat(all.text("$.items[0].consultantName")).isEqualTo("Sipho Test");
+        assertThat(all.size("$.items[0].lines")).isEqualTo(2);
+        assertThat(money(all, "$.items[0].quotationTotal")).isEqualTo(1800.5);
+        assertThat(money(all, "$.quotationTotal")).isEqualTo(3601.0);
+        assertThat(money(all, "$.bankedTotal")).isEqualTo(3000.0);
+        assertThat(all.body()).doesNotContain("idNumber");
+
+        ApiClient.Response paged = manager.get("/api/transactions?from=2026-09-01&to=2026-09-20&size=2&page=1");
+        assertThat(paged.number("$.totalItems")).isEqualTo(3);
+        assertThat(paged.number("$.totalPages")).isEqualTo(2);
+        assertThat(paged.size("$.items")).isEqualTo(1);
+        assertThat(paged.number("$.items[0].id")).isEqualTo(earlier);
+        assertThat(money(paged, "$.quotationTotal")).as("totals cover every page").isEqualTo(3701.0);
+
+        ApiClient.Response onlySipho = manager.get(
+                "/api/transactions?from=2026-09-01&to=2026-09-20&consultantId=" + siphoId);
+        assertThat(onlySipho.number("$.totalItems")).isEqualTo(1);
+
+        ApiClient.Response own = thandi.get("/api/transactions?from=2026-09-01&to=2026-09-20");
+        assertThat(own.number("$.totalItems")).as("a consultant sees only their own").isEqualTo(2);
+        assertThat(thandi.get("/api/transactions?from=2026-09-01&to=2026-09-20&consultantId=" + siphoId).status())
+                .isEqualTo(403);
+        assertThat(thandi.get("/api/transactions?from=2026-09-20&to=2026-09-14").text("$.type"))
+                .isEqualTo("urn:credit-advisory:sale:invalid-date-range");
+    }
 }
