@@ -308,6 +308,7 @@ Everybody is signed out by a restart. Users are also signed out after 30 minutes
 | --- | --- |
 | A user is locked out (5 wrong passwords or codes) | it opens again by itself after 15 minutes, or an administrator: Consultants > Manage > Unlock account |
 | A user forgot their password | an administrator: Consultants > Manage > Reset password. Hand the temporary password over in person |
+| A user lost or replaced their phone, and still has their recovery codes | nothing for IT: they sign in with a recovery code, then move two-step sign-in to the new phone themselves in the application. Their other sessions are signed out and they get 10 new recovery codes |
 | A user lost their phone and their recovery codes | an administrator: Consultants > Manage > Reset two-step sign-in. **Check who you are talking to first** - this is how an attacker would try to get in |
 | The same, for a **manager or administrator** account | an administrator: Managers > Manage (unlock, reset password, reset two-step sign-in, disable) |
 | The **only** administrator forgot their password, or lost their phone and recovery codes | nobody can fix it in the application, so IT does it with the database (break-glass). Steps below. To avoid needing them, keep **at least two** administrator accounts |
