@@ -50,7 +50,7 @@ const problem = (status: number, code: string, detail: string) =>
 
 export async function lists(): Promise<CaptureLists> {
   await delay();
-
+  // The same employers the mock clients point at, so a client's employer is in the dropdown.
   const employers = (await listEmployers({ active: true, size: 100 })).items;
   return {
     products,
