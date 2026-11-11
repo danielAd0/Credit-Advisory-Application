@@ -79,6 +79,17 @@ interface Extras {
   secondaryLoan: string;
 }
 
+/** Fixed-price products start with their standard price. The consultant can change or clear it. */
+const PREFILLED = ['INSURANCE', 'MAFORI_CARD'];
+
+function prefill(products: Product[]): Partial<Record<number, string>> {
+  const out: Partial<Record<number, string>> = {};
+  for (const p of products)
+    if (PREFILLED.includes(p.code) && p.standardPrice !== null)
+      out[p.id] = p.standardPrice.toFixed(2);
+  return out;
+}
+
 const NO_EXTRAS: Extras = {
   amountToClient: '',
   thirdPartySettlement: '',
@@ -207,7 +218,11 @@ export default function ConsultantActionsPage() {
     let live = true;
     transactions
       .lists()
-      .then((lists) => live && setLoad({ kind: 'ready', lists }))
+      .then((lists) => {
+        if (!live) return;
+        setAmounts(prefill(lists.products));
+        setLoad({ kind: 'ready', lists });
+      })
       .catch(() => live && setLoad({ kind: 'failed' }));
     return () => {
       live = false;
@@ -226,7 +241,8 @@ export default function ConsultantActionsPage() {
     };
   }, [manager]);
 
-  const products = load.kind === 'ready' ? load.lists.products : [];
+  // const products = load.kind === 'ready' ? load.lists.products : [];
+  const products = useMemo(() => (load.kind === 'ready' ? load.lists.products : []), [load]);
   const groups = useMemo(() => groupProducts(products), [products]);
 
   const lines = products.flatMap((p) => {
@@ -323,7 +339,7 @@ export default function ConsultantActionsPage() {
 
   function again(keepClient: boolean) {
     setSaved(null);
-    setAmounts({});
+    setAmounts(prefill(products));
     setExtras(NO_EXTRAS);
     setErrors({});
     setFailure(null);
@@ -495,7 +511,10 @@ export default function ConsultantActionsPage() {
 
           <section className="ca-card" aria-labelledby="ca-h-products">
             <h2 id="ca-h-products">3. Products</h2>
-            <p className="ca-hint">Leave a product blank if it was not sold.</p>
+            <p className="ca-hint">
+              Insurance and Mafori Card start at their standard price. Change or clear them if the
+              sale was different. Leave any other product blank if it was not sold.
+            </p>
             {errors.lines && <p className="ca-err">{errors.lines}</p>}
             {groups.map((g) => (
               <fieldset key={g.title} className="ca-group">
