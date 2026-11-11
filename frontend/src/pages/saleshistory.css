@@ -1,0 +1,115 @@
+.ms {
+  max-width: 1100px;
+}
+
+.ms-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-end;
+  margin: 1.25rem 0 1rem;
+  padding: 1rem 1.25rem;
+  background: var(--surface);
+  border: 1px soled var(--line);
+  border-radius: 12px;
+}
+
+.ms-field {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.ms-field label {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.ms-field input,
+.ms-filed select {
+  height: 2.5rem;
+  padding: 0 0.75rem;
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.ms-field select {
+  min-width: 14rem;
+}
+
+.ms-field input:focus,
+.ms-field select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(255, 90, 0, 0.25);
+}
+
+.ms-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.ms-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.ms-tile {
+  display: grid;
+  gap: 0.2rem;
+  padding: 1rem 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.ms-tile span {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.ms-tile strong {
+  font-size: 1.4rem;
+  font-weight: 600;
+}
+
+.ms-table td {
+  vertical-align: top;
+}
+
+.ms-table td a {
+  color: var(--ink);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.ms-table td a:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.ms-table td.ms-products {
+  min-width: 15rem;
+  white-space: normal;
+}
+
+.ms-lines {
+  display: grid;
+  gap: 0.15rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.9rem;
+}
+
+.ms-lines li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}

@@ -21,6 +21,7 @@ import EmployersPage from './pages/EmployersPage';
 import ProductQuotationsPage from './pages/ProductQuotationsPage';
 import ProductsPage from './pages/ProductsPage';
 import ConsultantActionsPage from './pages/ConsultantActionsPage';
+import SalesHistoryPage from './pages/SalesHistoryPage';
 import ReportsPage from './pages/ReportsPage';
 import ReassignPage from './pages/ReassignPage';
 import TwoStepPage from './pages/TwoStepPage';
@@ -105,6 +106,7 @@ export default function App() {
                   </RequireRole>
                 }
               />
+              <Route path="sales-history" element={<SalesHistoryPage />} />
               <Route path="products" element={<ProductsPage />} />
               <Route path="employers" element={<EmployersPage />} />
               <Route

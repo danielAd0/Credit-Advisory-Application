@@ -40,6 +40,7 @@ const groups: { label: string; items: NavItem[] }[] = [
         icon: IconUserCheck,
         roles: ['CONSULTANT'],
       },
+      { to: '/sales-history', label: 'Sales history', icon: IconFile, roles: everyone },
       { to: '/reports', label: 'Reports', icon: IconChart, roles: everyone },
       { to: '/consultants', label: 'Team', icon: IconTeam, roles: managers },
       { to: '/products', label: 'Products', icon: IconFolder, roles: managers },
