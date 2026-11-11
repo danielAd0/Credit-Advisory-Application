@@ -57,6 +57,7 @@ const ACTIONS: Partial<Record<string, string>> = {
   EMPLOYER_MERGED: 'Employers merged',
   EMPLOYER_REVIEWED: 'Employer reviewed',
   PRODUCT_CREATED: 'Product created',
+  SALES_TARGET_SET: 'Sales target set',
   PRODUCT_UPDATED: 'Product updated',
   PRODUCT_QUOTATION_CREATED: 'Branch created',
   PRODUCT_QUOTATION_UPDATED: 'Branch renamed',

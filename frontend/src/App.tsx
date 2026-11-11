@@ -24,6 +24,7 @@ import ConsultantActionsPage from './pages/ConsultantActionsPage';
 import SalesHistoryPage from './pages/SalesHistoryPage';
 import ReportsPage from './pages/ReportsPage';
 import ReassignPage from './pages/ReassignPage';
+import TargetsPage from './pages/TargetsPage';
 import TwoStepPage from './pages/TwoStepPage';
 
 const managers: Role[] = ['ADMIN', 'MANAGER'];
@@ -107,6 +108,14 @@ export default function App() {
                 }
               />
               <Route path="sales-history" element={<SalesHistoryPage />} />
+              <Route
+                path="targets"
+                element={
+                  <RequireRole roles={managers}>
+                    <TargetsPage />
+                  </RequireRole>
+                }
+              />
               <Route path="products" element={<ProductsPage />} />
               <Route path="employers" element={<EmployersPage />} />
               <Route
