@@ -1,0 +1,48 @@
+.tg {
+  max-width: 900px;
+}
+
+.tg-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 1rem;
+  margin: 1.25rem 0;
+}
+
+.tg-tile {
+  display: grid;
+  gap: 0.2rem;
+  padding: 1rem 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.tg-tile span {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.tg-tile strong {
+  font-size: 1.4rem;
+  font-weight: 600;
+}
+
+.tg-form {
+  margin-bottom: 1.5rem;
+  padding: 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.tg-form h2,
+.tg-history h2 {
+  margin-top: 0;
+  font-size: 1.1rem;
+}
+
+.tg-table td.num,
+.tg-table th.num {
+  text-align: right;
+}

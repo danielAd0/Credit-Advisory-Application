@@ -184,7 +184,13 @@ export default function SalesHistoryPage() {
 
           {paged.items.length === 0 ? (
             <p className="muted">
-              No sales in this period. <Link to="/consultant-actions">Capture a sale</Link>.
+              No sales in this period.
+              {!manager && (
+                <>
+                  {' '}
+                  <Link to="/consultant-actions">Capture a sale</Link>.
+                </>
+              )}
             </p>
           ) : (
             <div className="table-wrap">
