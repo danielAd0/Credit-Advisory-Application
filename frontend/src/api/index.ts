@@ -42,6 +42,8 @@ export type {
   SavedLine,
   SavedTransaction,
 } from './transactions';
+export { targets } from './targets';
+export type { NewTarget, Target, TargetsResponse } from './targets';
 export { audit } from './audit';
 export type { AuditEntry, AuditFilter } from './audit';
 export { catalogue } from './catalogue';

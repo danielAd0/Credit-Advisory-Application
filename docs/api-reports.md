@@ -41,6 +41,14 @@ Amounts are numbers in rand with two decimals (`1900.00`). Quotation and Banked 
 - `targetMet` is `true` when quotation **>=** target. (The workbook used `>`; agreed to change, Q5.)
 - Targets are company targets: `null` for scope `OWN`.
 
+#### Setting targets (MANAGER, ADMIN)
+
+- `GET /api/targets` → `{ today, current, history[] }`. Each entry: `id`, `effectiveFrom`, `dailyTarget`, `weeklyTarget`, `setByEmail`, `createdAt`. `history` is newest first and includes future (scheduled) targets.
+- `POST /api/targets` with `{ "effectiveFrom": "2026-11-16", "dailyTarget": 150000, "weeklyTarget": 750000 }` → `200` with the saved entry. Posting the same `effectiveFrom` again replaces that entry.
+- The daily target applies to each day from `effectiveFrom`; the weekly target applies to each week whose Monday is on or after `effectiveFrom`.
+- `effectiveFrom` before today (Africa/Johannesburg) → `422` `urn:credit-advisory:target:past-date`, so past reports never change. Missing or non-positive amounts → `400`. A consultant → `403`.
+- Each save writes a `SALES_TARGET_SET` audit entry.
+
 ### Errors (all report endpoints)
 
 | Status | `type`                                      | When                                                                  |
