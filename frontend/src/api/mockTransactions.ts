@@ -1,7 +1,13 @@
 import { ApiError } from './http';
-import { clients, delay } from './mock';
+import { clients, consultants, delay } from './mock';
 import type { Employer, Product } from './admin';
-import type { CaptureLists, NewTransaction, SavedTransaction } from './transactions';
+import type {
+  CaptureLists,
+  NewTransaction,
+  SaleFilter,
+  SalesPage,
+  SavedTransaction,
+} from './transactions';
 import type { ClientSummary } from './types';
 
 const stamp = '2026-01-01T00:00:00Z';
@@ -126,4 +132,114 @@ export async function save(t: NewTransaction, key: string): Promise<SavedTransac
   };
   saved.set(key, result);
   return result;
+}
+
+const dayText = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+const SAMPLE: [string, number][][] = [
+  [
+    ['INSURANCE', 225],
+    ['MAFORI_CARD', 175],
+    ['COMBO', 1500],
+  ],
+  [
+    ['INSURANCE', 225],
+    ['CREDIT_REPAIR', 850],
+  ],
+  [
+    ['MAFORI_CARD', 175],
+    ['HOUSING_ADMIN', 400],
+    ['GROCERY', 600],
+  ],
+  [
+    ['INSURANCE', 225],
+    ['IVC', 1200],
+  ],
+  [
+    ['CASH_ADVANCE_LITE', 2000],
+    ['INSURANCE', 225],
+  ],
+  [
+    ['MAFORI_WELLNESS', 120],
+    ['MAFORI_CARD', 175],
+  ],
+  [
+    ['CREDIT_RESCUE', 950],
+    ['INSURANCE', 225],
+    ['VOLUNTARY_DISTRIBUTION', 300],
+  ],
+  [
+    ['SPEED_SERVICE', 500],
+    ['MAFORI_CARD', 175],
+  ],
+];
+
+let sampleSales: SavedTransaction[] | null = null;
+
+function samples(): SavedTransaction[] {
+  if (sampleSales) return sampleSales;
+  sampleSales = SAMPLE.flatMap((picks, i) => {
+    const date = new Date();
+    date.setDate(date.getDate() - i * 2);
+    const client = clients[i % clients.length];
+    if (!client) return [];
+    const lines = picks.flatMap(([code, amount]) => {
+      const p = products.find((x) => x.code === code);
+      return p
+        ? [
+            {
+              productId: p.id,
+              name: p.name,
+              amount,
+              countsTowardQuotation: p.countsTowardQuotation,
+              countsTowardBanked: p.countsTowardBanked,
+            },
+          ]
+        : [];
+    });
+    const sum = (pick: (l: (typeof lines)[number]) => boolean) =>
+      lines.filter(pick).reduce((s, l) => s + cents(l.amount), 0) / 100;
+    const weekday = date.getDay();
+    return [
+      {
+        id: 900 + i,
+        clientId: client.id,
+        consultantId: client.consultant?.id ?? 1,
+        transactionDate: dayText(date),
+        dayOfWeek: weekday === 0 ? 7 : weekday,
+        lines,
+        quotationTotal: sum((l) => l.countsTowardQuotation),
+        bankedTotal: sum((l) => l.countsTowardBanked),
+      },
+    ];
+  });
+  return sampleSales;
+}
+
+export async function list(filter: SaleFilter, page: number, size = 25): Promise<SalesPage> {
+  await delay();
+  const all = [...samples(), ...saved.values()]
+    .filter((t) => t.transactionDate >= filter.from && t.transactionDate <= filter.to)
+    .filter((t) => filter.consultantId === undefined || t.consultantId === filter.consultantId)
+    .sort((a, b) => b.transactionDate.localeCompare(a.transactionDate) || b.id - a.id);
+  const total = (pick: (t: SavedTransaction) => number) =>
+    all.reduce((s, t) => s + cents(pick(t)), 0) / 100;
+  const items = all.slice(page * size, (page + 1) * size).map((t) => {
+    const client = clients.find((c) => c.id === t.clientId);
+    return {
+      ...t,
+      clientName: client ? `${client.firstName} ${client.lastName}` : 'Unknown client',
+      consultantName: consultants.find((c) => c.id === t.consultantId)?.fullName ?? 'Unassigned',
+    };
+  });
+  return {
+    items,
+    page,
+    size,
+    totalItems: all.length,
+    totalPages: Math.ceil(all.length / size),
+    quotationTotal: total((t) => t.quotationTotal),
+    bankedTotal: total((t) => t.bankedTotal),
+  };
 }

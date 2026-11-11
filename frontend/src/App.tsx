@@ -12,6 +12,7 @@ import ClientDetailPage from './pages/ClientDetailPage';
 import ClientsPage from './pages/ClientsPage';
 import AddConsultantPage from './pages/AddConsultantPage';
 import ConsultantsPage from './pages/ConsultantsPage';
+import SalesHistoryPage from './pages/SalesHistoryPage';
 import Dashboard from './pages/Dashboard';
 import EditClientPage from './pages/EditClientPage';
 import ImportPage from './pages/ImportPage';
@@ -75,6 +76,7 @@ export default function App() {
               />
               <Route path="reports" element={<ReportsPage />} />
               <Route path="consultant-actions" element={<ConsultantActionsPage />} />
+              <Route path="sales-history" element={<SalesHistoryPage />} />
               <Route path="products" element={<ProductsPage />} />
               <Route path="employers" element={<EmployersPage />} />
               <Route

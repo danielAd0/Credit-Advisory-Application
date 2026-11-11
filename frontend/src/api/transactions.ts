@@ -1,6 +1,6 @@
 import { api } from './http';
 import { listEmployers, listProducts, type Employer, type Product } from './admin';
-import type { ClientSummary } from './types';
+import type { ClientSummary, PageResponse } from './types';
 import * as mockTransactions from './mockTransactions';
 
 export interface Option {
@@ -43,6 +43,22 @@ export interface SavedTransaction {
   bankedTotal: number;
 }
 
+export interface SaleRow extends SavedTransaction {
+  clientName: string;
+  consultantName: string;
+}
+
+export interface SaleFilter {
+  from: string;
+  to: string;
+  consultantId?: number;
+}
+
+export interface SalesPage extends PageResponse<SaleRow> {
+  quotationTotal: number;
+  bankedTotal: number;
+}
+
 export interface CaptureLists {
   products: Product[];
   employers: Employer[];
@@ -73,6 +89,17 @@ const real = {
       method: 'POST',
       body: JSON.stringify({ idNumber }),
     }),
+
+  list(filter: SaleFilter, page: number, size = 25) {
+    const q = new URLSearchParams({
+      from: filter.from,
+      to: filter.to,
+      page: String(page),
+      size: String(size),
+    });
+    if (filter.consultantId !== undefined) q.set('consultantId', String(filter.consultantId));
+    return api<SalesPage>(`/api/transactions?${q.toString()}`);
+  },
 
   save: (t: NewTransaction, key: string) =>
     api<SavedTransaction>('/api/transactions', {

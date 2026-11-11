@@ -35,6 +35,9 @@ export type {
   CaptureLists,
   NewTransaction,
   Option,
+  SaleFilter,
+  SaleRow,
+  SalesPage,
   SavedLine,
   SavedTransaction,
 } from './transactions';
