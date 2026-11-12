@@ -196,8 +196,12 @@
   border-radius: 50%;
   background: #8a92a0;
 }
+.lp .badge.active {
+  min-width: 0;
+  padding: 0.3rem 0.6rem;
+}
 .lp .badge.active::before {
-  background: #2e8b57;
+  display: none;
 }
 .lp .badge.suspended::before {
   background: var(--err-line);
@@ -294,4 +298,11 @@
     flex: 1 1 12rem;
     width: auto;
   }
+}
+
+/* "You" marker next to the signed-in user's own row */
+.lp-pill.lp-you {
+  margin: 0 0 0 0.5rem;
+  font-weight: 500;
+  color: var(--muted);
 }

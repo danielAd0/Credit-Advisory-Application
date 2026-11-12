@@ -1,128 +1,130 @@
-/* Reassign clients. Classes start with "ra-". */
-.ra {
-  max-width: 900px;
-}
-.ra h1 {
-  margin-bottom: 0.25rem;
-}
+/* Reassign clients. Classes start with "ra-". The page sits in the shared ListPage frame. */
 .ra .alert {
-  margin: 1rem 0 0;
+  margin: 1.5rem 0 0;
 }
 .ra .alert.ok {
   background: #fff1e8;
   color: #7a2a00;
   border-color: var(--accent);
 }
+
+/* Client list on the left, the move form beside it on wide screens */
+.ra-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 22rem;
+  gap: 0 1.5rem;
+  align-items: start;
+}
+.ra-count {
+  margin: 0 0 0 auto;
+  background: #fdf3ee;
+  color: #7a2a00;
+  font-weight: 600;
+}
+
+/* Filters band */
 .ra-tools {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem 1.25rem;
-  align-items: center;
-  margin: 1.25rem 0 1rem;
+  align-items: flex-end;
+  gap: 0.75rem 1rem;
+  margin: 0 calc(-1 * var(--lp-pad));
+  padding: 1rem var(--lp-pad) 1.25rem;
+  border-top: 1px solid var(--line);
 }
-.ra-tools input[type='search'] {
-  width: min(100%, 360px);
-  height: 2.75rem;
-  padding: 0 0.9rem;
-  font: inherit;
-  color: var(--ink);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 10px;
+.ra-from {
+  flex: 1 1 15rem;
 }
-.ra-tools input[type='search']:focus,
-.ra-field input:focus,
-.ra-field select:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(255, 90, 0, 0.25);
+.ra-search {
+  flex: 1 1 14rem;
 }
-.ra-check {
-  display: inline-flex;
-  gap: 0.5rem;
-  align-items: center;
-  cursor: pointer;
-}
-.ra-box {
-  width: 2.5rem;
-  text-align: center;
-}
-.ra input[type='checkbox'] {
-  width: 1.1rem;
-  height: 1.1rem;
-  accent-color: var(--accent);
-  cursor: pointer;
-}
-.ra-picked {
-  background: #fff6f0;
-}
-.ra-form {
-  margin-top: 1.5rem;
-  padding: 1.5rem;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  max-width: 560px;
-}
-.ra-form h2 {
-  margin: 0 0 1rem;
-  font-size: 1.15rem;
-}
-.ra-field {
-  margin-bottom: 1rem;
-}
+.ra-from label,
+.ra-search label,
 .ra-field label {
   display: block;
   margin-bottom: 0.35rem;
-  font-size: 0.9rem;
-  font-weight: 600;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--muted);
 }
+.ra-from select,
+.ra-search input,
 .ra-field input,
 .ra-field select {
   width: 100%;
   height: 2.75rem;
   padding: 0 0.85rem;
   font: inherit;
-  font-size: 1rem;
+  font-size: 0.95rem;
   color: var(--ink);
   background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  border: 1px solid var(--lp-field);
+  border-radius: 6px;
   box-sizing: border-box;
 }
+.ra-from select:focus,
+.ra-search input:focus,
+.ra-field input:focus,
+.ra-field select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(255, 90, 0, 0.2);
+}
+
+/* Table: the whole row toggles the checkbox */
+.ra-table tbody tr {
+  cursor: pointer;
+}
+.ra-table th:last-child,
+.ra-table td:last-child {
+  text-align: left;
+}
+.ra-table th.ra-box,
+.ra-table td.ra-box {
+  width: 1.25rem;
+  padding-right: 0.25rem;
+}
+.ra input[type='checkbox'] {
+  width: 1.1rem;
+  height: 1.1rem;
+  margin: 0;
+  vertical-align: middle;
+  accent-color: var(--lp-cta);
+  cursor: pointer;
+}
+
+/* Move form */
+.ra-form {
+  position: sticky;
+  top: 1.5rem;
+}
+.ra-form h2 {
+  padding-bottom: 1rem;
+  margin: 0 0 1.25rem;
+  border-bottom: 1px solid var(--line);
+}
+.ra-field {
+  margin-bottom: 1.1rem;
+}
 .ra-hint {
-  margin: 0.35rem 0 0;
-  font-size: 0.85rem;
+  margin: 0.4rem 0 0;
+  font-size: 0.82rem;
   color: var(--muted);
+}
+.ra-form .btn.primary {
+  width: 100%;
+  margin-top: 0.25rem;
 }
 .ra-form .btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
-@media (max-width: 600px) {
-  .ra-form {
-    padding: 1.1rem;
+
+@media (max-width: 1000px) {
+  .ra-layout {
+    grid-template-columns: minmax(0, 1fr);
   }
-}
-.ra-from {
-  min-width: 15rem;
-}
-.ra-from label {
-  display: block;
-  margin-bottom: 0.35rem;
-  font-size: 0.9rem;
-  font-weight: 600;
-}
-.ra-from select {
-  width: 100%;
-  height: 2.75rem;
-  padding: 0 0.85rem;
-  font: inherit;
-  color: var(--ink);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-}
-.ra-tools {
-  align-items: flex-end;
+  .ra-form {
+    position: static;
+  }
 }

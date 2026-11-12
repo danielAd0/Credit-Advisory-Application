@@ -16,6 +16,7 @@ import {
   type Severity,
 } from '../api';
 import { hasAnyRole, useSession } from '../auth/useAuth';
+import ListPage from '../components/ListPage';
 import Pager from '../components/Pager';
 import './addclient.css';
 import './consultants.css';
@@ -157,7 +158,7 @@ function History({ onOpen }: { onOpen: (id: number) => void }) {
       )}
       {result && result.items.length > 0 && (
         <>
-          <div className="table-wrap">
+          <div className="lp-table">
             <table>
               <thead>
                 <tr>
@@ -174,9 +175,13 @@ function History({ onOpen }: { onOpen: (id: number) => void }) {
               <tbody>
                 {result.items.map((h) => (
                   <tr key={h.id}>
-                    <td>{day(h.weekStarting)}</td>
-                    <td>{h.fileName}</td>
-                    <td>{STATE_LABEL[h.state] ?? h.state}</td>
+                    <td className="lp-strong">{day(h.weekStarting)}</td>
+                    <td className="lp-code">{h.fileName}</td>
+                    <td>
+                      <span className={`badge wi-state ${h.state.toLowerCase()}`}>
+                        {STATE_LABEL[h.state] ?? h.state}
+                      </span>
+                    </td>
                     <td>
                       {h.state === 'COMMITTED'
                         ? `${h.appliedRows} of ${h.totalRows}`
@@ -185,7 +190,7 @@ function History({ onOpen }: { onOpen: (id: number) => void }) {
                     </td>
                     <td>{h.uploadedBy}</td>
                     <td>
-                      <button type="button" className="btn" onClick={() => onOpen(h.id)}>
+                      <button type="button" className="btn lp-row-btn" onClick={() => onOpen(h.id)}>
                         {h.state === 'PREVIEWED' ? 'Review' : 'View'}
                       </button>
                     </td>
@@ -810,32 +815,38 @@ export default function ImportPage() {
   }
 
   return (
-    <div className="wi">
-      <h1>Import weekly register</h1>
-      <p className="muted">
-        Upload the weekly Credit Advisory workbook. New clients and the week&rsquo;s sales are added
-        after you confirm. ID numbers are always shown masked.
-      </p>
-      {error && (
-        <p className="alert error" role="alert">
-          {error}
-        </p>
-      )}
-      {job ? (
-        <ImportView
-          key={job.id}
-          initial={job}
-          onBack={() => {
-            setJob(null);
-            setHistoryKey((n) => n + 1);
-          }}
-        />
-      ) : (
+    <ListPage
+      title="Import weekly register"
+      description={
         <>
-          <UploadCard onPreview={setJob} />
-          <History key={historyKey} onOpen={open} />
+          Upload the weekly Credit Advisory workbook. New clients and the week&rsquo;s sales are
+          added after you confirm. ID numbers are always shown masked.
         </>
-      )}
-    </div>
+      }
+      footer="Import history is kept"
+    >
+      <div className="wi">
+        {error && (
+          <p className="alert error" role="alert">
+            {error}
+          </p>
+        )}
+        {job ? (
+          <ImportView
+            key={job.id}
+            initial={job}
+            onBack={() => {
+              setJob(null);
+              setHistoryKey((n) => n + 1);
+            }}
+          />
+        ) : (
+          <>
+            <UploadCard onPreview={setJob} />
+            <History key={historyKey} onOpen={open} />
+          </>
+        )}
+      </div>
+    </ListPage>
   );
 }

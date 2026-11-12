@@ -9,6 +9,8 @@ import {
   type PageResponse,
 } from '../api';
 import { clientName } from '../api/names';
+import ListPage from '../components/ListPage';
+import { countOf } from '../components/countOf';
 import Pager from '../components/Pager';
 import './reassign.css';
 
@@ -154,137 +156,160 @@ export default function ReassignPage() {
   }
 
   return (
-    <div className="ra">
-      <h1>Reassign clients</h1>
-      <p className="muted">
-        Choose whose clients to move, tick the ones to move, pick the consultant who takes them, and
-        say why. The reason is kept in the assignment history.
-      </p>
-
-      {done && (
-        <p className="alert ok" role="status">
-          {done.moved} {done.moved === 1 ? 'client was' : 'clients were'} moved.
-        </p>
-      )}
-      {(failure || loadError) && (
-        <p className="alert error" role="alert">
-          {failure ?? 'Could not load the list. Refresh and try again.'}
-        </p>
-      )}
-
-      <div className="ra-tools">
-        <div className="ra-from">
-          <label htmlFor="ra-from">Move clients from</label>
-          <select id="ra-from" value={from} onChange={(e) => changeFrom(e.target.value)}>
-            <option value={NONE}>Not assigned to anyone</option>
-            {consultants.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.fullName}
-                {c.status !== 'ACTIVE' ? ` (${c.status.toLowerCase()})` : ''}
-              </option>
-            ))}
-          </select>
-        </div>
-        <input
-          type="search"
-          placeholder="Search by name"
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setPage(0);
-          }}
-          aria-label="Search clients"
-          autoComplete="off"
-        />
-      </div>
-
-      {rows === null && !loadError && <p className="muted">Loading...</p>}
-      {rows && rows.length === 0 && <p className="muted">No clients here.</p>}
-
-      {rows && rows.length > 0 && (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th className="ra-box">
-                  <input
-                    type="checkbox"
-                    checked={allShown}
-                    onChange={toggleAll}
-                    aria-label="Select all shown clients"
-                  />
-                </th>
-                <th>Name</th>
-                <th>ID number</th>
-                <th>Current consultant</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((c) => (
-                <tr key={c.id} className={selected.has(c.id) ? 'ra-picked' : undefined}>
-                  <td className="ra-box">
-                    <input
-                      type="checkbox"
-                      checked={selected.has(c.id)}
-                      onChange={() => toggle(c.id)}
-                      aria-label={`Select ${clientName(c)}`}
-                    />
-                  </td>
-                  <td>{clientName(c)}</td>
-                  <td className="mono">{c.idNumberMasked}</td>
-                  <td>{c.consultant?.fullName ?? <span className="muted">Unassigned</span>}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-      {paged && (
-        <Pager
-          page={paged.page}
-          size={paged.size}
-          totalItems={paged.totalItems}
-          totalPages={paged.totalPages}
-          onPage={setPage}
-        />
-      )}
-
-      <form className="ra-form" onSubmit={submit}>
-        <h2>
-          Move{' '}
-          {selected.size === 0
-            ? 'selected clients'
-            : `${selected.size} ${selected.size === 1 ? 'client' : 'clients'}`}
-        </h2>
-        <div className="ra-field">
-          <label htmlFor="ra-to">New consultant</label>
-          <select id="ra-to" value={toId} onChange={(e) => setToId(e.target.value)}>
-            <option value="">Choose a consultant</option>
-            {targets.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.fullName}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="ra-field">
-          <label htmlFor="ra-reason">Reason</label>
-          <input
-            id="ra-reason"
-            type="text"
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            maxLength={200}
-            autoComplete="off"
-          />
-          <p className="ra-hint">
-            For example: consultant on leave. Do not type ID numbers or other client details here.
+    <ListPage
+      title="Reassign clients"
+      description="Choose whose clients to move, tick the ones to move, pick the consultant who takes them, and say why. The reason is kept in the assignment history."
+      footer="Client assignment history is kept"
+    >
+      <div className="ra">
+        {done && (
+          <p className="alert ok" role="status">
+            {done.moved} {done.moved === 1 ? 'client was' : 'clients were'} moved.
           </p>
+        )}
+        {(failure || loadError) && (
+          <p className="alert error" role="alert">
+            {failure ?? 'Could not load the list. Refresh and try again.'}
+          </p>
+        )}
+
+        <div className="ra-layout">
+          <section className="lp-card ra-list" aria-labelledby="ra-list-title">
+            <div className="lp-head">
+              <h2 id="ra-list-title">Clients</h2>
+              {paged && <span className="lp-count">{countOf(paged.totalItems, 'client')}</span>}
+              {selected.size > 0 && (
+                <span className="lp-pill ra-count">{selected.size} selected</span>
+              )}
+            </div>
+            <div className="ra-tools">
+              <div className="ra-from">
+                <label htmlFor="ra-from">Move clients from</label>
+                <select id="ra-from" value={from} onChange={(e) => changeFrom(e.target.value)}>
+                  <option value={NONE}>Not assigned to anyone</option>
+                  {consultants.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.fullName}
+                      {c.status !== 'ACTIVE' ? ` (${c.status.toLowerCase()})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="ra-search">
+                <label htmlFor="ra-search">Search</label>
+                <input
+                  id="ra-search"
+                  type="search"
+                  placeholder="Search by name"
+                  value={query}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    setPage(0);
+                  }}
+                  autoComplete="off"
+                />
+              </div>
+            </div>
+
+            {rows === null && !loadError && <p className="lp-empty">Loading...</p>}
+            {rows && rows.length === 0 && <p className="lp-empty">No clients here.</p>}
+
+            {rows && rows.length > 0 && (
+              <div className="lp-table ra-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th className="ra-box">
+                        <input
+                          type="checkbox"
+                          checked={allShown}
+                          onChange={toggleAll}
+                          aria-label="Select all shown clients"
+                        />
+                      </th>
+                      <th>Name</th>
+                      <th>ID number</th>
+                      <th>Current consultant</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((c) => (
+                      <tr
+                        key={c.id}
+                        className={selected.has(c.id) ? 'lp-selected' : undefined}
+                        onClick={(e) => {
+                          if ((e.target as HTMLElement).tagName !== 'INPUT') toggle(c.id);
+                        }}
+                      >
+                        <td className="ra-box">
+                          <input
+                            type="checkbox"
+                            checked={selected.has(c.id)}
+                            onChange={() => toggle(c.id)}
+                            aria-label={`Select ${clientName(c)}`}
+                          />
+                        </td>
+                        <td className="lp-strong">{clientName(c)}</td>
+                        <td className="lp-code">{c.idNumberMasked}</td>
+                        <td>
+                          {c.consultant?.fullName ?? <span className="lp-none">Unassigned</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {paged && (
+              <Pager
+                page={paged.page}
+                size={paged.size}
+                totalItems={paged.totalItems}
+                totalPages={paged.totalPages}
+                onPage={setPage}
+              />
+            )}
+          </section>
+
+          <form className="lp-card ra-form" onSubmit={submit}>
+            <h2>
+              Move{' '}
+              {selected.size === 0
+                ? 'selected clients'
+                : `${selected.size} ${selected.size === 1 ? 'client' : 'clients'}`}
+            </h2>
+            <div className="ra-field">
+              <label htmlFor="ra-to">New consultant</label>
+              <select id="ra-to" value={toId} onChange={(e) => setToId(e.target.value)}>
+                <option value="">Choose a consultant</option>
+                {targets.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.fullName}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="ra-field">
+              <label htmlFor="ra-reason">Reason</label>
+              <input
+                id="ra-reason"
+                type="text"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                maxLength={200}
+                autoComplete="off"
+              />
+              <p className="ra-hint">
+                For example: consultant on leave. Do not type ID numbers or other client details
+                here.
+              </p>
+            </div>
+            <button type="submit" className="btn primary" disabled={!ready}>
+              {saving ? 'Saving...' : target ? `Move to ${target.fullName}` : 'Move clients'}
+            </button>
+          </form>
         </div>
-        <button type="submit" className="btn primary" disabled={!ready}>
-          {saving ? 'Saving...' : target ? `Move to ${target.fullName}` : 'Move clients'}
-        </button>
-      </form>
-    </div>
+      </div>
+    </ListPage>
   );
 }

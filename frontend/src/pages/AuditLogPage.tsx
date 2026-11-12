@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { audit, detailOf, type AuditEntry, type PageResponse } from '../api';
+import ListPage from '../components/ListPage';
+import { countOf } from '../components/countOf';
+import { IconShield } from '../components/icons';
 import Pager from '../components/Pager';
 import './addclient.css';
-import './consultants.css';
 import './audit.css';
 
 const SIZE = 25;
@@ -130,19 +132,61 @@ function actionLabel(code: string): string {
   return ACTIONS[code] ?? code;
 }
 
-function details(e: AuditEntry): string {
-  if (!e.metadata) return '';
-  return Object.entries(e.metadata)
-    .flatMap(([key, value]) => {
-      const label = KEYS[key];
-      const text = show(key, value);
-      return label && text !== '' ? [`${label}: ${text}`] : [];
-    })
-    .join(' · ');
+/** Colour family of an action, for its chip in the "What" column. */
+type Tone = 'alert' | 'security' | 'move' | 'ok' | 'info' | 'plain';
+
+function toneOf(code: string): Tone {
+  if (
+    /FAILED$|_LOCKED$|RATE_LIMITED|LIMIT_REACHED|_DISABLED$|_DEACTIVATED$|_CANCELLED$|_EXPIRED$|_REMOVED$/.test(
+      code,
+    )
+  )
+    return 'alert';
+  if (/PASSWORD|^MFA_|_UNLOCKED$|_ROLES_CHANGED$|^CLIENT_VIEWED$|ID_NUMBER/.test(code))
+    return 'security';
+  if (/TRANSFERRED|UNASSIGNED|REPLACED|MERGED|LINK_CHANGED/.test(code)) return 'move';
+  if (/_CREATED$|_ASSIGNED$|_ENABLED$|_ACTIVATED$|_CONFIRMED$|_ADDED$/.test(code)) return 'ok';
+  if (/^SALE_|EXPORTED|PREVIEWED|LOOKUP|_VIEWED$|TARGET_SET/.test(code)) return 'info';
+  return 'plain';
+}
+
+/** ACTIVE -> Active */
+const word = (v: unknown) =>
+  typeof v === 'string' ? v.charAt(0) + v.slice(1).toLowerCase().replace(/_/g, ' ') : String(v);
+
+/** Every labelled metadata field as "Label: value". */
+function fields(e: AuditEntry, skip: string[] = []): string[] {
+  if (!e.metadata) return [];
+  return Object.entries(e.metadata).flatMap(([key, value]) => {
+    if (skip.includes(key)) return [];
+    const label = KEYS[key];
+    const text = show(key, value);
+    return label && text !== '' ? [`${label}: ${text}`] : [];
+  });
+}
+
+/** The Details cell: a short headline, plus the reason on its own line when there is one. */
+function summary(e: AuditEntry): { main: string; reason: string | null } {
+  const m = e.metadata ?? {};
+  const reason = typeof m.reason === 'string' && m.reason.trim() ? m.reason.trim() : null;
+  const from = m.fromStatus ?? m.from;
+  const to = m.toStatus ?? m.to;
+  let main: string;
+  if (typeof from === 'string' && typeof to === 'string' && from && to) {
+    main = `${word(from)} → ${word(to)}`;
+  } else if (typeof m.count === 'number') {
+    main = `${m.count} ${m.count === 1 ? 'client' : 'clients'}`;
+  } else if (m.clientId !== undefined && m.products !== undefined) {
+    const n = Array.isArray(m.products) ? m.products.length : Number(m.products);
+    main = `Client #${String(m.clientId)} · ${n} ${n === 1 ? 'product' : 'products'}`;
+  } else {
+    main = fields(e, ['reason']).join(' · ');
+  }
+  return { main, reason };
 }
 
 const target = (e: AuditEntry) =>
-  e.targetType ? `${targetLabel(e.targetType)}${e.targetId ? ` #${e.targetId}` : ''}` : '-';
+  e.targetType ? `${targetLabel(e.targetType)}${e.targetId ? ` #${e.targetId}` : ''}` : '';
 
 const startOf = (date: string, addDays = 0) => {
   if (!date) return undefined;
@@ -150,6 +194,31 @@ const startOf = (date: string, addDays = 0) => {
   d.setDate(d.getDate() + addDays);
   return d.toISOString();
 };
+
+// ---------- time, shown in South African time ----------
+
+const TZ = 'Africa/Johannesburg';
+const DAY = new Intl.DateTimeFormat('en-GB', {
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+  timeZone: TZ,
+});
+const TIME = new Intl.DateTimeFormat('en-GB', {
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hourCycle: 'h23',
+  timeZone: TZ,
+});
+const whenDay = (iso: string) => DAY.format(new Date(iso));
+const whenTime = (iso: string) => `${TIME.format(new Date(iso))} SAST`;
+
+const Dash = () => (
+  <span className="lp-none" aria-label="none">
+    —
+  </span>
+);
 
 export default function AuditLogPage() {
   const [params] = useSearchParams();
@@ -194,115 +263,164 @@ export default function AuditLogPage() {
     setPage(0);
   };
 
+  const filtered = Boolean(action || targetType || fromDate || toDate);
+  const count = result ? countOf(result.totalItems, 'entry', 'entries') : null;
+
   return (
-    <>
-      <h1>Audit log</h1>
-      <p className="muted">Who did what, and when. Entries cannot be changed or deleted.</p>
-
-      <div className="al-filters">
-        <div className="ac-field">
-          <label htmlFor="al-action">Action</label>
-          <select
-            id="al-action"
-            value={action}
-            onChange={(e) => reset(() => setAction(e.target.value))()}
-          >
-            <option value="">All actions</option>
-            {Object.keys(ACTIONS).map((code) => (
-              <option key={code} value={code}>
-                {actionLabel(code)}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="ac-field">
-          <label htmlFor="al-type">About</label>
-          <select
-            id="al-type"
-            value={targetType}
-            onChange={(e) => reset(() => setTargetType(e.target.value))()}
-          >
-            <option value="">Anything</option>
-            {TARGETS.map((t) => (
-              <option key={t} value={t}>
-                {targetLabel(t)}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="ac-field">
-          <label htmlFor="al-id">Number</label>
-          <input
-            id="al-id"
-            inputMode="numeric"
-            value={targetId}
-            disabled={!targetType}
-            placeholder="e.g. 4"
-            onChange={(e) => reset(() => setTargetId(e.target.value.replace(/\D/g, '')))()}
-          />
-        </div>
-        <div className="ac-field">
-          <label htmlFor="al-from">From</label>
-          <input
-            id="al-from"
-            type="date"
-            value={fromDate}
-            onChange={(e) => reset(() => setFromDate(e.target.value))()}
-          />
-        </div>
-        <div className="ac-field">
-          <label htmlFor="al-to">To</label>
-          <input
-            id="al-to"
-            type="date"
-            value={toDate}
-            onChange={(e) => reset(() => setToDate(e.target.value))()}
-          />
-        </div>
-      </div>
-
-      {error && (
-        <p className="alert error" role="alert">
-          {error}
-        </p>
-      )}
-      {!error && result === null && <p className="muted">Loading...</p>}
-      {result && result.items.length === 0 && <p className="muted">No entries found.</p>}
-      {result && result.items.length > 0 && (
+    <ListPage
+      title="Audit log"
+      section="Administration"
+      description={
         <>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>When</th>
-                  <th>Who</th>
-                  <th>What</th>
-                  <th>About</th>
-                  <th>Details</th>
-                </tr>
-              </thead>
-              <tbody>
-                {result.items.map((e) => (
-                  <tr key={e.id}>
-                    <td className="al-when">{new Date(e.occurredAt).toLocaleString('en-ZA')}</td>
-                    <td>{e.actor ? e.actor.email : <span className="muted">System</span>}</td>
-                    <td>{actionLabel(e.action)}</td>
-                    <td>{target(e)}</td>
-                    <td className="al-details">{details(e)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <Pager
-            page={result.page}
-            size={result.size}
-            totalItems={result.totalItems}
-            totalPages={result.totalPages}
-            onPage={setPage}
-          />
+          A complete record of who did what, and when.
+          <span className="al-lock">
+            <IconShield />
+            Entries cannot be edited or deleted
+          </span>
         </>
-      )}
-    </>
+      }
+      footer="A permanent, read-only record of workspace activity"
+      action={<span className="al-tz">All times in SAST (UTC+02:00)</span>}
+    >
+      <section className="lp-card al" aria-labelledby="lp-title">
+        <div className="lp-head">
+          <h2 id="lp-title">Activity</h2>
+          {count && <span className="al-count">{count}</span>}
+        </div>
+
+        <div className="al-filters">
+          <div className="al-field">
+            <label htmlFor="al-action">Action</label>
+            <select
+              id="al-action"
+              value={action}
+              onChange={(e) => reset(() => setAction(e.target.value))()}
+            >
+              <option value="">All actions</option>
+              {Object.keys(ACTIONS).map((code) => (
+                <option key={code} value={code}>
+                  {actionLabel(code)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="al-field">
+            <label htmlFor="al-type">About</label>
+            <select
+              id="al-type"
+              value={targetType}
+              onChange={(e) => reset(() => setTargetType(e.target.value))()}
+            >
+              <option value="">All records</option>
+              {TARGETS.map((t) => (
+                <option key={t} value={t}>
+                  {targetLabel(t)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="al-field">
+            <label htmlFor="al-id">Record number</label>
+            <input
+              id="al-id"
+              inputMode="numeric"
+              value={targetId}
+              disabled={!targetType}
+              placeholder="e.g. 4"
+              onChange={(e) => reset(() => setTargetId(e.target.value.replace(/\D/g, '')))()}
+            />
+          </div>
+          <div className="al-field">
+            <label htmlFor="al-from">From</label>
+            <input
+              id="al-from"
+              type="date"
+              value={fromDate}
+              onChange={(e) => reset(() => setFromDate(e.target.value))()}
+            />
+          </div>
+          <div className="al-field">
+            <label htmlFor="al-to">To</label>
+            <input
+              id="al-to"
+              type="date"
+              value={toDate}
+              onChange={(e) => reset(() => setToDate(e.target.value))()}
+            />
+          </div>
+        </div>
+
+        <div className="al-bar">
+          <span>
+            <strong>{filtered ? 'Filtered activity' : 'All activity'}</strong>
+            {count && (
+              <>
+                <span className="al-dot" aria-hidden="true">
+                  •
+                </span>
+                {count}
+              </>
+            )}
+          </span>
+          <span>Newest first</span>
+        </div>
+
+        {error && (
+          <p className="alert error" role="alert">
+            {error}
+          </p>
+        )}
+        {!error && result === null && <p className="lp-empty">Loading...</p>}
+        {result && result.items.length === 0 && <p className="lp-empty">No entries found.</p>}
+        {result && result.items.length > 0 && (
+          <>
+            <div className="lp-table al-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>When</th>
+                    <th>Who</th>
+                    <th>What</th>
+                    <th>About</th>
+                    <th>Details</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.items.map((e) => {
+                    const { main, reason } = summary(e);
+                    return (
+                      <tr key={e.id}>
+                        <td className="al-when">
+                          <span>{whenDay(e.occurredAt)}</span>
+                          <small>{whenTime(e.occurredAt)}</small>
+                        </td>
+                        <td>{e.actor ? e.actor.email : <span className="lp-pill">System</span>}</td>
+                        <td>
+                          <span className={`al-chip ${toneOf(e.action)}`}>
+                            {actionLabel(e.action)}
+                          </span>
+                        </td>
+                        <td>{target(e) || <Dash />}</td>
+                        <td className="al-details">
+                          {main ? <span>{main}</span> : !reason && <Dash />}
+                          {reason && <small>Reason: {reason}</small>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <Pager
+              page={result.page}
+              size={result.size}
+              totalItems={result.totalItems}
+              totalPages={result.totalPages}
+              onPage={setPage}
+            />
+          </>
+        )}
+      </section>
+    </ListPage>
   );
 }

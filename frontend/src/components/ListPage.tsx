@@ -8,12 +8,15 @@ import './listpage.css';
  */
 export default function ListPage({
   title,
+  section,
   description,
   action,
   footer,
   children,
 }: {
   title: string;
+  /** The breadcrumb group, e.g. "Administration". Without it the crumb links to the workspace. */
+  section?: string;
   description?: ReactNode;
   action?: ReactNode;
   /** The right-hand footer note. */
@@ -23,7 +26,7 @@ export default function ListPage({
   return (
     <div className="lp">
       <nav className="lp-crumbs" aria-label="Breadcrumb">
-        <Link to="/">Workspace</Link>
+        {section ? <span>{section}</span> : <Link to="/">Workspace</Link>}
         <span aria-hidden="true">/</span>
         <span aria-current="page">{title}</span>
       </nav>

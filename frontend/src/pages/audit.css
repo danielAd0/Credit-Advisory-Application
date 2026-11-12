@@ -1,29 +1,161 @@
-.al-filters {
+/* Audit log. Classes start with "al-". The page sits in the shared ListPage frame. */
+
+/* ---------- Header ---------- */
+.al-lock {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem 1rem;
-  margin: 1.25rem 0 1rem;
+  align-items: center;
+  gap: 0.45rem;
+  width: fit-content;
+  margin-top: 0.9rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 6px;
+  background: var(--lp-pill);
+  color: var(--muted);
+  font-size: 0.8rem;
 }
-.al-filters .ac-field {
-  margin-bottom: 0;
-  min-width: 9rem;
+.al-lock svg {
+  width: 1rem;
+  height: 1rem;
 }
-.al-filters select {
+.al-tz {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+/* ---------- Card header ---------- */
+.al-count {
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  background: var(--lp-pill);
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+/* ---------- Filters ---------- */
+.al-filters {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(9rem, 1fr));
+  gap: 0.9rem 0.75rem;
+  padding-bottom: 1.25rem;
+}
+.al-field label {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+.al-field select,
+.al-field input {
   width: 100%;
   height: 2.75rem;
-  padding: 0 0.75rem;
+  padding: 0 0.8rem;
   font: inherit;
+  font-size: 0.92rem;
   color: var(--ink);
   background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  border: 1px solid var(--lp-field);
+  border-radius: 6px;
+  box-sizing: border-box;
+}
+.al-field select:focus,
+.al-field input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(255, 90, 0, 0.2);
+}
+.al-field input:disabled {
+  background: var(--lp-band);
+  cursor: not-allowed;
+}
+/* ---------- "All activity" bar above the table ---------- */
+.al-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin: 0 calc(-1 * var(--lp-pad));
+  padding: 0.9rem var(--lp-pad);
+  border-top: 1px solid var(--line);
+  font-size: 0.92rem;
+  color: var(--muted);
+}
+.al-bar strong {
+  font-weight: 600;
+  color: var(--ink);
+}
+.al-dot {
+  margin: 0 0.6rem;
+  color: #b4bac4;
+}
+/* ---------- Table ---------- */
+.al-table td {
+  padding-top: 0.95rem;
+  padding-bottom: 0.95rem;
+}
+.al-table th:last-child,
+.al-table td:last-child {
+  text-align: left;
+}
+
+.al-when span,
+.al-details span {
+  display: block;
+}
+.al-when small,
+.al-details small {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.8rem;
+  color: var(--muted);
 }
 .al-when {
-  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 .al-details {
-  max-width: 28rem;
+  max-width: 26rem;
+  white-space: normal;
   overflow-wrap: anywhere;
-  color: var(--muted);
-  font-size: 0.9rem;
+}
+
+/* Action chips, coloured by kind of event */
+.al-chip {
+  display: inline-block;
+  padding: 0.28rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  background: var(--lp-pill);
+  color: #3d4451;
+}
+.al-chip.info {
+  background: #eaf1fd;
+  color: #1f4fa3;
+}
+.al-chip.security {
+  background: #f3edfb;
+  color: #6534a8;
+}
+.al-chip.ok {
+  background: #e8f5ec;
+  color: #1f6b3a;
+}
+.al-chip.move {
+  background: #fdf0e6;
+  color: #a2470f;
+}
+.al-chip.alert {
+  background: var(--err-bg);
+  color: var(--err-ink);
+}
+
+/* ---------- Smaller screens ---------- */
+@media (max-width: 1200px) {
+  .al-filters {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 700px) {
+  .al-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }

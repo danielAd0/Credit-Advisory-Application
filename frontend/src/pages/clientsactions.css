@@ -1,12 +1,65 @@
 /* Edit / remove on the Clients page. Classes start with "ca-". */
-/* The clients table has many columns: tighter cells, and it scrolls sideways on small screens. */
-.cl-table th,
-.cl-table td {
-  padding: 0.6rem 0.75rem;
+/* The clients table: many columns, so tighter cells; it scrolls sideways on small screens. */
+.lp-table .cl-table th,
+.lp-table .cl-table td {
+  padding-left: 0.85rem;
+  padding-right: 0.85rem;
+  white-space: nowrap;
+}
+.lp-table .cl-table th:first-child,
+.lp-table .cl-table td:first-child {
+  padding-left: var(--lp-pad);
+}
+.lp-table .cl-table th:last-child,
+.lp-table .cl-table td:last-child {
+  padding-right: var(--lp-pad);
+}
+.cl-name {
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+}
+.cl-name span {
+  font-weight: 400;
+}
+.cl-name:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.cl-contact {
+  font-variant-numeric: tabular-nums;
+}
+.cl-contact > span {
+  display: block;
+  line-height: 1.5;
+}
+.cl-tag {
+  display: inline-block;
+  width: 1.1rem;
+  margin-right: 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
 }
 .ca-actions {
   white-space: nowrap;
 }
+.ca-actions .lp-row-btn + .lp-row-btn {
+  margin-left: 0.5rem;
+}
+.lp-row-btn.cl-danger {
+  color: #a32014;
+  border-color: #e3b5b0;
+}
+.lp-row-btn.cl-danger:hover:not(:disabled) {
+  color: #ffffff;
+  background: #a32014;
+  border-color: #a32014;
+}
+.alert.ok.cl-notice {
+  margin-top: 1.5rem;
+}
+/* Kept for any other page that still uses the plain text links. */
 .ca-link {
   font: inherit;
   padding: 0;
