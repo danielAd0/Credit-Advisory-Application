@@ -14,9 +14,7 @@ import jakarta.persistence.Version;
 import java.time.Instant;
 import java.util.Locale;
 
-/**
- * A consultant clients can be assigned to. Maps to the consultants table (V1).
- */
+
 @Entity
 @Table(name = "consultants")
 public class Consultant {
@@ -30,6 +28,9 @@ public class Consultant {
 
     @Column(name = "full_name", nullable = false, length = 200)
     private String fullName;
+
+    @Column(name = "email", length = 254)
+    private String email;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 16)
@@ -48,23 +49,28 @@ public class Consultant {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    /** Required by JPA. NOt for application code - use the public constructor. */
     protected Consultant() {
     }
 
-    /** A new consultant always starts ACTIVE */
     public Consultant(String consultantCode, String fullName) {
         this.consultantCode = normalizeCode(consultantCode);
         this.fullName = fullName;
         this.status = ConsultantStatus.ACTIVE;
     }
 
-    // -------- behaviour --------
     public void rename(String fullName) {
         this.fullName = fullName.strip();
     }
 
-    /** Changes status and records when. Does nothing if the status is unchanged. */
+ 
+    public void changeEmail(String email) {
+        this.email = email == null || email.isBlank() ? null : email.strip().toLowerCase(Locale.ROOT);
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
     public void changeStatus(ConsultantStatus newStatus) {
         if (newStatus == this.status) {
             return;
@@ -73,12 +79,10 @@ public class Consultant {
         this.statusChangedAt = Instant.now();
     }
 
-    /** "c004" becomes "C004" - the database only accepts upper-case codes */
     public static String normalizeCode(String code) {
         return code.strip().toUpperCase(Locale.ROOT);
     }
 
-    // -------- timestamps --------
 
     @PrePersist
     void onCreate() {
@@ -93,8 +97,7 @@ public class Consultant {
         this.updatedAt = Instant.now();
     }
 
-    // -------- getters (no setters - change state through the methods above)
-    // --------
+    
 
     public Long getId() {
         return id;

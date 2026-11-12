@@ -368,9 +368,9 @@ out alone: a recovery code to sign in, then the new phone.
 
 **Why:**
 
-- Self-service reset needs a channel the user proves they own, normally email. The application does not send
-  email (nothing is set up for it), and an email inbox is a weaker check than an administrator who knows the
-  people asking.
+- Self-service reset needs a channel the user proves they own, normally email. An email inbox is a weaker check
+  than an administrator who knows the people asking, and reset links are a common phishing lure: staff who learn
+  to click "reset your password" emails are easier to fool.
 - A reset link that reaches the wrong inbox hands over an account that can see client ID numbers. An administrator
   reset is checked in person or by phone, and audited.
 - Two-step sign-in stays in force after every recovery: a new password alone never opens an account.
@@ -385,12 +385,19 @@ out alone: a recovery code to sign in, then the new phone.
 | Lost phone **and** recovery codes | an admin | resets two-step sign-in (`POST /api/users/{id}/mfa-reset`); the user sets up the app again at the next sign-in. Audited `MFA_RESET` |
 | The **only** administrator is stuck | IT, with the database | the break-glass steps in `it-handover.md` section 9. To avoid needing them, keep **at least two** administrator accounts |
 
-The administrator hands a temporary password over in person or reads it out on a call they started, never by
-email or chat. Before an MFA reset they check who they are talking to: whoever knows the password can set up the
-new authenticator.
+For a **reset**, the administrator hands the temporary password over in person or reads it out on a call they
+started, never by email or chat. Before an MFA reset they check who they are talking to: whoever knows the password
+can set up the new authenticator.
 
-**Later:** if the business sets up email sending, a self-service reset can be added (a single-use link that expires
-in about 30 minutes, still followed by two-step sign-in). Nothing above would change.
+**New consultants are different.** Their **first** login details can be emailed to their work address in bulk by
+consultant onboarding (`consultant-onboarding.md`): they have no account to take over yet, and the email goes to
+the address on the weekly register. That is the only email that ever carries a password. Resets and MFA resets are
+never emailed, so a "your password was reset" email is always fake, and staff can be told exactly that.
+
+**Later:** the application can now send email (Microsoft 365, set up for onboarding), so a self-service reset
+could be added: a single-use link that expires in about 30 minutes, still followed by two-step sign-in. It is
+left out on purpose for the reasons above; revisit if administrators spend too long on resets. Nothing above
+would change.
 
 ---
 

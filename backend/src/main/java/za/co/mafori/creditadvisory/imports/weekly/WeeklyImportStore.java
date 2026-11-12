@@ -145,7 +145,8 @@ public class WeeklyImportStore {
 
     public record NewRow(long jobId, String sheetName, int rowNumber, int dayOfWeek, LocalDate transactionDate,
             String action, byte[] idNumberHash, byte[] idNumberEncrypted, String idNumberLast4, String firstName,
-            String lastName, String consultantName, String employerName, String structureName,
+            String lastName, String consultantName, String consultantEmail, String employerName,
+            String structureName,
             String paymentTermName, BigDecimal quotation, BigDecimal banked, BigDecimal amountToClient,
             BigDecimal thirdPartySettlement, String primaryBudgetList, BigDecimal primaryLoanAmount,
             String secondaryBudgetList, BigDecimal secondaryLoanAmount, String extrasJson, Long existingClientId,
@@ -157,16 +158,17 @@ public class WeeklyImportStore {
                 """
                         insert into import_rows (import_job_id, sheet_name, row_number, day_of_week, transaction_date, action,
                             id_number_hash, id_number_encrypted, id_number_last4, first_name, last_name, consultant_name,
-                            employer_name, structure_name, payment_term_name, quotation_total, banked_total,
+                            consultant_email, employer_name, structure_name, payment_term_name, quotation_total, banked_total,
                             amount_to_client, third_party_settlement, primary_budget_list, primary_loan_amount,
                             secondary_budget_list, secondary_loan_amount, extras, existing_client_id,
                             existing_client_version, creates_client, assigns_consultant, warning_count)
-                        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, cast(? as jsonb), ?, ?, ?, ?, ?)
+                        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, cast(? as jsonb), ?, ?, ?, ?, ?)
                         returning id
                         """,
                 Long.class, r.jobId(), r.sheetName(), r.rowNumber(), r.dayOfWeek(), r.transactionDate(),
                 r.action(), r.idNumberHash(), r.idNumberEncrypted(), r.idNumberLast4(), r.firstName(), r.lastName(),
-                r.consultantName(), r.employerName(), r.structureName(), r.paymentTermName(), r.quotation(),
+                r.consultantName(), r.consultantEmail(), r.employerName(), r.structureName(), r.paymentTermName(),
+                r.quotation(),
                 r.banked(), r.amountToClient(), r.thirdPartySettlement(), r.primaryBudgetList(),
                 r.primaryLoanAmount(), r.secondaryBudgetList(), r.secondaryLoanAmount(), r.extrasJson(),
                 r.existingClientId(), r.existingClientVersion(), r.createsClient(), r.assignsConsultant(),
@@ -357,6 +359,69 @@ public class WeeklyImportStore {
         return jdbc.queryForObject(
                 "insert into consultants (consultant_code, full_name) values (?, ?) returning id", Long.class,
                 code, fullName);
+    }
+
+    /**
+     * A consultant registered from the sheet with their email
+     * (ConsultantResolver.Registration).
+     */
+    public long createConsultant(String code, String fullName, String email) {
+        return jdbc.queryForObject(
+                "insert into consultants (consultant_code, full_name, email) values (?, ?, ?) returning id",
+                Long.class, code, fullName, email);
+    }
+
+    /** Fills in the email of a consultant who has none yet; false if someone set one meanwhile. */
+    public boolean setConsultantEmailIfMissing(long consultantId, String email) {
+        return jdbc.update("update consultants set email = ? where id = ? and email is null", email,
+                consultantId) == 1;
+    }
+
+    /** Every consultant that has an email, by that (lower-case) email. */
+    public Map<String, ConsultantRef> consultantsByEmail() {
+        Map<String, ConsultantRef> byEmail = new HashMap<>();
+        jdbc.query("select email, id, consultant_code, full_name, status from consultants where email is not null",
+                (rs, n) -> byEmail.put(rs.getString(1),
+                        new ConsultantRef(rs.getLong(2), rs.getString(3), rs.getString(4), rs.getString(5))));
+        return byEmail;
+    }
+
+    /** consultant id -> email, for the consultants that have one. */
+    public Map<Long, String> consultantEmails() {
+        Map<Long, String> emails = new HashMap<>();
+        jdbc.query("select id, email from consultants where email is not null",
+                (rs, n) -> emails.put(rs.getLong(1), rs.getString(2)));
+        return emails;
+    }
+
+    /** One consultant name as written in the sheet, with an email it came with (or null), and its rows. */
+    public record SheetConsultant(String name, String email, int rows) {
+    }
+
+    public List<SheetConsultant> sheetConsultants(long jobId) {
+        return jdbc.query("""
+                select consultant_name, consultant_email, count(*) from import_rows
+                where import_job_id = ? and action <> 'INVALID' and consultant_name is not null
+                group by consultant_name, consultant_email
+                order by consultant_name, consultant_email nulls last
+                """, (rs, n) -> new SheetConsultant(rs.getString(1), rs.getString(2), rs.getInt(3)), jobId);
+    }
+
+    /** New-client rows of a job per consultant name as written (null = no consultant). */
+    public Map<String, Integer> newClientRowsByConsultant(long jobId) {
+        Map<String, Integer> counts = new java.util.LinkedHashMap<>();
+        jdbc.query("""
+                select consultant_name, count(*) from import_rows
+                where import_job_id = ? and action = 'NEW'
+                group by consultant_name
+                """, (rs, n) -> counts.put(rs.getString(1), rs.getInt(2)), jobId);
+        return counts;
+    }
+
+    /** Preview warnings with this code (for example client:consultant-differs). */
+    public long issueCount(long jobId, String code) {
+        return jdbc.queryForObject("select count(*) from import_errors where import_job_id = ? and error_code = ?",
+                Long.class, jobId, code);
     }
 
     public void insertConsultantAlias(long consultantId, String alias, long userId) {

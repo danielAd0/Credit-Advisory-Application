@@ -17,6 +17,7 @@ import EditClientPage from './pages/EditClientPage';
 import ImportPage from './pages/ImportPage';
 import LoginPage from './pages/LoginPage';
 import ManagersPage from './pages/ManagersPage';
+import OnboardingPage from './pages/OnboardingPage';
 import EmployersPage from './pages/EmployersPage';
 import ProductQuotationsPage from './pages/ProductQuotationsPage';
 import ProductsPage from './pages/ProductsPage';
@@ -140,12 +141,20 @@ export default function App() {
                 <Route
                   path="import"
                   element={
-                    <RequireRole roles={managers}>
+                    <RequireRole roles={['ADMIN']}>
                       <ImportPage />
                     </RequireRole>
                   }
                 />
               )}
+              <Route
+                path="consultant-logins"
+                element={
+                  <RequireRole roles={['ADMIN']}>
+                    <OnboardingPage />
+                  </RequireRole>
+                }
+              />
               <Route
                 path="*"
                 element={

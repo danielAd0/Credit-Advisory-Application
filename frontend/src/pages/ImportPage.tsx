@@ -29,6 +29,10 @@ const day = (iso: string) => new Date(iso).toLocaleDateString('en-ZA');
 
 const BLOCKER_TEXT: Record<ImportBlocker, string> = {
   UNMAPPED_CONSULTANTS: 'Match each consultant name below to a consultant.',
+  CONSULTANT_CONFLICTS:
+    'Some consultant names do not match their email. Fix them in the workbook (see below) and upload it again.',
+  NAME_DIFFERENCES:
+    'Some ID numbers belong to clients stored under another name. Check the issues before confirming.',
   SHEET_ERRORS: 'The workbook has errors that stop the import. Fix it and upload it again.',
   EXPIRED: 'This preview has expired. Upload the file again.',
   NOT_PREVIEWED: 'This import is already finished.',
@@ -446,6 +450,145 @@ function ConsultantMapping({
   );
 }
 
+/** What confirm will do with the CONSULTANT EMAIL column, and who the new clients go to. */
+function ConsultantRegistrationCard({ job }: { job: ImportSummary }) {
+  const reg = job.consultantRegistration;
+  const asg = job.assignment;
+  if (!reg || !asg) return null;
+  const hasEmailWork =
+    reg.toRegister.length > 0 || reg.emailsToAdd.length > 0 || reg.conflicts.length > 0;
+  if (!hasEmailWork && reg.matchedByEmail === 0 && asg.newClientRows === 0) return null;
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+  return (
+    <section className="wi-card" aria-label="Consultants and assignment">
+      <h2>Consultants and client assignment</h2>
+      <p className="muted">
+        {plural(reg.namesInSheet, 'consultant name', 'consultant names')} in the workbook:{' '}
+        {reg.matchedByName} matched by name, {reg.matchedByEmail} by email
+        {reg.toRegister.length > 0 && `, ${reg.toRegister.length} new`}.
+      </p>
+
+      <div className="wi-stats">
+        <div className="wi-stat">
+          <strong>{asg.willBeAssigned}</strong>
+          <span>New clients assigned</span>
+        </div>
+        <div className={`wi-stat ${asg.waitingForConsultant > 0 ? 'bad' : ''}`}>
+          <strong>{asg.waitingForConsultant}</strong>
+          <span>Waiting for a consultant match</span>
+        </div>
+        <div className="wi-stat">
+          <strong>{asg.noConsultant + asg.consultantNotActive}</strong>
+          <span>Left unassigned</span>
+        </div>
+        <div className="wi-stat">
+          <strong>{asg.existingClientsWithOtherConsultant}</strong>
+          <span>Existing clients kept with their consultant</span>
+        </div>
+      </div>
+      {(asg.noConsultant > 0 || asg.consultantNotActive > 0) && (
+        <p className="muted">
+          Unassigned: {asg.noConsultant} without a consultant in the sheet,{' '}
+          {asg.consultantNotActive} whose consultant is inactive or suspended. Assign them later on
+          Reassign clients.
+        </p>
+      )}
+
+      {reg.conflicts.length > 0 && (
+        <>
+          <h3>Names that do not match their email</h3>
+          <p className="alert error" role="status">
+            These rows could give clients to the wrong consultant, so the import cannot be
+            confirmed. Correct the name or email in the workbook and upload it again. To fill in a
+            consultant&apos;s missing email, use Consultant logins.
+          </p>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Name in sheet</th>
+                  <th>Email</th>
+                  <th>Rows</th>
+                  <th>Problem</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reg.conflicts.map((c) => (
+                  <tr key={`${c.nameInSheet}|${c.email}`}>
+                    <td>{c.nameInSheet}</td>
+                    <td>{c.email}</td>
+                    <td>{c.rows}</td>
+                    <td>{c.reason}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {reg.toRegister.length > 0 && (
+        <>
+          <h3>New consultants (registered when you confirm)</h3>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Rows</th>
+                  <th>Check</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reg.toRegister.map((r) => (
+                  <tr key={r.email}>
+                    <td>
+                      {r.fullName}
+                      {r.otherSpellings.length > 0 && (
+                        <span className="muted"> (also written {r.otherSpellings.join(', ')})</span>
+                      )}
+                    </td>
+                    <td>{r.email}</td>
+                    <td>{r.rows}</td>
+                    <td>
+                      {r.similarConsultants.length > 0 ? (
+                        <span>
+                          Similar to{' '}
+                          {r.similarConsultants
+                            .map((c) => `${c.fullName} (${c.consultantCode})`)
+                            .join(', ')}
+                          . If it is the same person, give that consultant this email first.
+                        </span>
+                      ) : (
+                        <span className="muted">-</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {reg.emailsToAdd.length > 0 && (
+        <>
+          <h3>Emails added to existing consultants</h3>
+          <ul>
+            {reg.emailsToAdd.map((u) => (
+              <li key={u.consultantId}>
+                {u.fullName} ({u.consultantCode}): {u.email}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </section>
+  );
+}
+
 function ImportView({ initial, onBack }: { initial: ImportSummary; onBack: () => void }) {
   const session = useSession();
   const isAdmin = hasAnyRole(session, ['ADMIN']);
@@ -518,6 +661,10 @@ function ImportView({ initial, onBack }: { initial: ImportSummary; onBack: () =>
             {result.employersCreated > 0 &&
               `, and ${result.employersCreated} new employers were added`}
             .
+            {(result.consultantsRegistered ?? 0) > 0 &&
+              ` ${result.consultantsRegistered} new consultant${
+                result.consultantsRegistered === 1 ? ' was' : 's were'
+              } registered: give them their logins on Consultant logins.`}
             {result.replacedTypedInSales > 0 &&
               ` It replaced ${result.replacedTypedInSales} sale${
                 result.replacedTypedInSales === 1 ? '' : 's'
@@ -641,6 +788,7 @@ function ImportView({ initial, onBack }: { initial: ImportSummary; onBack: () =>
         )}
       </section>
 
+      {previewed && <ConsultantRegistrationCard job={job} />}
       {previewed && <ConsultantMapping job={job} onUpdated={setJob} />}
       <Details id={job.id} />
     </>

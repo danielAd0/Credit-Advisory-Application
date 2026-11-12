@@ -36,6 +36,9 @@ public class WeeklyRegisterParser {
 
     private static final int MAX_NAME = 100;
     private static final int MAX_LABEL = 200;
+    private static final int MAX_EMAIL = 254;
+    /** Same rule as the database CHECK on users.email and consultants.email. */
+    private static final Pattern EMAIL = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
     private static final int MAX_PAYMENT_TERM = 100;
     private static final int MAX_BUDGET_LIST = 500;
     private static final int MAX_EXTRA_TEXT = 500;
@@ -123,7 +126,8 @@ public class WeeklyRegisterParser {
 
     private static ParsedRow withIssues(ParsedRow r, List<ParseIssue> issues) {
         return new ParsedRow(r.sheetName(), r.day(), r.rowNumber(), r.transactionDate(), r.firstName(),
-                r.lastName(), r.idNumber(), r.consultantName(), r.employerName(), r.structureName(),
+                r.lastName(), r.idNumber(), r.consultantName(), r.consultantEmail(), r.employerName(),
+                r.structureName(),
                 r.paymentTermName(), r.quotation(), r.banked(), r.quotationByRule(), r.bankedByRule(),
                 r.amountToClient(), r.thirdPartySettlement(), r.primaryBudgetList(), r.primaryLoanAmount(),
                 r.secondaryBudgetList(), r.secondaryLoanAmount(), r.productAmounts(), r.extras(), issues);
@@ -352,6 +356,7 @@ public class WeeklyRegisterParser {
                 issues.add(WARNING, IssueCodes.ROW_NO_CONSULTANT, "CONSULTANT",
                         "No consultant: imported as an unassigned client and transaction.");
             }
+            String consultantEmail = consultantEmail(cells, consultant != null, issues);
             String employer = label(cells, RegisterField.EMPLOYER, MAX_LABEL, issues);
             String structure = label(cells, RegisterField.STRUCTURE, MAX_LABEL, issues);
             String paymentTerm = label(cells, RegisterField.PAYMENT_TERM, MAX_PAYMENT_TERM, issues);
@@ -390,8 +395,8 @@ public class WeeklyRegisterParser {
 
             Map<String, Object> extras = extras(cells, issues);
 
-            return new ParsedRow(sheet.name(), day, rowNumber, date, first, last, id, consultant, employer,
-                    structure, paymentTerm, quotation, banked, byRuleQ, byRuleB, amountToClient, thirdParty,
+            return new ParsedRow(sheet.name(), day, rowNumber, date, first, last, id, consultant, consultantEmail,
+                    employer, structure, paymentTerm, quotation, banked, byRuleQ, byRuleB, amountToClient, thirdParty,
                     primaryBudget, primaryLoan, secondaryBudget, secondaryLoan, products, extras, issues.list);
         }
 
@@ -423,6 +428,31 @@ public class WeeklyRegisterParser {
                 return null;
             }
             return value;
+        }
+
+        /**
+         * The consultant's email, lower-case, or null. A bad address is a WARNING and
+         * is ignored: the row then falls back to matching the consultant by name. An
+         * email without a consultant name is ignored too.
+         */
+        private String consultantEmail(Map<Integer, RawCell> cells, boolean hasConsultant, RowIssues issues) {
+            String header = "CONSULTANT EMAIL";
+            String value = text(cell(cells, RegisterField.CONSULTANT_EMAIL), header, issues);
+            if (value == null) {
+                return null;
+            }
+            String email = value.strip().toLowerCase(Locale.ROOT);
+            if (email.length() > MAX_EMAIL || !EMAIL.matcher(email).matches()) {
+                issues.add(WARNING, IssueCodes.ROW_INVALID_CONSULTANT_EMAIL, header,
+                        "CONSULTANT EMAIL is not a valid email address; the consultant is matched by name only.");
+                return null;
+            }
+            if (!hasConsultant) {
+                issues.add(WARNING, IssueCodes.ROW_EMAIL_WITHOUT_CONSULTANT, header,
+                        "CONSULTANT EMAIL is filled in but CONSULTANT is empty; the email is ignored.");
+                return null;
+            }
+            return email;
         }
 
         /** Trimmed, single-spaced text; numbers become text; null when empty. */

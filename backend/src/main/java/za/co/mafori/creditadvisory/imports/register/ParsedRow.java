@@ -17,6 +17,8 @@ public record ParsedRow(
         String lastName,
         SaIdNumber idNumber,
         String consultantName,
+        /** Lower-case and trimmed, or null (no column, empty, or not a valid address). */
+        String consultantEmail,
         String employerName,
         String structureName,
         String paymentTermName,

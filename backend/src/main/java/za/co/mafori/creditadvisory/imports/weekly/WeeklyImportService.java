@@ -38,7 +38,12 @@ import za.co.mafori.creditadvisory.imports.report.ReportReconciler;
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportStore.ConsultantRef;
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportStore.ExistingClient;
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportStore.Job;
+import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.AssignmentPreview;
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.ConfirmResult;
+import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.ConsultantConflict;
+import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.ConsultantEmailToAdd;
+import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.ConsultantRegistration;
+import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.ConsultantToRegister;
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.DaySummary;
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.ImportListItem;
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.ImportSummary;
@@ -108,7 +113,9 @@ public class WeeklyImportService {
 
         ImportDictionary dictionary = dictionaryLoader.load();
         ParseResult parsed = parser.parse(workbook, week, dictionary);
-        Map<String, ConsultantRef> consultants = store.consultantsByName();
+        Map<String, ConsultantRef> byName = store.consultantsByName();
+        Map<String, ConsultantRef> consultants = withPlan(byName,
+                planFor(sheetConsultantsOf(parsed.rows()), byName));
 
         List<Staged> staged = new ArrayList<>();
         List<ParseIssue> extraIssues = new ArrayList<>();
@@ -207,7 +214,7 @@ public class WeeklyImportService {
         long rowId = store.insertRow(new WeeklyImportStore.NewRow(jobId, r.sheetName(), r.rowNumber(),
                 r.day().getValue(), r.transactionDate(), s.action, s.hash, encrypted,
                 r.idNumber() == null ? null : r.idNumber().last4(), r.firstName(), r.lastName(), r.consultantName(),
-                r.employerName(), r.structureName(), r.paymentTermName(), r.quotation(), r.banked(),
+                r.consultantEmail(), r.employerName(), r.structureName(), r.paymentTermName(), r.quotation(), r.banked(),
                 r.amountToClient(), r.thirdPartySettlement(), r.primaryBudgetList(), r.primaryLoanAmount(),
                 r.secondaryBudgetList(), r.secondaryLoanAmount(), extrasJson(r.extras()), s.existingClientId,
                 s.existingVersion, s.createsClient, s.assignsConsultant, warnings));
@@ -263,7 +270,10 @@ public class WeeklyImportService {
         BigDecimal banked = days.stream().map(DaySummary::banked).reduce(BigDecimal.ZERO, BigDecimal::add);
         Map<String, Long> issues = store.issueCounts(jobId);
 
-        List<UnmappedConsultant> unmapped = "PREVIEWED".equals(state) ? unmappedConsultants(jobId) : List.of();
+        boolean previewed = "PREVIEWED".equals(state);
+        Map<String, ConsultantRef> byName = previewed ? store.consultantsByName() : Map.of();
+        ConsultantResolver.Plan plan = previewed ? planFor(store.sheetConsultants(jobId), byName) : null;
+        List<UnmappedConsultant> unmapped = previewed ? unmappedConsultants(jobId, byName, plan) : List.of();
         Long weekImportedBy = store.currentJobForWeek(job.weekStarting()).filter(id -> id != jobId).orElse(null);
 
         List<String> blockers = new ArrayList<>();
@@ -275,6 +285,9 @@ public class WeeklyImportService {
         }
         if (!unmapped.isEmpty()) {
             blockers.add("UNMAPPED_CONSULTANTS");
+        }
+        if (plan != null && !plan.conflicts().isEmpty()) {
+            blockers.add("CONSULTANT_CONFLICTS");
         }
         int nameDifferences = (int) store.nameDifferenceCount(jobId);
         if (nameDifferences > 0 && "PREVIEWED".equals(state)) {
@@ -289,18 +302,121 @@ public class WeeklyImportService {
                 job.invalidCount(), job.appliedCount(), issues.getOrDefault("ERROR", 0L),
                 issues.getOrDefault("WARNING", 0L), issues.getOrDefault("INFO", 0L), quotation, banked, days, unmapped,
                 weekImportedBy, weekImportedBy != null && "PREVIEWED".equals(state), blockers.isEmpty(), blockers,
-                report.status(), report.differences(), nameDifferences, typedInSales);
+                report.status(), report.differences(), nameDifferences, typedInSales,
+                plan == null ? ConsultantRegistration.NONE : registrationView(jobId, byName, plan),
+                plan == null ? AssignmentPreview.NONE : assignmentPreview(jobId, byName, plan));
     }
 
     private List<UnmappedConsultant> unmappedConsultants(long jobId) {
         Map<String, ConsultantRef> known = store.consultantsByName();
+        return unmappedConsultants(jobId, known, planFor(store.sheetConsultants(jobId), known));
+    }
+
+    /**
+     * Names that match nobody and have no email to register them with. Names the
+     * email rules decide (registered, matched by email, or in conflict) are not
+     * listed here.
+     */
+    private List<UnmappedConsultant> unmappedConsultants(long jobId, Map<String, ConsultantRef> known,
+            ConsultantResolver.Plan plan) {
         List<UnmappedConsultant> out = new ArrayList<>();
         store.consultantNames(jobId).forEach((name, rows) -> {
-            if (!known.containsKey(WeeklyImportStore.key(name))) {
+            if (!known.containsKey(WeeklyImportStore.key(name)) && !plan.decidedByEmail(name)) {
                 out.add(new UnmappedConsultant(name, rows, similarConsultants(name, known)));
             }
         });
         return out;
+    }
+
+    // ---------- consultant emails (docs/consultant-onboarding.md) ----------
+
+    private ConsultantResolver.Plan planFor(List<WeeklyImportStore.SheetConsultant> sheet,
+            Map<String, ConsultantRef> byName) {
+        return ConsultantResolver.plan(sheet, byName, store.consultantsByEmail(), store.consultantEmails());
+    }
+
+    /** byName plus the sheet spellings the plan will add as aliases. */
+    private static Map<String, ConsultantRef> withPlan(Map<String, ConsultantRef> byName,
+            ConsultantResolver.Plan plan) {
+        Map<String, ConsultantRef> all = new HashMap<>(byName);
+        for (ConsultantResolver.AliasAdd a : plan.aliases()) {
+            all.putIfAbsent(WeeklyImportStore.key(a.alias()), a.consultant());
+        }
+        return all;
+    }
+
+    /** The same grouping as WeeklyImportStore.sheetConsultants, from rows not stored yet. */
+    private static List<WeeklyImportStore.SheetConsultant> sheetConsultantsOf(List<ParsedRow> rows) {
+        Map<List<String>, Integer> counts = new java.util.LinkedHashMap<>();
+        for (ParsedRow r : rows) {
+            if (!r.rejected() && r.consultantName() != null) {
+                // Arrays.asList: the email may be null (List.of refuses nulls).
+                counts.merge(java.util.Arrays.asList(r.consultantName(), r.consultantEmail()), 1, Integer::sum);
+            }
+        }
+        List<WeeklyImportStore.SheetConsultant> out = new ArrayList<>();
+        counts.forEach((k, n) -> out.add(new WeeklyImportStore.SheetConsultant(k.get(0), k.get(1), n)));
+        return out;
+    }
+
+    private ConsultantRegistration registrationView(long jobId, Map<String, ConsultantRef> byName,
+            ConsultantResolver.Plan plan) {
+        Set<String> names = new HashSet<>();
+        int matchedByName = 0;
+        for (String name : store.consultantNames(jobId).keySet()) {
+            String key = WeeklyImportStore.key(name);
+            if (names.add(key) && byName.containsKey(key) && !plan.decidedByEmail(name)) {
+                matchedByName++;
+            }
+        }
+        List<ConsultantToRegister> toRegister = plan.registrations().stream()
+                .map(r -> new ConsultantToRegister(r.fullName(), r.email(), r.otherNames(), r.rows(),
+                        similarConsultants(r.fullName(), byName)))
+                .toList();
+        List<ConsultantEmailToAdd> emails = plan.emailUpdates().stream()
+                .map(u -> new ConsultantEmailToAdd(u.consultant().id(), u.consultant().code(),
+                        u.consultant().fullName(), u.email(), u.rows()))
+                .toList();
+        List<ConsultantConflict> conflicts = plan.conflicts().stream()
+                .map(c -> new ConsultantConflict(c.nameInSheet(), c.email(), c.reason(), c.rows()))
+                .toList();
+        return new ConsultantRegistration(names.size(), matchedByName, plan.namesMatchedByEmail(), toRegister,
+                emails, conflicts);
+    }
+
+    private AssignmentPreview assignmentPreview(long jobId, Map<String, ConsultantRef> byName,
+            ConsultantResolver.Plan plan) {
+        Map<String, ConsultantRef> effective = withPlan(byName, plan);
+        int total = 0;
+        int assigned = 0;
+        int none = 0;
+        int notActive = 0;
+        int waiting = 0;
+        for (var e : store.newClientRowsByConsultant(jobId).entrySet()) {
+            String name = e.getKey();
+            int rows = e.getValue();
+            total += rows;
+            if (name == null) {
+                none += rows;
+                continue;
+            }
+            ConsultantRef ref = effective.get(WeeklyImportStore.key(name));
+            if (plan.inConflict(name)) {
+                waiting += rows;
+            } else if (ref != null) {
+                if (ref.active()) {
+                    assigned += rows;
+                } else {
+                    notActive += rows;
+                }
+            } else if (plan.registers(name)) {
+                assigned += rows; // a registered consultant starts ACTIVE
+            } else {
+                waiting += rows;
+            }
+        }
+        return new AssignmentPreview(total, assigned, none, notActive, waiting,
+                store.issueCount(jobId, "client:consultant-differs"));
     }
 
     /**
@@ -484,11 +600,17 @@ public class WeeklyImportService {
             throw ApiException.unprocessable("import:blocking-errors", "Workbook has errors",
                     "Fix the sheet-level errors listed in the preview, then upload the file again.");
         }
-        Map<String, ConsultantRef> consultants = store.consultantsByName();
-        List<UnmappedConsultant> unmapped = unmappedConsultants(job.id());
+        Map<String, ConsultantRef> known = store.consultantsByName();
+        ConsultantResolver.Plan plan = planFor(store.sheetConsultants(job.id()), known);
+        List<UnmappedConsultant> unmapped = unmappedConsultants(job.id(), known, plan);
         if (!unmapped.isEmpty()) {
             throw ApiException.unprocessable("import:unmapped-consultants", "Unknown consultants",
                     unmapped.size() + " consultant name(s) must be matched to a consultant first.");
+        }
+        if (!plan.conflicts().isEmpty()) {
+            throw ApiException.unprocessable("import:consultant-conflicts", "Consultant conflicts",
+                    plan.conflicts().size() + " consultant name(s) do not match their email safely. Fix them in the "
+                            + "sheet (see consultantRegistration.conflicts in the preview) and upload it again.");
         }
         store.committedJobWithDigest(job.fileDigest()).ifPresent(id -> {
             throw ApiException.conflict("import:duplicate-file", "Already imported",
@@ -522,6 +644,10 @@ public class WeeklyImportService {
         }
         // The spreadsheet wins over sales typed into the app for this week (V21).
         int typedIn = store.supersedeTypedInSales(week.id(), job.id());
+
+        // Consultants from the sheet's emails, before any client is assigned.
+        int[] consultantChanges = applyConsultantPlan(userId, job.id(), plan);
+        Map<String, ConsultantRef> consultants = store.consultantsByName();
 
         Map<String, Long> employers = store.employersByName();
         Map<String, Long> structures = store.structuresByName();
@@ -566,6 +692,9 @@ public class WeeklyImportService {
                                 "A client in this import was removed since the preview. Upload the file again.");
                     }
                     Long assignTo = consultant != null && consultant.active() ? consultant.id() : null;
+                    if (assignTo == null) {
+                        n.unassignedNew++;
+                    }
                     clientId = store.insertClient(r.idNumberHash(), r.idNumberEncrypted(), r.idNumberLast4(),
                             r.firstName(), r.lastName(), assignTo, employerId, job.id());
                     n.newClients++;
@@ -596,13 +725,15 @@ public class WeeklyImportService {
         audit.record("IMPORT_CONFIRMED", "IMPORT_JOB", job.id(), meta("weekStarting", job.weekStarting().toString(),
                 "transactions", n.transactions, "newClients", n.newClients, "assigned", n.assigned,
                 "replacesImportJobId", replaced, "nameDifferencesAccepted", nameDifferences,
-                "replacedTypedInSales", typedIn));
+                "replacedTypedInSales", typedIn, "consultantsRegistered", consultantChanges[0],
+                "consultantEmailsAdded", consultantChanges[1], "consultantAliasesAdded", consultantChanges[2]));
         if (replaced != null) {
             audit.record("WEEK_REPLACED", "IMPORT_JOB", replaced, meta("replacedBy", job.id(), "reason", reason,
                     "supersededTransactions", superseded));
         }
         return new ConfirmResult(job.id(), week.id(), job.weekStarting(), n.transactions, n.lines, n.extras,
-                n.newClients, n.assigned, n.employers, n.structures, n.terms, n.stale, replaced, superseded, typedIn);
+                n.newClients, n.assigned, n.employers, n.structures, n.terms, n.stale, replaced, superseded, typedIn,
+                consultantChanges[0], consultantChanges[1], consultantChanges[2], n.unassignedNew);
     }
 
     private static final class Counters {
@@ -615,6 +746,50 @@ public class WeeklyImportService {
         int structures;
         int terms;
         int stale;
+        int unassignedNew;
+    }
+
+    /**
+     * Registers the sheet's new consultants, fills in missing emails and adds the
+     * sheet's spellings as aliases (ConsultantResolver). Runs inside confirm's
+     * transaction, so a failed import leaves no consultant behind.
+     *
+     * @return {registered, emails added, aliases added}
+     */
+    private int[] applyConsultantPlan(long userId, long jobId, ConsultantResolver.Plan plan) {
+        int registered = 0;
+        int emails = 0;
+        int aliases = 0;
+        for (ConsultantResolver.Registration r : plan.registrations()) {
+            String code = codes.next();
+            long id = store.createConsultant(code, r.fullName(), r.email());
+            store.insertConsultantAlias(id, r.fullName(), userId);
+            for (String other : r.otherNames()) {
+                store.insertConsultantAlias(id, other, userId);
+                aliases++;
+            }
+            audit.record("CONSULTANT_CREATED", "CONSULTANT", id, meta("consultantCode", code, "fullName",
+                    r.fullName(), "email", r.email(), "codeGenerated", true, "importJobId", jobId,
+                    "source", "WEEKLY_REGISTER_EMAIL"));
+            registered++;
+        }
+        for (ConsultantResolver.EmailUpdate u : plan.emailUpdates()) {
+            if (!store.setConsultantEmailIfMissing(u.consultant().id(), u.email())) {
+                throw ApiException.conflict("import:stale-preview", "Data changed",
+                        "Consultant " + u.consultant().code() + " was given an email since the preview. "
+                                + "Upload the file again.");
+            }
+            audit.record("CONSULTANT_EMAIL_SET", "CONSULTANT", u.consultant().id(),
+                    meta("email", u.email(), "importJobId", jobId));
+            emails++;
+        }
+        for (ConsultantResolver.AliasAdd a : plan.aliases()) {
+            store.insertConsultantAlias(a.consultant().id(), a.alias(), userId);
+            audit.record("CONSULTANT_ALIAS_CREATED", "CONSULTANT", a.consultant().id(),
+                    meta("alias", a.alias(), "importJobId", jobId, "source", "WEEKLY_REGISTER_EMAIL"));
+            aliases++;
+        }
+        return new int[] { registered, emails, aliases };
     }
 
     private static Long resolve(Map<String, Long> known, String name,

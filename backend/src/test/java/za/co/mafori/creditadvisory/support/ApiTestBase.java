@@ -67,6 +67,10 @@ public abstract class ApiTestBase {
     @Autowired
     protected IdNumberProtector idNumberProtector;
 
+    /** Stands in for Microsoft 365 in every test (no email ever leaves a test). */
+    @Autowired
+    protected FakeLoginDetailsMailer mailer;
+
     protected long adminId;
 
     private int clientCounter;
@@ -84,6 +88,7 @@ public abstract class ApiTestBase {
         // limit.
         loginRateLimiter.clear();
         idRevealLimiter.clear();
+        mailer.reset();
         adminId = createUser(ADMIN_EMAIL, null, RoleName.ADMIN);
     }
 

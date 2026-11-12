@@ -162,6 +162,11 @@ java -jar credit-advisory-0.0.1-SNAPSHOT.jar
 | `ALLOW_LOCAL_DATABASE`     | no               | `true` only if PostgreSQL runs on the same machine as the app; otherwise a `localhost` `DB_URL` is refused           |
 | `FIRST_ADMIN_EMAIL`        | first start only | email of the first administrator                                                                                     |
 | `FIRST_ADMIN_PASSWORD`     | first start only | temporary password, 12+ characters; they must change it on first sign-in                                             |
+| `APP_LOGIN_URL`            | for login emails | the address consultants sign in at, written in their login email                                                     |
+| `MAIL_GRAPH_TENANT_ID`     | for login emails | Microsoft 365 tenant of the app registration that sends email (`docs/consultant-onboarding.md`, section 5)           |
+| `MAIL_GRAPH_CLIENT_ID`     | for login emails | its application (client) ID                                                                                          |
+| `MAIL_GRAPH_CLIENT_SECRET` | for login emails | its client secret                                                                                                    |
+| `MAIL_SENDER`              | for login emails | the mailbox the emails come from, e.g. `no-reply@mafori.co.za`                                                        |
 
 Rules:
 
@@ -260,5 +265,6 @@ git push
 
 - `docs/it-handover.md` - who does what, installing and running the application in production
 - `docs/api-auth-consultants-clients.md` - API contract between backend and frontend
+- `docs/consultant-onboarding.md` - consultants from the register's emails, bulk logins, login emails (and the Microsoft 365 set-up IT does)
 - `docs/SRS-v1.docx` - requirements specification and technical architecture
 - `docs/spreadsheet-business-breakdown.docx` - analysis of the original Excel workbook
