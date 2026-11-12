@@ -15,6 +15,9 @@ public interface ConsultantRepository extends JpaRepository<Consultant, Long> {
 
     boolean existsByConsultantCode(String consultantCode);
 
+    /** Emails are stored lower-case (Consultant.changeEmail), so pass a lower-case email. */
+    boolean existsByEmail(String email);
+
     /**
      * GET /api/consultants. Both filters are optional (null = no filter).
      *

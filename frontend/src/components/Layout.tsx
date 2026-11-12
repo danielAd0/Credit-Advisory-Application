@@ -65,9 +65,11 @@ const groups: { label: string; items: NavItem[] }[] = [
         to: '/import',
         label: 'Import',
         icon: IconDownload,
-        roles: managers,
+        // Only an administrator may import (the backend refuses managers).
+        roles: ['ADMIN'],
         enabled: features.import,
       },
+      { to: '/consultant-logins', label: 'Consultant logins', icon: IconTeam, roles: ['ADMIN'] },
     ],
   },
 ];

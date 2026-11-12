@@ -86,6 +86,24 @@ class IdNumberProtectorTest {
     }
 
     @Test
+    void sealedTextOpensOnlyForTheSamePurpose() {
+        byte[] sealed = protector.sealText("temp-password", "Tmp-Pa55word&<x>");
+
+        assertThat(new String(sealed, StandardCharsets.ISO_8859_1)).doesNotContain("Pa55word");
+        assertThat(protector.openText("temp-password", sealed)).isEqualTo("Tmp-Pa55word&<x>");
+        assertThat(protector.sealText("temp-password", "same")).as("fresh nonce every time")
+                .isNotEqualTo(protector.sealText("temp-password", "same"));
+        assertThatThrownBy(() -> protector.openText("another-purpose", sealed))
+                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> protector.decrypt(sealed)).as("never readable as an ID number")
+                .isInstanceOf(IllegalStateException.class);
+        byte[] tampered = sealed.clone();
+        tampered[tampered.length - 1] ^= 1;
+        assertThatThrownBy(() -> protector.openText("temp-password", tampered))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
     void badKeysAreRefused() {
         assertThatThrownBy(() -> new IdNumberProtector(new byte[16], 1, Map.of(1, encryptionKey)))
                 .isInstanceOf(IllegalArgumentException.class);

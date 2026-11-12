@@ -56,12 +56,21 @@ public class ConsultantAccountService {
                         throw ApiException.conflict("user:duplicate-email", "Email already in use",
                                         "A user with this email already exists.");
                 }
+                if (consultants.existsByEmail(email)) {
+                        throw ApiException.conflict("consultant:duplicate-email", "Email already in use",
+                                        "Another consultant already has this email.");
+                }
                 PasswordPolicy.check(request.temporaryPassword(), email);
 
                 ConsultantResponse consultant = consultantService.create(
                                 new CreateConsultantRequest(code, request.fullName().strip()));
                 UserResponse user = userService.create(new CreateUserRequest(email, request.temporaryPassword(),
                                 Set.of(RoleName.CONSULTANT), consultant.id()));
+                // The login's email is also the consultant's, so next week's register can match them by it.
+                Consultant saved = consultants.findById(consultant.id()).orElseThrow();
+                saved.changeEmail(email);
+                // Flushed first, so the response carries the version the edit produced.
+                consultant = ConsultantResponse.from(consultants.saveAndFlush(saved), 0);
 
                 audit.record("CONSULTANT_ACCOUNT_CREATED", "CONSULTANT", consultant.id(),
                                 meta("consultantCode", consultant.consultantCode(), "userId", user.id(), "email",

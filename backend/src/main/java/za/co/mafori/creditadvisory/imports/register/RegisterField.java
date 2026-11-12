@@ -14,6 +14,8 @@ public enum RegisterField {
     EMPLOYER,
     STRUCTURE,
     CONSULTANT,
+    /** Optional. When present it is how the import recognises (or registers) the consultant. */
+    CONSULTANT_EMAIL,
     PRIMARY_BUDGET_LIST,
     PRIMARY_LOAN_AMOUNT,
     SECONDARY_BUDGET_LIST,

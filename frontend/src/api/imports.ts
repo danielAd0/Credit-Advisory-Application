@@ -3,7 +3,13 @@ import * as mockImports from './mockImports';
 import type { PageResponse } from './types';
 
 export type ImportState = 'PREVIEWED' | 'COMMITTED' | 'CANCELLED' | 'EXPIRED';
-export type ImportBlocker = 'UNMAPPED_CONSULTANTS' | 'SHEET_ERRORS' | 'EXPIRED' | 'NOT_PREVIEWED';
+export type ImportBlocker =
+  | 'UNMAPPED_CONSULTANTS'
+  | 'CONSULTANT_CONFLICTS'
+  | 'NAME_DIFFERENCES'
+  | 'SHEET_ERRORS'
+  | 'EXPIRED'
+  | 'NOT_PREVIEWED';
 export type RowAction = 'NEW' | 'UNCHANGED' | 'DUPLICATE' | 'INVALID';
 export type Severity = 'ERROR' | 'WARNING' | 'INFO';
 
@@ -20,6 +26,42 @@ export interface ImportDay {
 export interface UnmappedConsultant {
   nameInSheet: string;
   rows: number;
+}
+
+/** What confirm does with the CONSULTANT EMAIL column (docs/consultant-onboarding.md). */
+export interface ConsultantRegistration {
+  namesInSheet: number;
+  matchedByName: number;
+  matchedByEmail: number;
+  /** New consultants confirm will create. */
+  toRegister: {
+    fullName: string;
+    email: string;
+    otherSpellings: string[];
+    rows: number;
+    /** Existing consultants with a similar name: maybe the same person under another email. */
+    similarConsultants: { consultantId: number; consultantCode: string; fullName: string }[];
+  }[];
+  /** Existing consultants without an email who get the sheet's email. */
+  emailsToAdd: {
+    consultantId: number;
+    consultantCode: string;
+    fullName: string;
+    email: string;
+    rows: number;
+  }[];
+  /** Names that do not match their email safely. They stop the import. */
+  conflicts: { nameInSheet: string; email: string; reason: string; rows: number }[];
+}
+
+/** New clients and who confirm will give them to. Existing clients keep their consultant. */
+export interface AssignmentPreview {
+  newClientRows: number;
+  willBeAssigned: number;
+  noConsultant: number;
+  consultantNotActive: number;
+  waitingForConsultant: number;
+  existingClientsWithOtherConsultant: number;
 }
 
 export interface ImportSummary {
@@ -52,6 +94,9 @@ export interface ImportSummary {
   blockers: ImportBlocker[];
   /** Sales typed into the app for this week. Confirming replaces them: the spreadsheet wins. */
   typedInSales: number;
+  /** Only while PREVIEWED (empty lists otherwise). Missing in older mock data. */
+  consultantRegistration?: ConsultantRegistration;
+  assignment?: AssignmentPreview;
 }
 
 export interface ImportHistoryItem {
@@ -112,6 +157,11 @@ export interface ConfirmResult {
   supersededTransactions: number;
   /** Typed-in sales of this week that the import replaced. */
   replacedTypedInSales: number;
+  /** Consultants registered from the sheet's emails (they still need a login: Consultant logins). */
+  consultantsRegistered?: number;
+  consultantEmailsAdded?: number;
+  consultantAliasesAdded?: number;
+  newClientsUnassigned?: number;
 }
 
 function query(params: Record<string, string | number | undefined>): string {

@@ -1,0 +1,10 @@
+.ob-steps {
+  margin: 1rem 0 0;
+  padding-left: 1.25rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.ob-steps .wi-actions {
+  margin-top: 0.5rem;
+}
