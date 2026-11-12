@@ -1,6 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { catalogue, detailOf, isStale, type PageResponse, type ProductQuotation } from '../api';
 import { hasAnyRole, useSession } from '../auth/useAuth';
+import ListPage from '../components/ListPage';
+import { countOf } from '../components/countOf';
 import Pager from '../components/Pager';
 import './addclient.css';
 import './consultants.css';
@@ -165,10 +167,11 @@ export default function ProductQuotationsPage() {
   }, [query, state, pageNo, reload]);
 
   return (
-    <>
-      <div className="topbar-actions">
-        <h1>Branches</h1>
-        {isAdmin && (
+    <ListPage
+      title="Branches"
+      description="The list consultants choose from on a client. Branches are deactivated, not deleted."
+      action={
+        isAdmin && (
           <button
             type="button"
             className="btn primary"
@@ -176,95 +179,100 @@ export default function ProductQuotationsPage() {
           >
             Add branch
           </button>
-        )}
-      </div>
-      <p className="muted">
-        The list consultants choose from on a client. Branches are deactivated, not deleted.
-      </p>
-
-      <div className="cn-filters">
-        <div className="toolbar">
-          <input
-            type="search"
-            placeholder="Search by name"
-            aria-label="Search branches"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-        <select
-          aria-label="Filter by state"
-          value={state}
-          onChange={(e) => {
-            setState(e.target.value as 'all' | 'active' | 'inactive');
-            setPageNo(0);
-          }}
-        >
-          <option value="all">All branches</option>
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
-        </select>
-      </div>
-
-      {error && (
-        <p className="alert error" role="alert">
-          {error}
-        </p>
-      )}
-      {!error && result === null && <p className="muted">Loading...</p>}
-      {result && result.items.length === 0 && (
-        <p className="muted">
-          {query || state !== 'all' ? 'No branches found.' : 'No branches yet.'}
-          {isAdmin && !query && state === 'all' && ' Add the first one with the button above.'}
-        </p>
-      )}
-      {result && result.items.length > 0 && (
-        <>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Status</th>
-                  <th>
-                    <span className="sr-only">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {result.items.map((q) => (
-                  <tr key={q.id}>
-                    <td>{q.name}</td>
-                    <td>
-                      <span className={`badge ${q.active ? 'active' : 'suspended'}`}>
-                        {q.active ? 'active' : 'inactive'}
-                      </span>
-                    </td>
-                    <td>
-                      {isAdmin && (
-                        <button
-                          type="button"
-                          className="btn"
-                          onClick={() => setPanel({ quotation: q, justAdded: false })}
-                        >
-                          Edit
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        )
+      }
+    >
+      <section className="lp-card" aria-labelledby="lp-title">
+        <div className="lp-head">
+          <h2 id="lp-title">Branch list</h2>
+          {result && (
+            <span className="lp-count">{countOf(result.totalItems, 'branch', 'branches')}</span>
+          )}
+          <div className="lp-filters">
+            <input
+              type="search"
+              placeholder="Search by name"
+              aria-label="Search branches"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <select
+              aria-label="Filter by state"
+              value={state}
+              onChange={(e) => {
+                setState(e.target.value as 'all' | 'active' | 'inactive');
+                setPageNo(0);
+              }}
+            >
+              <option value="all">All branches</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
           </div>
-          <Pager
-            page={result.page}
-            size={result.size}
-            totalItems={result.totalItems}
-            totalPages={result.totalPages}
-            onPage={setPageNo}
-          />
-        </>
-      )}
+        </div>
+        {error && (
+          <p className="alert error" role="alert">
+            {error}
+          </p>
+        )}
+        {!error && result === null && <p className="lp-empty">Loading...</p>}
+        {result && result.items.length === 0 && (
+          <p className="lp-empty">
+            {query || state !== 'all' ? 'No branches found.' : 'No branches yet.'}
+            {isAdmin && !query && state === 'all' && ' Add the first one with the button above.'}
+          </p>
+        )}
+        {result && result.items.length > 0 && (
+          <>
+            <div className="lp-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Status</th>
+                    <th>
+                      <span className="sr-only">Actions</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.items.map((q) => (
+                    <tr
+                      key={q.id}
+                      className={panel?.quotation?.id === q.id ? 'lp-selected' : undefined}
+                    >
+                      <td className="lp-strong">{q.name}</td>
+                      <td>
+                        <span className={`badge ${q.active ? 'active' : 'inactive'}`}>
+                          {q.active ? 'active' : 'inactive'}
+                        </span>
+                      </td>
+                      <td>
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            className="btn lp-row-btn"
+                            onClick={() => setPanel({ quotation: q, justAdded: false })}
+                          >
+                            Edit
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pager
+              page={result.page}
+              size={result.size}
+              totalItems={result.totalItems}
+              totalPages={result.totalPages}
+              onPage={setPageNo}
+            />
+          </>
+        )}
+      </section>
 
       {panel && (
         <QuotationPanel
@@ -278,6 +286,6 @@ export default function ProductQuotationsPage() {
           onClose={() => setPanel(null)}
         />
       )}
-    </>
+    </ListPage>
   );
 }

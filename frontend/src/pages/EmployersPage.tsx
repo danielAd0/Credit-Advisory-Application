@@ -1,6 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { catalogue, detailOf, isStale, type Employer, type PageResponse } from '../api';
 import { hasAnyRole, useSession } from '../auth/useAuth';
+import ListPage from '../components/ListPage';
+import { countOf } from '../components/countOf';
 import Pager from '../components/Pager';
 import './addclient.css';
 import './consultants.css';
@@ -184,10 +186,11 @@ export default function EmployersPage() {
   }, [query, state, pageNo, reload]);
 
   return (
-    <>
-      <div className="topbar-actions">
-        <h1>Employers</h1>
-        {isAdmin && (
+    <ListPage
+      title="Employers"
+      description="From the Mafori Employer Schedule. Employers are deactivated, not deleted."
+      action={
+        isAdmin && (
           <button
             type="button"
             className="btn primary"
@@ -195,94 +198,97 @@ export default function EmployersPage() {
           >
             Add employer
           </button>
-        )}
-      </div>
-      <p className="muted">
-        From the Mafori Employer Schedule. Employers are deactivated, not deleted.
-      </p>
-
-      <div className="cn-filters">
-        <div className="toolbar">
-          <input
-            type="search"
-            placeholder="Search by name"
-            aria-label="Search employers"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-        <select
-          aria-label="Filter by state"
-          value={state}
-          onChange={(e) => {
-            setState(e.target.value as 'all' | 'active' | 'inactive');
-            setPageNo(0);
-          }}
-        >
-          <option value="all">All employers</option>
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
-        </select>
-      </div>
-
-      {error && (
-        <p className="alert error" role="alert">
-          {error}
-        </p>
-      )}
-      {!error && result === null && <p className="muted">Loading...</p>}
-      {result && result.items.length === 0 && <p className="muted">No employers found.</p>}
-      {result && result.items.length > 0 && (
-        <>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Company</th>
-                  <th>Type</th>
-                  <th>Status</th>
-                  <th>
-                    <span className="sr-only">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {result.items.map((e) => (
-                  <tr key={e.id}>
-                    <td>{e.name}</td>
-                    <td>{e.company ?? '-'}</td>
-                    <td>{e.employerType ?? '-'}</td>
-                    <td>
-                      <span className={`badge ${e.active ? 'active' : 'suspended'}`}>
-                        {e.active ? 'active' : 'inactive'}
-                      </span>
-                    </td>
-                    <td>
-                      {isAdmin && (
-                        <button
-                          type="button"
-                          className="btn"
-                          onClick={() => setPanel({ employer: e })}
-                        >
-                          Edit
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        )
+      }
+    >
+      <section className="lp-card" aria-labelledby="lp-title">
+        <div className="lp-head">
+          <h2 id="lp-title">Employer schedule</h2>
+          {result && <span className="lp-count">{countOf(result.totalItems, 'employer')}</span>}
+          <div className="lp-filters">
+            <input
+              type="search"
+              placeholder="Search by name"
+              aria-label="Search employers"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <select
+              aria-label="Filter by state"
+              value={state}
+              onChange={(e) => {
+                setState(e.target.value as 'all' | 'active' | 'inactive');
+                setPageNo(0);
+              }}
+            >
+              <option value="all">All employers</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
           </div>
-          <Pager
-            page={result.page}
-            size={result.size}
-            totalItems={result.totalItems}
-            totalPages={result.totalPages}
-            onPage={setPageNo}
-          />
-        </>
-      )}
+        </div>
+        {error && (
+          <p className="alert error" role="alert">
+            {error}
+          </p>
+        )}
+        {!error && result === null && <p className="lp-empty">Loading...</p>}
+        {result && result.items.length === 0 && <p className="lp-empty">No employers found.</p>}
+        {result && result.items.length > 0 && (
+          <>
+            <div className="lp-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Company</th>
+                    <th>Type</th>
+                    <th>Status</th>
+                    <th>
+                      <span className="sr-only">Actions</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.items.map((e) => (
+                    <tr
+                      key={e.id}
+                      className={panel?.employer?.id === e.id ? 'lp-selected' : undefined}
+                    >
+                      <td className="lp-strong">{e.name}</td>
+                      <td>{e.company ?? <span className="lp-none">Not provided</span>}</td>
+                      <td>{e.employerType ?? <span className="lp-none">Not provided</span>}</td>
+                      <td>
+                        <span className={`badge ${e.active ? 'active' : 'inactive'}`}>
+                          {e.active ? 'active' : 'inactive'}
+                        </span>
+                      </td>
+                      <td>
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            className="btn lp-row-btn"
+                            onClick={() => setPanel({ employer: e })}
+                          >
+                            Edit
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pager
+              page={result.page}
+              size={result.size}
+              totalItems={result.totalItems}
+              totalPages={result.totalPages}
+              onPage={setPageNo}
+            />
+          </>
+        )}
+      </section>
 
       {panel && (
         <EmployerPanel
@@ -295,6 +301,6 @@ export default function EmployersPage() {
           onClose={() => setPanel(null)}
         />
       )}
-    </>
+    </ListPage>
   );
 }
