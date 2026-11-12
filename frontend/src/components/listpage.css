@@ -1,0 +1,308 @@
+/* Shared frame for the Team, Products, Employers and Branches pages. Classes start with "lp-". */
+.lp {
+  --lp-pad: 1.75rem;
+  --lp-band: #f4f5f8;
+  --lp-pill: #eceef2;
+  --lp-cta: #c8501d;
+  --lp-cta-hover: #b04415;
+  --lp-field: #d6d9df;
+  max-width: 1280px;
+  padding-bottom: 0.5rem;
+}
+
+/* Breadcrumb and title */
+.lp-crumbs {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+  font-size: 0.95rem;
+  color: var(--muted);
+}
+.lp-crumbs a {
+  color: var(--muted);
+  text-decoration: none;
+}
+.lp-crumbs a:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+.lp-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem 2rem;
+}
+.lp h1 {
+  margin: 0;
+  font-size: 2.25rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+}
+.lp-sub {
+  margin: 0.6rem 0 0;
+  max-width: 46rem;
+  font-size: 0.95rem;
+  color: var(--muted);
+}
+
+/* Main action button (burnt orange, white text) */
+.lp .btn.primary {
+  min-height: 2.75rem;
+  padding: 0.55rem 1.4rem;
+  justify-content: center;
+  border-radius: 6px;
+  background: var(--lp-cta);
+  border-color: var(--lp-cta);
+  color: #fff;
+}
+.lp .btn.primary:hover:not(:disabled) {
+  background: var(--lp-cta-hover);
+  border-color: var(--lp-cta-hover);
+}
+.lp .btn {
+  border-radius: 6px;
+}
+
+/* Card */
+.lp-card {
+  margin-top: 1.5rem;
+  padding: var(--lp-pad);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  min-width: 0;
+}
+.lp-card h2 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+.lp-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 0.9rem;
+  margin-bottom: 1.25rem;
+}
+.lp-count {
+  font-size: 0.95rem;
+  color: var(--muted);
+}
+
+/* Search and filter, right-aligned in the card header */
+.lp-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-left: auto;
+}
+.lp-filters input,
+.lp-filters select {
+  height: 2.75rem;
+  padding: 0 0.85rem;
+  font: inherit;
+  font-size: 0.95rem;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--lp-field);
+  border-radius: 6px;
+}
+.lp-filters input {
+  width: 18rem;
+  max-width: 100%;
+}
+.lp-filters input:focus,
+.lp-filters select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(255, 90, 0, 0.2);
+}
+
+/* Edge-to-edge table with a shaded header band */
+.lp-table {
+  margin: 0 calc(-1 * var(--lp-pad));
+  overflow-x: auto;
+}
+.lp-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.lp-table th {
+  padding: 1rem;
+  background: var(--lp-band);
+  border-bottom: 0;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+.lp-table td {
+  padding: 1.1rem 1rem;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--line);
+}
+.lp-table th:first-child,
+.lp-table td:first-child {
+  padding-left: var(--lp-pad);
+}
+.lp-table th:last-child,
+.lp-table td:last-child {
+  padding-right: var(--lp-pad);
+  text-align: right;
+}
+.lp-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.lp-table tbody tr:hover {
+  background: #fafbfc;
+}
+.lp-table tr.lp-selected td {
+  background: #fdf3ee;
+}
+.lp-strong {
+  font-weight: 600;
+}
+.lp-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+.lp .lp-none {
+  color: #8a92a0;
+}
+.lp-row-btn.btn {
+  padding: 0.35rem 0.9rem;
+  font-size: 0.9rem;
+}
+
+/* Status pills with a coloured dot */
+.lp .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 6.5rem;
+  padding: 0.3rem 0.8rem;
+  border-radius: 6px;
+  background: var(--lp-pill);
+  color: var(--ink);
+  font-size: 0.85rem;
+}
+.lp .badge::before {
+  content: '';
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: #8a92a0;
+}
+.lp .badge.active {
+  min-width: 0;
+  padding: 0.3rem 0.6rem;
+}
+.lp .badge.active::before {
+  display: none;
+}
+.lp .badge.suspended::before {
+  background: var(--err-line);
+}
+.lp-pill {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  margin: 0.1rem 0.35rem 0.1rem 0;
+  border-radius: 6px;
+  background: var(--lp-pill);
+  font-size: 0.82rem;
+}
+
+/* Empty / loading states inside a card */
+.lp-empty {
+  margin: 0;
+  padding: 1rem 0 0.25rem;
+  color: var(--muted);
+}
+
+/* Pager sits under the table, separated by a rule */
+.lp .pager {
+  margin: 0 calc(-1 * var(--lp-pad)) calc(-1 * var(--lp-pad));
+  padding: 1rem var(--lp-pad);
+  border-top: 1px solid var(--line);
+  font-size: 0.9rem;
+}
+
+/* The add / edit / manage panel, restyled as a card */
+.lp .cn-panel {
+  max-width: none;
+  margin-top: 1.5rem;
+  padding: var(--lp-pad);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.lp .cn-panel > h2 {
+  padding-bottom: 1rem;
+  margin: 0 0 1.25rem;
+  font-size: 1.2rem;
+  border-bottom: 1px solid var(--line);
+}
+.lp .cn-panel > h2 + p.muted {
+  margin-top: -0.5rem;
+}
+.lp .cn-panel h3 {
+  margin: 1.75rem 0 0.75rem;
+  padding-top: 1.25rem;
+  font-size: 1rem;
+  border-top: 1px solid var(--line);
+}
+.lp .cn-panel form,
+.lp .cn-panel .cn-facts {
+  max-width: 40rem;
+}
+.lp .cn-panel input:not([type='checkbox']),
+.lp .cn-panel select,
+.lp .cn-panel textarea {
+  border-color: var(--lp-field);
+  border-radius: 6px;
+}
+.lp .cn-actions {
+  margin-top: 1.25rem;
+}
+
+/* Footer */
+.lp-foot {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  margin-top: 2rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.lp-foot span:first-child {
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+@media (max-width: 700px) {
+  .lp {
+    --lp-pad: 1rem;
+  }
+  .lp h1 {
+    font-size: 1.6rem;
+  }
+  .lp-filters {
+    margin-left: 0;
+    width: 100%;
+  }
+  .lp-filters input,
+  .lp-filters select {
+    flex: 1 1 12rem;
+    width: auto;
+  }
+}
+
+/* "You" marker next to the signed-in user's own row */
+.lp-pill.lp-you {
+  margin: 0 0 0 0.5rem;
+  font-weight: 500;
+  color: var(--muted);
+}

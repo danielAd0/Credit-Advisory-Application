@@ -212,7 +212,14 @@ export default function ClientCases({ clientId }: { clientId: number }) {
 
   return (
     <section className="cd-card cs" aria-labelledby="cs-title">
-      <h2 id="cs-title">Cases</h2>
+      <div className="cd-head">
+        <h2 id="cs-title">Cases</h2>
+        {rows && (
+          <span className="cd-count">
+            {rows.length} {rows.length === 1 ? 'case' : 'cases'}
+          </span>
+        )}
+      </div>
 
       {error && (
         <p className="alert error" role="alert">
@@ -240,7 +247,11 @@ export default function ClientCases({ clientId }: { clientId: number }) {
 
       {rows === undefined && <p className="muted">Loading...</p>}
       {rows === null && <p className="muted">Could not load the cases.</p>}
-      {rows && rows.length === 0 && <p className="muted">No cases yet.</p>}
+      {rows && rows.length === 0 && (
+        <p className="muted cs-empty">
+          No cases yet. Create a case to track this client&rsquo;s next steps.
+        </p>
+      )}
 
       {rows && rows.length > 0 && (
         <ul className="cs-list">

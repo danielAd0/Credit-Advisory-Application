@@ -2,14 +2,16 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError, data, detailOf, features, type ClientSummary, type PageResponse } from '../api';
 import { clientName, phoneForDisplay } from '../api/names';
+import ListPage from '../components/ListPage';
+import { countOf } from '../components/countOf';
 import Pager from '../components/Pager';
 import { hasAnyRole, useSession } from '../auth/useAuth';
 import './clientsactions.css';
 
 /** An empty cell, so a missing value reads as missing rather than as a layout gap. */
 const Dash = () => (
-  <span className="muted" aria-label="none">
-    -
+  <span className="lp-none" aria-label="none">
+    &mdash;
   </span>
 );
 
@@ -98,133 +100,167 @@ export default function ClientsPage() {
   }
 
   return (
-    <>
-      <h1>Clients</h1>
-      <div className="toolbar toolbar-actions">
-        <input
-          type="search"
-          placeholder="Search by name, File number or File ID"
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setPage(0);
-          }}
-          aria-label="Search clients"
-          autoComplete="off"
-        />
-        {!isManager && (
+    <ListPage
+      title="Clients"
+      description={
+        isManager
+          ? 'Every client on the book, with their branch, latest sale and consultant.'
+          : 'Your clients, with their contact details and latest sale.'
+      }
+      action={
+        !isManager ? (
           <Link className="btn primary" to="/clients/new">
             Add client
           </Link>
-        )}
-        {isManager && features.import && (
+        ) : features.import ? (
           <Link className="btn primary" to="/import">
             Import from Excel
           </Link>
-        )}
-      </div>
-
+        ) : undefined
+      }
+    >
       {notice && (
-        <p className="alert ok" role="status">
+        <p className="alert ok cl-notice" role="status">
           {notice}
         </p>
       )}
-      {error && (
-        <p className="alert error" role="alert">
-          {error}
-        </p>
-      )}
-      {!error && rows === null && <p className="muted">Loading...</p>}
-      {rows && rows.length === 0 && <p className="muted">No clients match your search.</p>}
 
-      {rows && rows.length > 0 && (
-        <div className="table-wrap">
-          <table className="cl-table">
-            <thead>
-              <tr>
-                <th>Surname</th>
-                <th>Name</th>
-                <th>Client employer</th>
-                <th>Work telephone</th>
-                <th>Home telephone</th>
-                <th>Branch</th>
-                <th>Payment term</th>
-                <th>Structure</th>
-                {isManager && <th>Consultant</th>}
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((c) => (
-                <tr key={c.id}>
-                  <td>
-                    <Link className="row-link" to={`/clients/${c.id}`}>
-                      {c.lastName}
-                    </Link>
-                  </td>
-                  <td>{c.firstName}</td>
-                  <td>
-                    {c.employer ? (
-                      c.employer.name
-                    ) : c.paymentMethod === 'DEBIT_ORDER' ? (
-                      <span className="muted">Debit order</span>
-                    ) : (
-                      <Dash />
-                    )}
-                  </td>
-                  <td>{c.workPhone ? phoneForDisplay(c.workPhone) : <Dash />}</td>
-                  <td>{c.homePhone ? phoneForDisplay(c.homePhone) : <Dash />}</td>
-                  <td>{c.productQuotation?.name ?? <Dash />}</td>
-                  <td>{c.latestSale?.paymentTerm ?? <Dash />}</td>
-                  <td>{c.latestSale?.structure ?? <Dash />}</td>
-                  {isManager && (
-                    <td>{c.consultant?.fullName ?? <span className="muted">Unassigned</span>}</td>
-                  )}
-                  <td className="ca-actions">
-                    {!isManager && (
-                      <>
-                        <Link
-                          className="ca-link"
-                          to={`/consultant-actions?clientId=${c.id}`}
-                          aria-label={`Capture a sale for ${clientName(c)}`}
-                        >
-                          Capture sale
-                        </Link>
-                        <Link
-                          className="ca-link"
-                          to={`/clients/${c.id}/edit`}
-                          aria-label={`Edit ${clientName(c)}`}
-                        >
-                          Edit
-                        </Link>
-                      </>
-                    )}
-                    {isManager && features.removeClient && c.consultant && (
-                      <button
-                        type="button"
-                        className="ca-link danger"
-                        onClick={() => openRemove(c)}
-                        aria-label={`Remove ${clientName(c)}`}
-                      >
-                        Remove
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <section className="lp-card" aria-labelledby="cl-title">
+        <div className="lp-head">
+          <h2 id="cl-title">Client register</h2>
+          {paged && <span className="lp-count">{countOf(paged.totalItems, 'client')}</span>}
+          <div className="lp-filters">
+            <input
+              type="search"
+              placeholder="Search by name, File number or File ID"
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setPage(0);
+              }}
+              aria-label="Search clients"
+              autoComplete="off"
+            />
+          </div>
         </div>
-      )}
-      {paged && (
-        <Pager
-          page={paged.page}
-          size={paged.size}
-          totalItems={paged.totalItems}
-          totalPages={paged.totalPages}
-          onPage={setPage}
-        />
-      )}
+
+        {error && (
+          <p className="alert error" role="alert">
+            {error}
+          </p>
+        )}
+        {!error && rows === null && <p className="lp-empty">Loading...</p>}
+        {rows && rows.length === 0 && <p className="lp-empty">No clients match your search.</p>}
+
+        {rows && rows.length > 0 && (
+          <div className="lp-table">
+            <table className="cl-table">
+              <thead>
+                <tr>
+                  <th>Client</th>
+                  <th>Employer</th>
+                  <th>Contact</th>
+                  <th>Branch</th>
+                  <th>Payment term</th>
+                  <th>Structure</th>
+                  {isManager && <th>Consultant</th>}
+                  <th>
+                    <span className="sr-only">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((c) => (
+                  <tr key={c.id}>
+                    <td>
+                      <Link className="cl-name" to={`/clients/${c.id}`}>
+                        {c.lastName}
+                        {c.firstName && <span>, {c.firstName}</span>}
+                      </Link>
+                    </td>
+                    <td>
+                      {c.employer ? (
+                        c.employer.name
+                      ) : c.paymentMethod === 'DEBIT_ORDER' ? (
+                        <span className="lp-pill">Debit order</span>
+                      ) : (
+                        <Dash />
+                      )}
+                    </td>
+                    <td className="cl-contact">
+                      {c.workPhone || c.homePhone ? (
+                        <>
+                          {c.workPhone && (
+                            <span>
+                              <span className="cl-tag">W</span>
+                              {phoneForDisplay(c.workPhone)}
+                            </span>
+                          )}
+                          {c.homePhone && (
+                            <span>
+                              <span className="cl-tag">H</span>
+                              {phoneForDisplay(c.homePhone)}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <Dash />
+                      )}
+                    </td>
+                    <td>{c.productQuotation?.name ?? <Dash />}</td>
+                    <td>{c.latestSale?.paymentTerm ?? <Dash />}</td>
+                    <td>{c.latestSale?.structure ?? <Dash />}</td>
+                    {isManager && (
+                      <td>
+                        {c.consultant?.fullName ?? <span className="lp-none">Unassigned</span>}
+                      </td>
+                    )}
+                    <td className="ca-actions">
+                      {!isManager && (
+                        <>
+                          <Link
+                            className="btn lp-row-btn"
+                            to={`/consultant-actions?clientId=${c.id}`}
+                            aria-label={`Capture a sale for ${clientName(c)}`}
+                          >
+                            Capture sale
+                          </Link>
+                          <Link
+                            className="btn lp-row-btn"
+                            to={`/clients/${c.id}/edit`}
+                            aria-label={`Edit ${clientName(c)}`}
+                          >
+                            Edit
+                          </Link>
+                        </>
+                      )}
+                      {isManager && features.removeClient && c.consultant && (
+                        <button
+                          type="button"
+                          className="btn lp-row-btn cl-danger"
+                          onClick={() => openRemove(c)}
+                          aria-label={`Remove ${clientName(c)}`}
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {paged && (
+          <Pager
+            page={paged.page}
+            size={paged.size}
+            totalItems={paged.totalItems}
+            totalPages={paged.totalPages}
+            onPage={setPage}
+          />
+        )}
+      </section>
 
       <dialog
         ref={dialogRef}
@@ -283,6 +319,6 @@ export default function ClientsPage() {
           </form>
         )}
       </dialog>
-    </>
+    </ListPage>
   );
 }

@@ -10,6 +10,7 @@ import {
   type InviteStatus,
   type OnboardingSummary,
 } from '../api/onboarding';
+import ListPage from '../components/ListPage';
 import Pager from '../components/Pager';
 import './addclient.css';
 import './consultants.css';
@@ -17,6 +18,10 @@ import './imports.css';
 import './onboarding.css';
 
 const SIZE = 50;
+
+const DESCRIPTION =
+  'Consultants are registered from the CONSULTANT EMAIL column when a weekly register is imported. Here you make their logins and email each consultant their own details.';
+const FOOTER = 'Confidential staff information';
 
 type Notice = { kind: 'ok' | 'error'; text: string } | null;
 
@@ -439,46 +444,21 @@ export default function OnboardingPage() {
 
   if (loadError)
     return (
-      <div className="panel">
-        <h1>Consultant logins</h1>
-        <p className="alert error">{loadError}</p>
-      </div>
+      <ListPage title="Consultant logins" description={DESCRIPTION} footer={FOOTER}>
+        <p className="alert error ob-top">{loadError}</p>
+      </ListPage>
     );
   if (!summary)
     return (
-      <div className="panel">
-        <h1>Consultant logins</h1>
-        <p className="muted">Loading...</p>
-      </div>
+      <ListPage title="Consultant logins" description={DESCRIPTION} footer={FOOTER}>
+        <p className="lp-empty ob-top">Loading...</p>
+      </ListPage>
     );
 
   return (
-    <>
-      <section className="wi-card" aria-label="Consultant logins">
-        <h1>Consultant logins</h1>
-        <p className="muted">
-          Consultants are registered from the CONSULTANT EMAIL column when a weekly register is
-          imported. Here you make their logins and email each consultant their own details.
-        </p>
-
-        {!summary.mailConfigured && (
-          <p className="alert error" role="status">
-            Email is not set up yet, so login details cannot be sent. IT needs to fill in the
-            Microsoft 365 settings (see docs/consultant-onboarding.md, &quot;Mail set-up&quot;).
-          </p>
-        )}
-        {notice && (
-          <p className={`alert ${notice.kind}`} role={notice.kind === 'error' ? 'alert' : 'status'}>
-            {notice.text}
-          </p>
-        )}
-        {progress && (
-          <p className="muted" role="status">
-            {progress}
-          </p>
-        )}
-
-        <div className="wi-stats">
+    <ListPage title="Consultant logins" description={DESCRIPTION} footer={FOOTER}>
+      <div className="wi ob">
+        <div className="wi-stats ob-stats">
           <div className="wi-stat">
             <strong>{summary.activeConsultants}</strong>
             <span>Active consultants</span>
@@ -501,79 +481,103 @@ export default function OnboardingPage() {
           </div>
         </div>
 
-        <ol className="ob-steps">
-          <li>
-            <strong>Import the weekly register.</strong> <Link to="/import">Import Excel</Link>{' '}
-            registers new consultants from their emails and assigns their new clients. The import
-            page also keeps the import history.
-          </li>
-          <li>
-            <strong>Generate temporary passwords</strong> for the {summary.eligibleForLogin}{' '}
-            consultant{summary.eligibleForLogin === 1 ? '' : 's'} without a login. Consultants who
-            already have one are never changed.
-            <div className="wi-actions">
-              <button
-                type="button"
-                className="btn primary"
-                disabled={busy || summary.eligibleForLogin === 0}
-                onClick={() => void withPassword(generateAll)}
-              >
-                Generate temporary passwords
-              </button>
-            </div>
-          </li>
-          <li>
-            <strong>Send login details.</strong> Each consultant gets one email with the sign-in
-            address{summary.loginUrl ? ` (${summary.loginUrl})` : ''}, their email and their own
-            temporary password
-            {summary.mailSender ? `, from ${summary.mailSender}` : ''}. They must choose a new
-            password when they first sign in.
-            <div className="wi-actions">
-              <button
-                type="button"
-                className="btn primary"
-                disabled={busy || summary.invites.PENDING === 0 || !summary.mailConfigured}
-                onClick={() => void withPassword(sendAll)}
-              >
-                Send login details ({summary.invites.PENDING})
-              </button>
-            </div>
-          </li>
-        </ol>
+        <section className="wi-card" aria-labelledby="ob-title">
+          <h2 id="ob-title">Getting consultants signed in</h2>
 
-        {askPassword && (
-          <ConfirmPassword
-            onCancel={() => setAskPassword(null)}
-            onConfirmed={() => {
-              const action = askPassword;
-              setAskPassword(null);
-              void withPassword(action);
-            }}
-          />
-        )}
+          {!summary.mailConfigured && (
+            <p className="alert error" role="status">
+              Email is not set up yet, so login details cannot be sent. IT needs to fill in the
+              Microsoft 365 settings (see docs/consultant-onboarding.md, &quot;Mail set-up&quot;).
+            </p>
+          )}
+          {notice && (
+            <p
+              className={`alert ${notice.kind}`}
+              role={notice.kind === 'error' ? 'alert' : 'status'}
+            >
+              {notice.text}
+            </p>
+          )}
+          {progress && (
+            <p className="muted" role="status">
+              {progress}
+            </p>
+          )}
 
-        {skipped.length > 0 && (
-          <>
-            <h3>Not given a login</h3>
-            <ul>
-              {skipped.map((s) => (
-                <li key={s.consultantId}>
-                  {s.fullName ?? `Consultant ${s.consultantId}`}
-                  {s.consultantCode ? ` (${s.consultantCode})` : ''}: {s.reason}
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-      </section>
+          <ol className="ob-steps">
+            <li>
+              <strong>Import the weekly register.</strong> <Link to="/import">Import Excel</Link>{' '}
+              registers new consultants from their emails and assigns their new clients. The import
+              page also keeps the import history.
+            </li>
+            <li>
+              <strong>Generate temporary passwords</strong> for the {summary.eligibleForLogin}{' '}
+              consultant{summary.eligibleForLogin === 1 ? '' : 's'} without a login. Consultants who
+              already have one are never changed.
+              <div className="wi-actions">
+                <button
+                  type="button"
+                  className="btn primary"
+                  disabled={busy || summary.eligibleForLogin === 0}
+                  onClick={() => void withPassword(generateAll)}
+                >
+                  Generate temporary passwords
+                </button>
+              </div>
+            </li>
+            <li>
+              <strong>Send login details.</strong> Each consultant gets one email with the sign-in
+              address{summary.loginUrl ? ` (${summary.loginUrl})` : ''}, their email and their own
+              temporary password
+              {summary.mailSender ? `, from ${summary.mailSender}` : ''}. They must choose a new
+              password when they first sign in.
+              <div className="wi-actions">
+                <button
+                  type="button"
+                  className="btn primary"
+                  disabled={busy || summary.invites.PENDING === 0 || !summary.mailConfigured}
+                  onClick={() => void withPassword(sendAll)}
+                >
+                  Send login details ({summary.invites.PENDING})
+                </button>
+              </div>
+            </li>
+          </ol>
 
-      <DeliveryReport
-        summary={summary}
-        refreshKey={refreshKey}
-        busy={busy}
-        onRetry={() => void withPassword(retryFailed)}
-      />
-      <NeedsAttention onChanged={() => void reload()} />
-    </>
+          {askPassword && (
+            <ConfirmPassword
+              onCancel={() => setAskPassword(null)}
+              onConfirmed={() => {
+                const action = askPassword;
+                setAskPassword(null);
+                void withPassword(action);
+              }}
+            />
+          )}
+
+          {skipped.length > 0 && (
+            <>
+              <h3>Not given a login</h3>
+              <ul>
+                {skipped.map((s) => (
+                  <li key={s.consultantId}>
+                    {s.fullName ?? `Consultant ${s.consultantId}`}
+                    {s.consultantCode ? ` (${s.consultantCode})` : ''}: {s.reason}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </section>
+
+        <DeliveryReport
+          summary={summary}
+          refreshKey={refreshKey}
+          busy={busy}
+          onRetry={() => void withPassword(retryFailed)}
+        />
+        <NeedsAttention onChanged={() => void reload()} />
+      </div>
+    </ListPage>
   );
 }

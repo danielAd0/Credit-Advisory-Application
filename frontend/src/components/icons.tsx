@@ -130,3 +130,44 @@ export const IconCheck = (p: P) => (
     <path d="m5 12.5 4.5 4.5L19 7.5" />
   </Svg>
 );
+
+export const IconShield = (p: P) => (
+  <Svg {...p}>
+    <path d="M12 3.5 5 6v5.5c0 4.2 2.9 7.6 7 9 4.1-1.4 7-4.8 7-9V6l-7-2.5Z" />
+    <path d="m9 12 2 2 4-4" />
+  </Svg>
+);
+
+export const IconSearch = (p: P) => (
+  <Svg {...p}>
+    <circle cx="11" cy="11" r="6.5" />
+    <path d="m20 20-4.4-4.4" />
+  </Svg>
+);
+
+export const IconRefresh = (p: P) => (
+  <Svg {...p}>
+    <path d="M20 12a8 8 0 1 1-2.3-5.7" />
+    <path d="M20 4.5v4h-4" />
+  </Svg>
+);
+
+export const IconClock = (p: P) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="8.5" />
+    <path d="M12 7.5V12l3 2" />
+  </Svg>
+);
+
+export const IconChevronRight = (p: P) => (
+  <Svg {...p}>
+    <path d="m9 6 6 6-6 6" />
+  </Svg>
+);
+
+export const IconLock = (p: P) => (
+  <Svg {...p}>
+    <rect x="5" y="10.5" width="14" height="10" rx="2" />
+    <path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" />
+  </Svg>
+);

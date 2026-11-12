@@ -84,7 +84,15 @@ export default function ClientSales({ clientId }: { clientId: number }) {
 
   return (
     <section className="cd-card cds" aria-labelledby="cds-h">
-      <h2 id="cds-h">Sales</h2>
+      <div className="cd-head">
+        <h2 id="cds-h">Sales</h2>
+        {current?.sales && (
+          <span className="cd-count">
+            {current.sales.length} {current.sales.length === 1 ? 'sale' : 'sales'}
+          </span>
+        )}
+        <span className="cd-meta">All amounts in ZAR</span>
+      </div>
       {current === null && <p className="muted">Loading...</p>}
       {current?.error && (
         <p className="alert error" role="alert">
@@ -101,12 +109,13 @@ export default function ClientSales({ clientId }: { clientId: number }) {
       )}
       {current?.sales && current.sales.length > 0 && (
         <>
-          <div className="table-wrap">
+          <div className="table-wrap cd-table">
             <table className="cds-table">
               <thead>
                 <tr>
                   <th>Date</th>
                   <th>Products</th>
+                  <th className="num">Amount</th>
                   <th className="num">Quotation</th>
                   <th className="num">Banked</th>
                   <th>Source</th>
@@ -126,16 +135,22 @@ export default function ClientSales({ clientId }: { clientId: number }) {
                       <td className="cds-products">
                         <ul className="cds-lines">
                           {s.lines.map((l) => (
-                            <li key={l.productId}>
-                              <span>{l.name}</span>
-                              <span className="muted">{rand(l.amount)}</span>
-                            </li>
+                            <li key={l.productId}>{l.name}</li>
                           ))}
                         </ul>
                       </td>
-                      <td className="num">{rand(s.quotationTotal)}</td>
-                      <td className="num">{rand(s.bankedTotal)}</td>
-                      <td>{from.label}</td>
+                      <td className="num">
+                        <ul className="cds-lines">
+                          {s.lines.map((l) => (
+                            <li key={l.productId}>{rand(l.amount)}</li>
+                          ))}
+                        </ul>
+                      </td>
+                      <td className="num cds-total">{rand(s.quotationTotal)}</td>
+                      <td className="num cds-total">{rand(s.bankedTotal)}</td>
+                      <td>
+                        <span className="cd-pill">{from.label}</span>
+                      </td>
                       {showActions && (
                         <td>
                           <div className="cds-actions">

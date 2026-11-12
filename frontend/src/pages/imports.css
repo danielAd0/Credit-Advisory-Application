@@ -139,3 +139,142 @@
   border-radius: 10px;
   box-sizing: border-box;
 }
+
+/* ---------- Inside the shared ListPage frame (Import, Consultant logins) ---------- */
+.lp .wi {
+  max-width: none;
+}
+.lp .wi-card {
+  margin-top: 1.5rem;
+  padding: var(--lp-pad);
+  border-radius: 12px;
+  min-width: 0;
+}
+.lp .wi-card > h2 {
+  padding-bottom: 1rem;
+  margin: 0 0 1.25rem;
+  font-size: 1.2rem;
+  font-weight: 600;
+  border-bottom: 1px solid var(--line);
+}
+.lp .wi-card > h2 + p.muted {
+  margin-top: -0.5rem;
+}
+.lp .wi-card h3 {
+  margin: 1.5rem 0 0.75rem;
+  font-size: 1rem;
+}
+.lp .wi-card input:not([type='checkbox']):not([type='file']),
+.lp .wi-card select,
+.lp .wi textarea {
+  border-color: var(--lp-field);
+  border-radius: 6px;
+}
+.lp .wi-card .btn,
+.lp .wi-tabs select,
+.lp .wi-map select {
+  border-radius: 6px;
+}
+
+/* Tables run edge to edge in the card, with the shaded header band */
+.lp .wi-card .table-wrap,
+.lp .wi-card .lp-table {
+  margin: 0 calc(-1 * var(--lp-pad));
+  border: 0;
+  border-radius: 0;
+  overflow-x: auto;
+}
+.lp .wi-card .table-wrap th {
+  padding: 1rem;
+  background: var(--lp-band);
+  border-bottom: 0;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+.lp .wi-card .table-wrap td {
+  padding: 1rem;
+}
+.lp .wi-card .table-wrap th:first-child,
+.lp .wi-card .table-wrap td:first-child {
+  padding-left: var(--lp-pad);
+}
+.lp .wi-card .table-wrap th:last-child,
+.lp .wi-card .table-wrap td:last-child {
+  padding-right: var(--lp-pad);
+}
+.lp .wi-card tbody tr:hover {
+  background: #fafbfc;
+}
+
+/* Summary tiles */
+.lp .wi-stat {
+  padding: 1rem 1.1rem;
+  border-radius: 12px;
+}
+.lp .wi-stat strong {
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+.lp .wi-stat span {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.82rem;
+}
+.lp .ob-stats {
+  margin: 1.5rem 0 0;
+}
+.lp .ob-top {
+  margin-top: 1.5rem;
+}
+
+/* Import status in the history table */
+.lp .badge.wi-state {
+  min-width: 0;
+  text-transform: none;
+}
+.lp .badge.wi-state.committed::before {
+  background: #2e8b57;
+}
+.lp .badge.wi-state.previewed::before {
+  background: var(--lp-cta);
+}
+
+/* Steps on the Consultant logins page */
+.lp .ob-steps {
+  counter-reset: ob;
+  list-style: none;
+  padding-left: 0;
+  gap: 0;
+}
+.lp .ob-steps > li {
+  counter-increment: ob;
+  position: relative;
+  padding: 1.1rem 0 1.1rem 2.75rem;
+  border-top: 1px solid var(--line);
+}
+.lp .ob-steps > li:first-child {
+  border-top: 0;
+  padding-top: 0.25rem;
+}
+.lp .ob-steps > li::before {
+  content: counter(ob);
+  position: absolute;
+  left: 0;
+  top: 1.05rem;
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  background: var(--lp-pill);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.lp .ob-steps > li:first-child::before {
+  top: 0.2rem;
+}
+.lp .ob-steps .wi-actions {
+  margin-top: 0.75rem;
+}

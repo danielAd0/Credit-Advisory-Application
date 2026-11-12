@@ -67,9 +67,11 @@ export default function ClientDetailPage() {
   }, [id, isManager]);
 
   const back = (
-    <Link className="cd-back" to="/clients">
-      &larr; Back to clients
-    </Link>
+    <nav className="cd-crumbs" aria-label="Breadcrumb">
+      <Link to="/clients">Clients</Link>
+      <span aria-hidden="true">/</span>
+      <span aria-current="page">Client profile</span>
+    </nav>
   );
 
   if (!Number.isInteger(id)) {
@@ -118,8 +120,9 @@ export default function ClientDetailPage() {
   return (
     <div className="cd">
       {back}
-      <h1>{clientName(c)}</h1>
+      <h1 className="cd-name">{clientName(c)}</h1>
       <RevealIdNumber key={c.id} clientId={c.id} masked={c.idNumberMasked} />
+      <p className="cd-eyebrow">Client overview</p>
       {!isManager && (
         <p className="cd-buttons">
           <Link className="btn primary" to={`/consultant-actions?clientId=${c.id}`}>
@@ -133,7 +136,9 @@ export default function ClientDetailPage() {
 
       <div className="cd-grid">
         <section className="cd-card" aria-labelledby="cd-details">
-          <h2 id="cd-details">Details</h2>
+          <h2 id="cd-details" className="cd-rule">
+            Details
+          </h2>
           <dl>
             <dt>First name</dt>
             <dd>{c.firstName}</dd>
@@ -157,7 +162,9 @@ export default function ClientDetailPage() {
         </section>
 
         <section className="cd-card" aria-labelledby="cd-work">
-          <h2 id="cd-work">Work and sales</h2>
+          <h2 id="cd-work" className="cd-rule">
+            Work and sales
+          </h2>
           <dl>
             <dt>Current consultant</dt>
             <dd>
@@ -213,12 +220,19 @@ export default function ClientDetailPage() {
 
       {isManager && (
         <section className="cd-card cd-history" aria-labelledby="cd-hist">
-          <h2 id="cd-hist">Assignment history</h2>
+          <div className="cd-head">
+            <h2 id="cd-hist">Assignment history</h2>
+            {rows && (
+              <span className="cd-meta">
+                {rows.length} {rows.length === 1 ? 'event' : 'events'}
+              </span>
+            )}
+          </div>
           {rows === undefined && <p className="muted">Loading...</p>}
           {rows === null && <p className="muted">Could not load the history.</p>}
           {rows && rows.length === 0 && <p className="muted">No changes recorded yet.</p>}
           {rows && rows.length > 0 && (
-            <div className="table-wrap">
+            <div className="table-wrap cd-table">
               <table>
                 <thead>
                   <tr>
@@ -234,15 +248,17 @@ export default function ClientDetailPage() {
                   {rows.map((h) => (
                     <tr key={`${h.changedAt}-${h.toConsultant?.id ?? 'none'}`}>
                       <td>{dateTime(h.changedAt)}</td>
-                      <td>{CHANGE_LABEL[h.changeType]}</td>
+                      <td>
+                        <span className="cd-pill">{CHANGE_LABEL[h.changeType]}</span>
+                      </td>
                       <td>
                         {h.fromConsultant?.fullName ?? <span className="muted">Unassigned</span>}
                       </td>
                       <td>
                         {h.toConsultant?.fullName ?? <span className="muted">Unassigned</span>}
                       </td>
-                      <td>{h.reason}</td>
-                      <td>{h.changedBy.email}</td>
+                      <td className="cd-reason">{h.reason}</td>
+                      <td className="cd-by">{h.changedBy.email}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -251,6 +267,11 @@ export default function ClientDetailPage() {
           )}
         </section>
       )}
+
+      <footer className="cd-foot">
+        <span>{c.latestSale?.structure ?? 'Credit Advisory'} / Client management</span>
+        <span>Confidential client information</span>
+      </footer>
     </div>
   );
 }

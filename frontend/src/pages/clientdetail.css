@@ -1,43 +1,132 @@
-/* Client detail. Classes start with "cd-". */
+/* Client detail. Classes start with "cd-" (shared by the sales and cases cards). */
 .cd {
-  max-width: 960px;
+  --cd-pad: 1.75rem;
+  --cd-band: #f4f5f8;
+  --cd-pill: #eceef2;
+  --cd-cta: #c8501d;
+  --cd-cta-hover: #b04415;
+  max-width: 1280px;
+  padding-bottom: 0.5rem;
 }
-.cd-back {
-  display: inline-block;
-  margin-bottom: 1rem;
-  color: var(--ink);
+
+/* Breadcrumb */
+.cd-crumbs {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+  font-size: 0.95rem;
+  color: var(--muted);
+}
+.cd-crumbs a {
+  color: var(--muted);
   text-decoration: none;
+}
+.cd-crumbs a:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+/* Name, ID number, eyebrow */
+.cd h1.cd-name,
+.cd h1 {
+  margin: 0 0 0.75rem;
+  font-size: 2.25rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+  line-height: 1.15;
+}
+.cd .rv {
+  margin: 0;
+}
+.cd .rv-line {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.25rem;
   font-size: 0.95rem;
 }
-.cd-back:hover {
-  color: var(--accent);
+.cd .rv-line .mono {
+  font-size: 1rem;
+  color: var(--ink);
+  letter-spacing: 0.04em;
 }
-.cd h1 {
-  margin: 0 0 0.25rem;
+.cd .rv-link {
+  font-weight: 600;
+  color: var(--accent-ink);
+  text-decoration: none;
 }
+.cd .rv-link:hover {
+  text-decoration: underline;
+  color: var(--accent-ink);
+}
+.cd-eyebrow {
+  margin: 0.6rem 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.cd-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin: 1rem 0 0;
+}
+
+/* Cards */
 .cd-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1rem;
-  margin-top: 1.25rem;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
 }
 .cd-card {
-  padding: 1.25rem 1.5rem;
+  padding: var(--cd-pad);
   background: var(--surface);
   border: 1px solid var(--line);
-  border-top: 3px solid var(--accent);
   border-radius: 12px;
   min-width: 0;
 }
-.cd-card h2 {
-  margin: 0 0 0.75rem;
-  font-size: 1.1rem;
+.cd > .cd-card,
+.cd .cds,
+.cd .cs {
+  margin-top: 1.5rem;
 }
+.cd-card h2 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+.cd-card h2.cd-rule {
+  padding-bottom: 1rem;
+  margin-bottom: 1.1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+/* Card header: title, count, right-aligned note */
+.cd-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.9rem;
+  margin-bottom: 1.25rem;
+}
+.cd-count {
+  font-size: 0.95rem;
+  color: var(--muted);
+}
+.cd-meta {
+  margin-left: auto;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+/* Label / value lists */
 .cd-card dl {
   margin: 0;
   display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
-  gap: 0.5rem 1.25rem;
+  grid-template-columns: minmax(8rem, 33%) minmax(0, 1fr);
+  gap: 0.55rem 1.25rem;
 }
 .cd-card dt {
   color: var(--muted);
@@ -47,9 +136,110 @@
   margin: 0;
   overflow-wrap: anywhere;
 }
-.cd-history {
-  margin-top: 1rem;
+.cd-card dd .muted {
+  color: #8a92a0;
 }
+
+/* Tables that run edge to edge inside a card, with a shaded header band */
+.cd-table.table-wrap {
+  margin: 0 calc(-1 * var(--cd-pad));
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.cd-table th {
+  padding: 1rem;
+  background: var(--cd-band);
+  border-bottom: 0;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+.cd-table td {
+  padding: 1.25rem 1rem;
+  vertical-align: top;
+}
+.cd-table th:first-child,
+.cd-table td:first-child {
+  padding-left: var(--cd-pad);
+}
+.cd-table th:last-child,
+.cd-table td:last-child {
+  padding-right: var(--cd-pad);
+}
+.cd-table tbody tr:hover {
+  background: #fafbfc;
+}
+.cd-reason {
+  white-space: normal;
+  min-width: 14rem;
+}
+
+/* Grey pill used for "Imported", change types, etc. */
+.cd-pill {
+  display: inline-block;
+  min-width: 6.5rem;
+  padding: 0.3rem 0.9rem;
+  border-radius: 6px;
+  background: var(--cd-pill);
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+
+/* Sales card */
+.cds-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+.cds-total {
+  font-weight: 600;
+}
+.cds-muted td {
+  color: var(--muted);
+}
+
+/* Cases card */
+.cd .cs-new {
+  margin-bottom: 1.25rem;
+}
+.cd .cs-new input {
+  height: 3rem;
+  border-color: #d6d9df;
+  border-radius: 6px;
+}
+.cd .cs-new .btn.primary {
+  min-width: 10rem;
+  justify-content: center;
+  border-radius: 6px;
+  background: var(--cd-cta);
+  border-color: var(--cd-cta);
+  color: #fff;
+}
+.cd .cs-new .btn.primary:hover:not(:disabled) {
+  background: var(--cd-cta-hover);
+  border-color: var(--cd-cta-hover);
+}
+.cs-empty {
+  margin: 0;
+}
+
+/* Footer */
+.cd-foot {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  margin-top: 2rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.cd-foot span:first-child {
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
 .row-link {
   color: var(--ink);
   font-weight: 600;
@@ -59,18 +249,22 @@
   color: var(--accent);
   text-decoration: underline;
 }
-/* Capture a sale / Edit client under the name. */
-.cd-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-}
 
-@media (max-width: 700px) {
+@media (max-width: 900px) {
   .cd-grid {
     grid-template-columns: minmax(0, 1fr);
   }
-  .cd-card {
-    padding: 1rem;
+}
+@media (max-width: 700px) {
+  .cd {
+    --cd-pad: 1rem;
+  }
+  .cd h1.cd-name,
+  .cd h1 {
+    font-size: 1.6rem;
+  }
+  .cd-meta {
+    margin-left: 0;
+    width: 100%;
   }
 }

@@ -10,6 +10,8 @@ import {
 } from '../api';
 import { passwordProblem } from '../api/passwords';
 import { useSession } from '../auth/useAuth';
+import ListPage from '../components/ListPage';
+import { countOf } from '../components/countOf';
 import Pager from '../components/Pager';
 import TempPassword from '../components/TempPassword';
 import './addclient.css';
@@ -592,10 +594,12 @@ export default function ManagersPage() {
   const selected = result?.items.find((u) => u.id === selectedId) ?? null;
 
   return (
-    <>
-      <div className="topbar-actions">
-        <h1>Managers</h1>
-        {!adding && (
+    <ListPage
+      title="Managers"
+      description="Sign-ins for managers and administrators. Consultants are managed under Team."
+      footer="Confidential staff information"
+      action={
+        !adding && (
           <button
             type="button"
             className="btn primary"
@@ -606,94 +610,103 @@ export default function ManagersPage() {
           >
             Add manager
           </button>
-        )}
-      </div>
-      <p className="muted">
-        Sign-ins for managers and administrators. Consultants are managed under Team.
-      </p>
-
+        )
+      }
+    >
       {adding && (
         <AddManager onCreated={() => setReload((n) => n + 1)} onClose={() => setAdding(false)} />
       )}
 
-      <div className="cn-filters">
-        <div className="toolbar">
-          <input
-            type="search"
-            placeholder="Search by email"
-            aria-label="Search managers"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-      </div>
-
-      {error && (
-        <p className="alert error" role="alert">
-          {error}
-        </p>
-      )}
-      {!error && result === null && <p className="muted">Loading...</p>}
-      {result && result.items.length === 0 && <p className="muted">No managers found.</p>}
-      {result && result.items.length > 0 && (
-        <>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Email</th>
-                  <th>Access</th>
-                  <th>Status</th>
-                  <th>Last sign-in</th>
-                  <th>
-                    <span className="sr-only">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {result.items.filter(isManager).map((u) => (
-                  <tr key={u.id}>
-                    <td>
-                      {u.email}
-                      {u.id === session.id && <span className="muted"> (you)</span>}
-                    </td>
-                    <td>{accessLabel(u)}</td>
-                    <td>
-                      <StateBadge user={u} />
-                      {isMixed(u) && (
-                        <>
-                          {' '}
-                          <span className="badge suspended">also a consultant</span>
-                        </>
-                      )}
-                    </td>
-                    <td>{signIn(u.lastLoginAt)}</td>
-                    <td>
-                      <button
-                        type="button"
-                        className="btn"
-                        onClick={() => {
-                          setSelectedId(u.id);
-                          setAdding(false);
-                        }}
-                      >
-                        Manage
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      <section className="lp-card" aria-labelledby="lp-title">
+        <div className="lp-head">
+          <h2 id="lp-title">Manager sign-ins</h2>
+          {result && <span className="lp-count">{countOf(result.totalItems, 'manager')}</span>}
+          <div className="lp-filters">
+            <input
+              type="search"
+              placeholder="Search by email"
+              aria-label="Search managers"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
           </div>
-          <Pager
-            page={result.page}
-            size={result.size}
-            totalItems={result.totalItems}
-            totalPages={result.totalPages}
-            onPage={setPage}
-          />
-        </>
-      )}
+        </div>
+
+        {error && (
+          <p className="alert error" role="alert">
+            {error}
+          </p>
+        )}
+        {!error && result === null && <p className="lp-empty">Loading...</p>}
+        {result && result.items.length === 0 && <p className="lp-empty">No managers found.</p>}
+        {result && result.items.length > 0 && (
+          <>
+            <div className="lp-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Email</th>
+                    <th>Access</th>
+                    <th>Status</th>
+                    <th>Last sign-in</th>
+                    <th>
+                      <span className="sr-only">Actions</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.items.filter(isManager).map((u) => (
+                    <tr key={u.id} className={u.id === selectedId ? 'lp-selected' : undefined}>
+                      <td className="lp-strong">
+                        {u.email}
+                        {u.id === session.id && <span className="lp-pill lp-you">You</span>}
+                      </td>
+                      <td>
+                        <span className="lp-pill">{accessLabel(u)}</span>
+                      </td>
+                      <td>
+                        <StateBadge user={u} />
+                        {isMixed(u) && (
+                          <>
+                            {' '}
+                            <span className="badge suspended">also a consultant</span>
+                          </>
+                        )}
+                      </td>
+                      <td>
+                        {u.lastLoginAt ? (
+                          signIn(u.lastLoginAt)
+                        ) : (
+                          <span className="lp-none">Never</span>
+                        )}
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          className="btn lp-row-btn"
+                          onClick={() => {
+                            setSelectedId(u.id);
+                            setAdding(false);
+                          }}
+                        >
+                          Manage
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pager
+              page={result.page}
+              size={result.size}
+              totalItems={result.totalItems}
+              totalPages={result.totalPages}
+              onPage={setPage}
+            />
+          </>
+        )}
+      </section>
 
       {selected && (
         <ManagePanel
@@ -704,6 +717,6 @@ export default function ManagersPage() {
           onClose={() => setSelectedId(null)}
         />
       )}
-    </>
+    </ListPage>
   );
 }

@@ -1,6 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { catalogue, detailOf, isStale, type PageResponse, type Product } from '../api';
 import { hasAnyRole, useSession } from '../auth/useAuth';
+import ListPage from '../components/ListPage';
+import { countOf } from '../components/countOf';
 import Pager from '../components/Pager';
 import './addclient.css';
 import './consultants.css';
@@ -253,107 +255,115 @@ export default function ProductsPage() {
   }, [query, state, pageNo, reload]);
 
   return (
-    <>
-      <div className="topbar-actions">
-        <h1>Products</h1>
-        {canAdd && (
+    <ListPage
+      title="Products"
+      description="The columns of the weekly register. Products are never deleted, only deactivated."
+      action={
+        canAdd && (
           <button type="button" className="btn primary" onClick={() => setPanel({ product: null })}>
             Add product
           </button>
-        )}
-      </div>
-      <p className="muted">
-        The columns of the weekly register. Products are never deleted, only deactivated.
-      </p>
-
-      <div className="cn-filters">
-        <div className="toolbar">
-          <input
-            type="search"
-            placeholder="Search by name or code"
-            aria-label="Search products"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-        <select
-          aria-label="Filter by state"
-          value={state}
-          onChange={(e) => {
-            setState(e.target.value as 'all' | 'active' | 'inactive');
-            setPageNo(0);
-          }}
-        >
-          <option value="all">All products</option>
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
-        </select>
-      </div>
-
-      {error && (
-        <p className="alert error" role="alert">
-          {error}
-        </p>
-      )}
-      {!error && result === null && <p className="muted">Loading...</p>}
-      {result && result.items.length === 0 && <p className="muted">No products found.</p>}
-      {result && result.items.length > 0 && (
-        <>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Code</th>
-                  <th>Name</th>
-                  <th>Price</th>
-                  <th>Counts toward</th>
-                  <th>Status</th>
-                  <th>
-                    <span className="sr-only">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {result.items.map((p) => (
-                  <tr key={p.id}>
-                    <td className="mono">{p.code}</td>
-                    <td>{p.name}</td>
-                    <td>{money(p.standardPrice)}</td>
-                    <td>
-                      {[p.countsTowardQuotation && 'Quotation', p.countsTowardBanked && 'Banked']
-                        .filter(Boolean)
-                        .join(', ') || 'Neither'}
-                    </td>
-                    <td>
-                      <span className={`badge ${p.active ? 'active' : 'suspended'}`}>
-                        {p.active ? 'active' : 'inactive'}
-                      </span>
-                    </td>
-                    <td>
-                      {isAdmin && (
-                        <button
-                          type="button"
-                          className="btn"
-                          onClick={() => setPanel({ product: p })}
-                        >
-                          Edit
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        )
+      }
+    >
+      <section className="lp-card" aria-labelledby="lp-title">
+        <div className="lp-head">
+          <h2 id="lp-title">Product catalogue</h2>
+          {result && <span className="lp-count">{countOf(result.totalItems, 'product')}</span>}
+          <div className="lp-filters">
+            <input
+              type="search"
+              placeholder="Search by name or code"
+              aria-label="Search products"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <select
+              aria-label="Filter by state"
+              value={state}
+              onChange={(e) => {
+                setState(e.target.value as 'all' | 'active' | 'inactive');
+                setPageNo(0);
+              }}
+            >
+              <option value="all">All products</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
           </div>
-          <Pager
-            page={result.page}
-            size={result.size}
-            totalItems={result.totalItems}
-            totalPages={result.totalPages}
-            onPage={setPageNo}
-          />
-        </>
-      )}
+        </div>
+        {error && (
+          <p className="alert error" role="alert">
+            {error}
+          </p>
+        )}
+        {!error && result === null && <p className="lp-empty">Loading...</p>}
+        {result && result.items.length === 0 && <p className="lp-empty">No products found.</p>}
+        {result && result.items.length > 0 && (
+          <>
+            <div className="lp-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Code</th>
+                    <th>Name</th>
+                    <th className="num">Standard price</th>
+                    <th>Counts toward</th>
+                    <th>Status</th>
+                    <th>
+                      <span className="sr-only">Actions</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.items.map((p) => (
+                    <tr
+                      key={p.id}
+                      className={panel?.product?.id === p.id ? 'lp-selected' : undefined}
+                    >
+                      <td className="lp-code">{p.code}</td>
+                      <td className="lp-strong">{p.name}</td>
+                      <td className={p.standardPrice === null ? 'num lp-none' : 'num'}>
+                        {money(p.standardPrice)}
+                      </td>
+                      <td>
+                        {p.countsTowardQuotation && <span className="lp-pill">Quotation</span>}
+                        {p.countsTowardBanked && <span className="lp-pill">Banked</span>}
+                        {!p.countsTowardQuotation && !p.countsTowardBanked && (
+                          <span className="lp-none">Neither</span>
+                        )}
+                      </td>
+                      <td>
+                        <span className={`badge ${p.active ? 'active' : 'inactive'}`}>
+                          {p.active ? 'active' : 'inactive'}
+                        </span>
+                      </td>
+                      <td>
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            className="btn lp-row-btn"
+                            onClick={() => setPanel({ product: p })}
+                          >
+                            Edit
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pager
+              page={result.page}
+              size={result.size}
+              totalItems={result.totalItems}
+              totalPages={result.totalPages}
+              onPage={setPageNo}
+            />
+          </>
+        )}
+      </section>
 
       {panel && (
         <ProductPanel
@@ -367,6 +377,6 @@ export default function ProductsPage() {
           onClose={() => setPanel(null)}
         />
       )}
-    </>
+    </ListPage>
   );
 }
