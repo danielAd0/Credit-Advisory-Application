@@ -1,3 +1,4 @@
+import { saveFile } from './download';
 import { ApiError } from './http';
 import { consultants, delay } from './mock';
 import type {
@@ -262,6 +263,26 @@ export async function issues(
   await delay(300);
   const all = find(id).issues.filter((i) => !params.severity || i.severity === params.severity);
   return paged(all, params.page ?? 0, params.size ?? 50);
+}
+
+export async function exportIssues(id: number, severity?: Severity): Promise<void> {
+  await delay(300);
+  const cell = (value: string | number | null) => {
+    const text = value === null ? '' : String(value);
+    const safe = /^[=+\-@]/.test(text) ? `'${text}` : text;
+    return `"${safe.replace(/"/g, '""')}"`;
+  };
+  const header = ['Sheet', 'Row', 'Field', 'Severity', 'Code', 'Message', 'ID number (last 4)'];
+  const lines = find(id)
+    .issues.filter((i) => !severity || i.severity === severity)
+    .map((i) =>
+      [i.sheetName, i.rowNumber, i.field, i.severity, i.code, i.message, ''].map(cell).join(','),
+    );
+  const csv = [header.map(cell).join(','), ...lines].join('\r\n');
+  saveFile(
+    new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=UTF-8' }),
+    `import-${id}-issues.csv`,
+  );
 }
 
 export async function mapConsultant(

@@ -203,6 +203,7 @@ export default function SalesHistoryPage() {
                     <th>Products</th>
                     <th className="num">Quotation</th>
                     <th className="num">Banked</th>
+                    <th>Source</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -225,6 +226,7 @@ export default function SalesHistoryPage() {
                       </td>
                       <td className="num">{rand(s.quotationTotal)}</td>
                       <td className="num">{rand(s.bankedTotal)}</td>
+                      <td>{s.typedIn === false ? 'Imported' : 'Typed in'}</td>
                     </tr>
                   ))}
                 </tbody>

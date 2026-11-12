@@ -26,6 +26,7 @@ import SalesHistoryPage from './pages/SalesHistoryPage';
 import ReportsPage from './pages/ReportsPage';
 import ReassignPage from './pages/ReassignPage';
 import TargetsPage from './pages/TargetsPage';
+import NewPhonePage from './pages/NewPhonePage';
 import TwoStepPage from './pages/TwoStepPage';
 
 const managers: Role[] = ['ADMIN', 'MANAGER'];
@@ -109,6 +110,7 @@ export default function App() {
                 }
               />
               <Route path="sales-history" element={<SalesHistoryPage />} />
+              <Route path="new-phone" element={<NewPhonePage />} />
               <Route
                 path="targets"
                 element={
@@ -127,7 +129,7 @@ export default function App() {
                   </RequireRole>
                 }
               />
-              {/* The old address, from before product quotations were renamed to branches. */}
+              {}
               <Route path="product-quotations" element={<Navigate to="/branches" replace />} />
               <Route
                 path="reassign"

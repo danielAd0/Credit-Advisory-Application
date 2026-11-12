@@ -1,4 +1,5 @@
-import { api } from './http';
+import { saveFile } from './download';
+import { ApiError, api } from './http';
 import * as mockImports from './mockImports';
 import type { PageResponse } from './types';
 
@@ -28,21 +29,20 @@ export interface UnmappedConsultant {
   rows: number;
 }
 
-/** What confirm does with the CONSULTANT EMAIL column (docs/consultant-onboarding.md). */
 export interface ConsultantRegistration {
   namesInSheet: number;
   matchedByName: number;
   matchedByEmail: number;
-  /** New consultants confirm will create. */
+
   toRegister: {
     fullName: string;
     email: string;
     otherSpellings: string[];
     rows: number;
-    /** Existing consultants with a similar name: maybe the same person under another email. */
+
     similarConsultants: { consultantId: number; consultantCode: string; fullName: string }[];
   }[];
-  /** Existing consultants without an email who get the sheet's email. */
+
   emailsToAdd: {
     consultantId: number;
     consultantCode: string;
@@ -50,11 +50,10 @@ export interface ConsultantRegistration {
     email: string;
     rows: number;
   }[];
-  /** Names that do not match their email safely. They stop the import. */
+
   conflicts: { nameInSheet: string; email: string; reason: string; rows: number }[];
 }
 
-/** New clients and who confirm will give them to. Existing clients keep their consultant. */
 export interface AssignmentPreview {
   newClientRows: number;
   willBeAssigned: number;
@@ -92,9 +91,7 @@ export interface ImportSummary {
   replaceRequired: boolean;
   canConfirm: boolean;
   blockers: ImportBlocker[];
-  /** Sales typed into the app for this week. Confirming replaces them: the spreadsheet wins. */
   typedInSales: number;
-  /** Only while PREVIEWED (empty lists otherwise). Missing in older mock data. */
   consultantRegistration?: ConsultantRegistration;
   assignment?: AssignmentPreview;
 }
@@ -155,9 +152,7 @@ export interface ConfirmResult {
   staleRows: number;
   replacedImportJobId: number | null;
   supersededTransactions: number;
-  /** Typed-in sales of this week that the import replaced. */
   replacedTypedInSales: number;
-  /** Consultants registered from the sheet's emails (they still need a login: Consultant logins). */
   consultantsRegistered?: number;
   consultantEmailsAdded?: number;
   consultantAliasesAdded?: number;
@@ -200,6 +195,19 @@ const real = {
 
   issues: (id: number, params: { severity?: Severity; page?: number; size?: number } = {}) =>
     api<PageResponse<ImportIssue>>(`/api/imports/${id}/issues${query(params)}`),
+
+  async exportIssues(id: number, severity?: Severity): Promise<void> {
+    const res = await fetch(`/api/imports/${id}/issues/export${query({ severity })}`, {
+      credentials: 'include',
+    });
+    if (res.status === 401) {
+      window.location.assign('/login');
+      throw new ApiError(401, 'Please sign in again.');
+    }
+    if (!res.ok) throw new ApiError(res.status, 'Could not download the issues file.');
+    const named = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '');
+    saveFile(await res.blob(), named?.[1] ?? `import-${id}-issues.csv`);
+  },
 
   mapConsultant: (id: number, nameInSheet: string, consultantId: number) =>
     api<ImportSummary>(`/api/imports/${id}/consultant-mappings`, {

@@ -65,7 +65,6 @@ const groups: { label: string; items: NavItem[] }[] = [
         to: '/import',
         label: 'Import',
         icon: IconDownload,
-        // Only an administrator may import (the backend refuses managers).
         roles: ['ADMIN'],
         enabled: features.import,
       },
@@ -74,7 +73,6 @@ const groups: { label: string; items: NavItem[] }[] = [
   },
 ];
 
-/** Pages that are not in the sidebar but still need a breadcrumb. */
 const extraCrumbs: { to: string; group: string; label: string }[] = [
   { to: '/charts', group: 'Workspace', label: 'Charts' },
 ];
@@ -91,7 +89,6 @@ function crumbsFor(pathname: string): { group: string; label: string } | null {
   return match ?? null;
 }
 
-/** "alex.morgan@x.co.za" -> "Alex Morgan"; used when the account has no consultant name. */
 function nameFromEmail(email: string): string {
   const local = email.split('@')[0] ?? email;
   const words = local.split(/[._-]+/).filter(Boolean);
@@ -133,6 +130,9 @@ function UserMenu() {
         <div className="user-menu-list" id="user-menu-list">
           <span className="sr-only">Signed in as {session.email}</span>
           <Link to="/change-password">Change password</Link>
+          <Link to="/new-phone" onClick={() => setOpen(false)}>
+            Move to a new phone
+          </Link>
           <button type="button" onClick={() => void signOut()}>
             Sign out
           </button>

@@ -3,15 +3,11 @@ import * as mock from './mock';
 import { mockMfaEnrol, mockMfaVerified } from './mockMfaState';
 import type { Session } from './types';
 
-/** Answer of POST /api/auth/mfa/setup. */
 export interface MfaSetup {
-  /** The secret in base32, for typing into the app when the QR code cannot be scanned. */
   secret: string;
-  /** What the QR code must contain. */
   otpauthUri: string;
 }
 
-/** Answer of POST /api/auth/mfa/enable. The recovery codes are shown ONCE and never again. */
 export interface MfaEnabled {
   recoveryCodes: string[];
   account: Session;
@@ -22,21 +18,15 @@ const useMock = import.meta.env.VITE_USE_MOCK === 'true';
 const post = <T>(path: string, body: unknown) =>
   api<T>(path, { method: 'POST', body: JSON.stringify(body) });
 
-/** The second sign-in step (contract section 2, "Two-step sign-in"). */
 const real = {
-  /** First time: a new secret for the authenticator app. */
   setup: () => post<MfaSetup>('/api/auth/mfa/setup', {}),
-  /** First time: the code the app now shows. Returns the recovery codes. */
   enable: (code: string) => post<MfaEnabled>('/api/auth/mfa/enable', { code }),
-  /** Every sign-in: the code the app shows now. */
   verify: (code: string) => post<Session>('/api/auth/mfa/verify', { code }),
-  /** Lost phone: one of the recovery codes instead. */
   recover: (recoveryCode: string) => post<Session>('/api/auth/mfa/recovery', { recoveryCode }),
-  /** ADMIN: remove a user's authenticator; they set up a new one at their next sign-in. */
+  change: () => post<MfaSetup>('/api/auth/mfa/change', {}),
+  confirmChange: (code: string) => post<MfaEnabled>('/api/auth/mfa/change/confirm', { code }),
   reset: (userId: number) => api<void>(`/api/users/${userId}/mfa-reset`, { method: 'POST' }),
 };
-
-// ---------- mock: "111111" is a wrong code; any other 6 digits work ----------
 
 const WRONG = new ApiError(400, 'The code is not correct.', {
   type: 'urn:credit-advisory:auth:wrong-code',
@@ -89,6 +79,31 @@ const fake = {
     mockMfaVerified();
     return mockAccount();
   },
+  change: async (): Promise<MfaSetup> => {
+    await mock.delay(300);
+    const secret = 'MFRGGZDFMZTWQ2LKNNWG23TPOBYXE43U';
+    return {
+      secret,
+      otpauthUri: `otpauth://totp/Credit%20Advisory:demo?secret=${secret}&issuer=Credit%20Advisory`,
+    };
+  },
+  confirmChange: async (code: string): Promise<MfaEnabled> => {
+    await mock.delay(400);
+    if (code === '111111') throw WRONG;
+    const recoveryCodes = [
+      'A2BCD-3EFGH',
+      'J4KLM-5NPQR',
+      'S6TUV-7WXYZ',
+      'C8DEF-9GHJK',
+      'M2NPQ-3RSTV',
+      'W4XYZ-5ABCD',
+      'E6FGH-7JKLM',
+      'N8PQR-9STUV',
+      'X2YZA-3BCDE',
+      'F4GHJ-5KLMN',
+    ];
+    return { recoveryCodes, account: await mockAccount() };
+  },
   reset: async (): Promise<void> => {
     await mock.delay(400);
   },
@@ -96,6 +111,5 @@ const fake = {
 
 export const mfa = useMock ? fake : real;
 
-/** True while this session must still do the second step. */
 export const mfaPending = (session: Session) =>
   session.mfa === 'SETUP_REQUIRED' || session.mfa === 'CODE_REQUIRED';

@@ -215,6 +215,19 @@ function Details({ id }: { id: number }) {
   const [issues, setIssues] = useState<PageResponse<ImportIssue> | null>(null);
   const [rows, setRows] = useState<PageResponse<ImportRow> | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
+
+  async function downloadIssues() {
+    setDownloading(true);
+    try {
+      await imports.exportIssues(id, severity || undefined);
+      setError(null);
+    } catch (err) {
+      setError(detailOf(err) ?? 'Could not download the issues file.');
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   useEffect(() => {
     let live = true;
@@ -291,6 +304,16 @@ function Details({ id }: { id: number }) {
             <option value="DUPLICATE">Repeat clients</option>
             <option value="INVALID">Rejected</option>
           </select>
+        )}
+        {tab === 'issues' && (
+          <button
+            type="button"
+            className="btn wi-download"
+            onClick={() => void downloadIssues()}
+            disabled={downloading}
+          >
+            {downloading ? 'Preparing...' : 'Download issues (CSV)'}
+          </button>
         )}
       </div>
 
@@ -450,7 +473,6 @@ function ConsultantMapping({
   );
 }
 
-/** What confirm will do with the CONSULTANT EMAIL column, and who the new clients go to. */
 function ConsultantRegistrationCard({ job }: { job: ImportSummary }) {
   const reg = job.consultantRegistration;
   const asg = job.assignment;
