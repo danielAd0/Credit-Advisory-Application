@@ -4,11 +4,13 @@ import * as real from './real';
 const useMock = import.meta.env.VITE_USE_MOCK === 'true';
 
 export const data = useMock ? mock : real;
+
 export { ApiError } from './http';
 export { accounts } from './accounts';
 export { users } from './users';
 export type { Consultant, ConsultantAccount, UserAccount } from './accounts';
 export { imports } from './imports';
+
 export type {
   ConfirmResult,
   ImportBlocker,
@@ -22,6 +24,7 @@ export type {
   Severity,
   UnmappedConsultant,
 } from './imports';
+
 export { reports } from './reports';
 export type {
   BudgetResponse,
@@ -31,17 +34,21 @@ export type {
   SummaryResponse,
   WeekListItem,
 } from './reports';
+
 export { transactions } from './transactions';
 export type {
   CaptureLists,
+  EditSale,
   NewTransaction,
   Option,
+  SaleDetail,
   SaleFilter,
   SaleRow,
   SalesPage,
   SavedLine,
   SavedTransaction,
 } from './transactions';
+
 export { targets } from './targets';
 export type { NewTarget, Target, TargetsResponse } from './targets';
 export { audit } from './audit';

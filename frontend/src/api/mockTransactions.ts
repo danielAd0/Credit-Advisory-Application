@@ -4,7 +4,9 @@ import type { Product } from './admin';
 import { listEmployers } from './mockCatalogue';
 import type {
   CaptureLists,
+  EditSale,
   NewTransaction,
+  SaleDetail,
   SaleFilter,
   SalesPage,
   SavedTransaction,
@@ -50,7 +52,6 @@ const problem = (status: number, code: string, detail: string) =>
 
 export async function lists(): Promise<CaptureLists> {
   await delay();
-
   const employers = (await listEmployers({ active: true, size: 100 })).items;
   return {
     products,
@@ -79,13 +80,10 @@ let nextId = 1000;
 
 const cents = (n: number) => Math.round(n * 100);
 
-export async function save(t: NewTransaction, key: string): Promise<SavedTransaction> {
-  await delay(400);
-  const again = saved.get(key);
-  if (again) return again;
-
-  if (!clients.some((c) => c.id === t.clientId))
-    throw problem(404, 'client:not-found', 'Client not found.');
+function priceLines(t: {
+  transactionDate: string;
+  lines: { productId: number; amount: number }[];
+}) {
   if (t.lines.length === 0)
     throw problem(400, 'validation', 'Add at least one product with an amount.');
   if (t.transactionDate > new Date().toISOString().slice(0, 10))
@@ -110,15 +108,28 @@ export async function save(t: NewTransaction, key: string): Promise<SavedTransac
     lines.filter(pick).reduce((s, l) => s + cents(l.amount), 0) / 100;
 
   const weekday = new Date(`${t.transactionDate}T00:00:00`).getDay();
+  return {
+    lines,
+    dayOfWeek: weekday === 0 ? 7 : weekday,
+    quotationTotal: sum((l) => l.countsTowardQuotation),
+    bankedTotal: sum((l) => l.countsTowardBanked),
+  };
+}
+
+export async function save(t: NewTransaction, key: string): Promise<SavedTransaction> {
+  await delay(400);
+  const again = saved.get(key);
+  if (again) return again;
+
+  if (!clients.some((c) => c.id === t.clientId))
+    throw problem(404, 'client:not-found', 'Client not found.');
+
   const result: SavedTransaction = {
     id: nextId++,
     clientId: t.clientId,
     consultantId: t.consultantId ?? 1,
     transactionDate: t.transactionDate,
-    dayOfWeek: weekday === 0 ? 7 : weekday,
-    lines,
-    quotationTotal: sum((l) => l.countsTowardQuotation),
-    bankedTotal: sum((l) => l.countsTowardBanked),
+    ...priceLines(t),
   };
   saved.set(key, result);
   return result;
@@ -241,4 +252,64 @@ export async function forClient(clientId: number): Promise<SavedTransaction[]> {
   return [...samples(), ...saved.values()]
     .filter((t) => t.clientId === clientId)
     .sort((a, b) => b.transactionDate.localeCompare(a.transactionDate) || b.id - a.id);
+}
+
+const versions = new Map<number, number>();
+
+const isEditable = (t: SavedTransaction) => t.typedIn !== false && t.replaced !== true;
+
+function find(id: number): SavedTransaction {
+  const found = [...samples(), ...saved.values()].find((t) => t.id === id);
+  if (!found) throw problem(404, 'sale:not-found', 'Sale not found.');
+  return found;
+}
+
+function toDetail(t: SavedTransaction): SaleDetail {
+  return {
+    ...t,
+    amountToClient: null,
+    thirdPartySettlement: null,
+    paymentTermId: null,
+    employerId: null,
+    structureId: null,
+    primaryStructureBudgetList: null,
+    primaryStructureLoanAmount: null,
+    secondaryStructureBudgetList: null,
+    secondaryStructureLoanAmount: null,
+    typedIn: t.typedIn !== false,
+    replaced: t.replaced === true,
+    editable: isEditable(t),
+    version: versions.get(t.id) ?? 0,
+  };
+}
+
+function mustBeEditable(t: SavedTransaction, version: number) {
+  if (t.typedIn === false)
+    throw problem(409, 'sale:imported', 'This sale came from a weekly spreadsheet.');
+  if (t.replaced) throw problem(409, 'sale:replaced', "This sale's week has been imported since.");
+  if ((versions.get(t.id) ?? 0) !== version)
+    throw problem(409, 'conflict:stale-version', 'Someone else saved this sale first. Reload it.');
+}
+
+export async function get(id: number): Promise<SaleDetail> {
+  await delay();
+  return toDetail(find(id));
+}
+
+export async function update(id: number, body: EditSale): Promise<SaleDetail> {
+  await delay(400);
+  const sale = find(id);
+  mustBeEditable(sale, body.version);
+  Object.assign(sale, { transactionDate: body.transactionDate, ...priceLines(body) });
+  versions.set(id, body.version + 1);
+  return toDetail(sale);
+}
+
+export async function remove(id: number, version: number): Promise<undefined> {
+  await delay(400);
+  const sale = find(id);
+  mustBeEditable(sale, version);
+  for (const [key, t] of saved) if (t.id === id) saved.delete(key);
+  if (sampleSales) sampleSales = sampleSales.filter((t) => t.id !== id);
+  return undefined;
 }

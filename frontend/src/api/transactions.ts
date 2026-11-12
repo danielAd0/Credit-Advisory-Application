@@ -41,10 +41,26 @@ export interface SavedTransaction {
   lines: SavedLine[];
   quotationTotal: number;
   bankedTotal: number;
-  weekStarting?: number;
+  weekStarting?: string | null;
   replaced?: boolean;
   typedIn?: boolean;
 }
+
+export interface SaleDetail extends SavedTransaction {
+  amountToClient: number | null;
+  thirdPartySettlement: number | null;
+  paymentTermId: number | null;
+  employerId: number | null;
+  structureId: number | null;
+  primaryStructureBudgetList: string | null;
+  primaryStructureLoanAmount: number | null;
+  secondaryStructureBudgetList: string | null;
+  secondaryStructureLoanAmount: number | null;
+  editable: boolean;
+  version: number;
+}
+
+export type EditSale = Omit<NewTransaction, 'clientId' | 'consultantId'> & { version: number };
 
 export interface SaleRow extends SavedTransaction {
   clientName: string;
@@ -112,9 +128,16 @@ const real = {
     return api<SalesPage>(`/api/transactions?${q.toString()}`);
   },
 
-  /** One client's sales, newest first, at most 200. A consultant can only ask for their own clients. */
   forClient: (clientId: number) =>
     api<SavedTransaction[]>(`/api/transactions?clientId=${clientId}`),
+
+  get: (id: number) => api<SaleDetail>(`/api/transactions/${id}`),
+
+  update: (id: number, body: EditSale) =>
+    api<SaleDetail>(`/api/transactions/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+
+  remove: (id: number, version: number) =>
+    api<undefined>(`/api/transactions/${id}?version=${version}`, { method: 'DELETE' }),
 
   save: (t: NewTransaction, key: string) =>
     api<SavedTransaction>('/api/transactions', {

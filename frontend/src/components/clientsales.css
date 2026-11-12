@@ -1,36 +1,59 @@
-.cds {
-  margin-top: 1rem;
-}
-
-.cds .table-wrap {
-  border: 0;
-  border-radius: 0;
-}
-
-.cds-table td {
-  vertical-align: top;
-}
-
-.cds-table td.cds-products {
-  min-width: 15rem;
-  white-space: normal;
-}
-
-.cds-lines {
-  display: grid;
-  gap: 0.15rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  font-size: 0.9rem;
-}
-
-.cds-lines li {
+.cds-actions {
   display: flex;
-  justify-content: space-between;
-  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
 }
 
-.cds-muted td {
-  color: var(--muted);
+.cds-edit td {
+  background: var(--surface);
+}
+
+.se {
+  display: grid;
+  gap: 0.9rem;
+  padding: 0.5rem 0;
+  max-width: 34rem;
+}
+
+.se-field {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.se-field label,
+.se-lines label {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.se input,
+.se select {
+  height: 2.5rem;
+  padding: 0 0.75rem;
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.se input:focus,
+.se select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(255, 90, 0, 0.25);
+}
+
+.se-lines {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 8rem auto;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.se-actions {
+  display: flex;
+  gap: 0.6rem;
 }
