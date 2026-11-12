@@ -10,6 +10,7 @@ import {
   type ConsultantSummary,
   type NewTransaction,
   type Product,
+  type SaleDetail,
   type SavedTransaction,
 } from '../api';
 import { hasAnyRole, useSession } from '../auth/useAuth';
@@ -79,7 +80,6 @@ interface Extras {
   secondaryLoan: string;
 }
 
-/** Fixed-price products start with their standard price. The consultant can change or clear it. */
 const PREFILLED = ['INSURANCE', 'MAFORI_CARD'];
 
 function prefill(products: Product[]): Partial<Record<number, string>> {
@@ -89,6 +89,8 @@ function prefill(products: Product[]): Partial<Record<number, string>> {
       out[p.id] = p.standardPrice.toFixed(2);
   return out;
 }
+
+const moneyText = (n: number | null): string => (n === null ? '' : n.toFixed(2));
 
 const NO_EXTRAS: Extras = {
   amountToClient: '',
@@ -102,10 +104,6 @@ const NO_EXTRAS: Extras = {
   secondaryLoan: '',
 };
 
-/**
- * The sale's employer starts as the client's own employer. A deactivated employer is not in the
- * dropdown, so it starts empty then.
- */
 const employerOf = (c: ClientSummary): string =>
   c.employer && c.employer.active ? String(c.employer.id) : '';
 
@@ -225,10 +223,12 @@ export default function ConsultantActionsPage() {
   const [key, setKey] = useState(() => crypto.randomUUID());
   const [notice, setNotice] = useState<string | null>(null);
 
-  // Opened from the Clients page ("Capture sale"): /consultant-actions?clientId=12.
-  // The internal client number only, never the ID number.
+  const [editing, setEditing] = useState<SaleDetail | null>(null);
+  const [blocked, setBlocked] = useState<string | null>(null);
+
   const [params] = useSearchParams();
   const wanted = Number(params.get('clientId')) || null;
+  const editId = Number(params.get('saleId')) || null;
 
   useEffect(() => {
     let live = true;
@@ -307,6 +307,48 @@ export default function ConsultantActionsPage() {
     };
   }, [wanted, pickClient]);
 
+  const ready = load.kind === 'ready';
+
+  useEffect(() => {
+    if (!editId || !ready) return;
+    let live = true;
+    transactions
+      .get(editId)
+      .then(async (sale) => {
+        const c = await data.getClient(sale.clientId);
+        if (!live) return;
+        const amountsOfSale: Partial<Record<number, string>> = {};
+        for (const l of sale.lines) amountsOfSale[l.productId] = l.amount.toFixed(2);
+        const gone = sale.lines.filter((l) => !products.some((p) => p.id === l.productId));
+        pickClient(c);
+        setConsultantId(String(sale.consultantId));
+        setDate(sale.transactionDate);
+        setAmounts(amountsOfSale);
+        setExtras({
+          amountToClient: moneyText(sale.amountToClient),
+          thirdPartySettlement: moneyText(sale.thirdPartySettlement),
+          paymentTermId: sale.paymentTermId === null ? '' : String(sale.paymentTermId),
+          employerId: sale.employerId === null ? '' : String(sale.employerId),
+          structureId: sale.structureId === null ? '' : String(sale.structureId),
+          primaryList: sale.primaryStructureBudgetList ?? '',
+          primaryLoan: moneyText(sale.primaryStructureLoanAmount),
+          secondaryList: sale.secondaryStructureBudgetList ?? '',
+          secondaryLoan: moneyText(sale.secondaryStructureLoanAmount),
+        });
+        setEditing(sale);
+        if (!sale.editable)
+          setBlocked('This sale can no longer be changed: its week has been imported.');
+        else if (gone.length > 0)
+          setBlocked(
+            `This sale includes ${gone.map((l) => l.name).join(', ')}, which is no longer on the product list, so it cannot be changed here.`,
+          );
+      })
+      .catch(() => live && setNotice('That sale could not be opened.'));
+    return () => {
+      live = false;
+    };
+  }, [editId, ready, products, pickClient]);
+
   function validate(): Errors {
     const e: Errors = {};
     if (!client) e.client = 'Choose a client first.';
@@ -343,14 +385,12 @@ export default function ConsultantActionsPage() {
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (saving || !client) return;
+    if (saving || !client || blocked) return;
     setFailure(null);
     const found = validate();
     setErrors(found);
     if (Object.keys(found).length > 0) return;
-    const body: NewTransaction = {
-      clientId: client.id,
-      ...(manager ? { consultantId: Number(consultantId) } : {}),
+    const details = {
       transactionDate: date,
       lines: lines.map((l) => ({ productId: l.product.id, amount: l.cents / 100 })),
       amountToClient: money(extras.amountToClient),
@@ -365,7 +405,16 @@ export default function ConsultantActionsPage() {
     };
     setSaving(true);
     try {
-      setSaved(await transactions.save(body, key));
+      if (editing) {
+        setSaved(await transactions.update(editing.id, { version: editing.version, ...details }));
+      } else {
+        const body: NewTransaction = {
+          clientId: client.id,
+          ...(manager ? { consultantId: Number(consultantId) } : {}),
+          ...details,
+        };
+        setSaved(await transactions.save(body, key));
+      }
     } catch (err) {
       setFailure(detailOf(err) ?? 'The sale could not be saved. Nothing was stored. Try again.');
     } finally {
@@ -375,6 +424,9 @@ export default function ConsultantActionsPage() {
 
   function again(keepClient: boolean) {
     setSaved(null);
+    setEditing(null);
+    setBlocked(null);
+    if (editing) setDate(today);
     setAmounts(prefill(products));
     setExtras(keepClient && client ? { ...NO_EXTRAS, employerId: employerOf(client) } : NO_EXTRAS);
     setErrors({});
@@ -398,9 +450,9 @@ export default function ConsultantActionsPage() {
   if (saved && client) {
     return (
       <div className="ca">
-        <h1>Consultant actions</h1>
+        <h1>{editing ? 'Edit sale' : 'Consultant actions'}</h1>
         <div className="ca-card ca-done" role="status">
-          <h2>Sale saved</h2>
+          <h2>{editing ? 'Sale updated' : 'Sale saved'}</h2>
           <p>
             {client.firstName} {client.lastName}, {weekday(saved.transactionDate)}{' '}
             {saved.transactionDate}.
@@ -422,7 +474,16 @@ export default function ConsultantActionsPage() {
             </span>
           </p>
           <div className="ca-done-actions">
-            <button type="button" className="btn primary" onClick={() => again(true)}>
+            {editing && (
+              <Link className="btn primary" to={`/clients/${client.id}`}>
+                Back to {client.firstName} {client.lastName}
+              </Link>
+            )}
+            <button
+              type="button"
+              className={editing ? 'btn' : 'btn primary'}
+              onClick={() => again(true)}
+            >
               Capture another sale for this client
             </button>
             <button type="button" className="btn" onClick={() => again(false)}>
@@ -481,8 +542,12 @@ export default function ConsultantActionsPage() {
 
   return (
     <div className="ca">
-      <h1>Consultant actions</h1>
-      <p className="muted">Capture a client&rsquo;s sale. It goes straight into the reports.</p>
+      <h1>{editing ? 'Edit sale' : 'Consultant actions'}</h1>
+      <p className="muted">
+        {editing
+          ? 'Change this sale. The client stays the same. The reports update straight away.'
+          : "Capture a client's sale. It goes straight into the reports."}
+      </p>
 
       <form className="ca-grid" onSubmit={submit} noValidate>
         <div className="ca-main">
@@ -494,6 +559,11 @@ export default function ConsultantActionsPage() {
           {notice && !client && (
             <p className="alert error" role="alert">
               {notice}
+            </p>
+          )}
+          {blocked && (
+            <p className="alert error" role="alert">
+              {blocked} {client && <Link to={`/clients/${client.id}`}>Back to the client</Link>}
             </p>
           )}
 
@@ -511,9 +581,11 @@ export default function ConsultantActionsPage() {
                   </span>
                 </p>
                 <RevealIdNumber clientId={client.id} masked={client.idNumberMasked} />
-                <button type="button" className="btn" onClick={changeClient}>
-                  Change client
-                </button>
+                {!editing && (
+                  <button type="button" className="btn" onClick={changeClient}>
+                    Change client
+                  </button>
+                )}
               </div>
             ) : (
               <ClientPicker onPick={pickClient} />
@@ -679,8 +751,12 @@ export default function ConsultantActionsPage() {
             </span>
           </p>
           <p className="ca-hint">The server checks these totals when you submit.</p>
-          <button type="submit" className="btn primary ca-submit" disabled={saving}>
-            {saving ? 'Saving...' : 'Submit transaction'}
+          <button
+            type="submit"
+            className="btn primary ca-submit"
+            disabled={saving || blocked !== null}
+          >
+            {saving ? 'Saving...' : editing ? 'Save changes' : 'Submit transaction'}
           </button>
         </aside>
       </form>

@@ -1,6 +1,7 @@
-import { Fragment, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { detailOf, transactions, type SavedTransaction } from '../api';
-import SaleEditor from './SaleEditor';
+import { hasAnyRole, useSession } from '../auth/useAuth';
 import './clientsales.css';
 
 const rand = (n: number) =>
@@ -23,13 +24,17 @@ function source(s: SavedTransaction): { label: string; muted: boolean } {
 const canChange = (s: SavedTransaction) => s.typedIn !== false && s.replaced !== true;
 
 export default function ClientSales({ clientId }: { clientId: number }) {
+  const session = useSession();
+
+  const consultant = hasAnyRole(session, ['CONSULTANT']);
+  const manager = hasAnyRole(session, ['ADMIN', 'MANAGER']);
+
   const [loaded, setLoaded] = useState<{
     id: number;
     sales: SavedTransaction[] | null;
     error: string | null;
   } | null>(null);
   const [reload, setReload] = useState(0);
-  const [editing, setEditing] = useState<number | null>(null);
   const [asking, setAsking] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -55,12 +60,6 @@ export default function ClientSales({ clientId }: { clientId: number }) {
 
   const current = loaded && loaded.id === clientId ? loaded : null;
 
-  function saved() {
-    setEditing(null);
-    setActionError(null);
-    setReload((n) => n + 1);
-  }
-
   async function remove(id: number) {
     setBusy(true);
     setActionError(null);
@@ -80,6 +79,8 @@ export default function ClientSales({ clientId }: { clientId: number }) {
       setBusy(false);
     }
   }
+
+  const showActions = consultant || manager;
 
   return (
     <section className="cd-card cds" aria-labelledby="cds-h">
@@ -109,60 +110,53 @@ export default function ClientSales({ clientId }: { clientId: number }) {
                   <th className="num">Quotation</th>
                   <th className="num">Banked</th>
                   <th>Source</th>
-                  <th>
-                    <span className="sr-only">Actions</span>
-                  </th>
+                  {showActions && (
+                    <th>
+                      <span className="sr-only">Actions</span>
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody>
                 {current.sales.map((s) => {
                   const from = source(s);
                   return (
-                    <Fragment key={s.id}>
-                      <tr className={from.muted ? 'cds-muted' : undefined}>
-                        <td>{day(s.transactionDate)}</td>
-                        <td className="cds-products">
-                          <ul className="cds-lines">
-                            {s.lines.map((l) => (
-                              <li key={l.productId}>
-                                <span>{l.name}</span>
-                                <span className="muted">{rand(l.amount)}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </td>
-                        <td className="num">{rand(s.quotationTotal)}</td>
-                        <td className="num">{rand(s.bankedTotal)}</td>
-                        <td>{from.label}</td>
+                    <tr key={s.id} className={from.muted ? 'cds-muted' : undefined}>
+                      <td>{day(s.transactionDate)}</td>
+                      <td className="cds-products">
+                        <ul className="cds-lines">
+                          {s.lines.map((l) => (
+                            <li key={l.productId}>
+                              <span>{l.name}</span>
+                              <span className="muted">{rand(l.amount)}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </td>
+                      <td className="num">{rand(s.quotationTotal)}</td>
+                      <td className="num">{rand(s.bankedTotal)}</td>
+                      <td>{from.label}</td>
+                      {showActions && (
                         <td>
                           <div className="cds-actions">
-                            {canChange(s) && asking !== s.id && (
-                              <>
-                                <button
-                                  type="button"
-                                  className="btn"
-                                  onClick={() => {
-                                    setEditing(editing === s.id ? null : s.id);
-                                    setAsking(null);
-                                    setActionError(null);
-                                  }}
-                                >
-                                  {editing === s.id ? 'Close' : 'Edit'}
-                                </button>
-                                <button
-                                  type="button"
-                                  className="btn"
-                                  onClick={() => {
-                                    setAsking(s.id);
-                                    setEditing(null);
-                                    setActionError(null);
-                                  }}
-                                >
-                                  Delete
-                                </button>
-                              </>
+                            {canChange(s) && consultant && (
+                              <Link className="btn" to={`/consultant-actions?saleId=${s.id}`}>
+                                Edit
+                              </Link>
                             )}
-                            {asking === s.id && (
+                            {canChange(s) && manager && asking !== s.id && (
+                              <button
+                                type="button"
+                                className="btn"
+                                onClick={() => {
+                                  setAsking(s.id);
+                                  setActionError(null);
+                                }}
+                              >
+                                Delete
+                              </button>
+                            )}
+                            {manager && asking === s.id && (
                               <>
                                 <span>Delete this sale?</span>
                                 <button
@@ -185,19 +179,8 @@ export default function ClientSales({ clientId }: { clientId: number }) {
                             )}
                           </div>
                         </td>
-                      </tr>
-                      {editing === s.id && (
-                        <tr className="cds-edit">
-                          <td colSpan={6}>
-                            <SaleEditor
-                              saleId={s.id}
-                              onSaved={saved}
-                              onCancel={() => setEditing(null)}
-                            />
-                          </td>
-                        </tr>
                       )}
-                    </Fragment>
+                    </tr>
                   );
                 })}
               </tbody>
