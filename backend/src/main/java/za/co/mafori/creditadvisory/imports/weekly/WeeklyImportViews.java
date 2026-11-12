@@ -21,7 +21,55 @@ public final class WeeklyImportViews {
                         List<DaySummary> days, List<UnmappedConsultant> unmappedConsultants, Long weekImportedByJobId,
                         boolean replaceRequired, boolean canConfirm, List<String> blockers,
                         String reconciliationStatus, int reportDifferences,
-                        int nameDifferences, int typedInSales) {
+                        int nameDifferences, int typedInSales, ConsultantRegistration consultantRegistration,
+                        AssignmentPreview assignment) {
+        }
+
+        /**
+         * What confirm will do with the consultants in the sheet
+         * (docs/consultant-onboarding.md). Only filled while the import is PREVIEWED.
+         *
+         * @param namesInSheet       distinct consultant names in the sheet
+         * @param matchedByName      names that match a consultant by name or alias (no email used)
+         * @param matchedByEmail     names matched through their email
+         * @param toRegister         new consultants confirm will create
+         * @param emailsToAdd        existing consultants without an email who get the sheet's email
+         * @param conflicts          names that cannot be matched safely: they block confirm
+         */
+        public record ConsultantRegistration(int namesInSheet, int matchedByName, int matchedByEmail,
+                        List<ConsultantToRegister> toRegister, List<ConsultantEmailToAdd> emailsToAdd,
+                        List<ConsultantConflict> conflicts) {
+
+                public static final ConsultantRegistration NONE = new ConsultantRegistration(0, 0, 0, List.of(),
+                                List.of(), List.of());
+        }
+
+        public record ConsultantToRegister(String fullName, String email, List<String> otherSpellings, int rows,
+                        List<SimilarConsultant> similarConsultants) {
+        }
+
+        public record ConsultantEmailToAdd(long consultantId, String consultantCode, String fullName, String email,
+                        int rows) {
+        }
+
+        public record ConsultantConflict(String nameInSheet, String email, String reason, int rows) {
+        }
+
+        /**
+         * New clients in the sheet and who they will be given to on confirm.
+         * Existing clients keep their consultant.
+         *
+         * @param newClientRows              rows that create a client
+         * @param willBeAssigned             to an active consultant (existing or registered by this import)
+         * @param noConsultant               the row has no consultant: the client stays unassigned
+         * @param consultantNotActive        the consultant is inactive or suspended: unassigned
+         * @param waitingForConsultant       the name is unmapped or in conflict: resolve it first
+         * @param existingClientsWithOtherConsultant existing clients assigned to someone else (not changed)
+         */
+        public record AssignmentPreview(int newClientRows, int willBeAssigned, int noConsultant,
+                        int consultantNotActive, int waitingForConsultant, long existingClientsWithOtherConsultant) {
+
+                public static final AssignmentPreview NONE = new AssignmentPreview(0, 0, 0, 0, 0, 0);
         }
 
         public record DaySummary(String sheetName, int dayOfWeek, LocalDate date, int rows, int rejected,
@@ -74,7 +122,8 @@ public final class WeeklyImportViews {
         public record ConfirmResult(long importJobId, long reportingWeekId, LocalDate weekStarting, int transactions,
                         int productLines, int extraValues, int newClients, int clientsAssigned, int employersCreated,
                         int structuresCreated, int paymentTermsCreated, int staleRows, Long replacedImportJobId,
-                        int supersededTransactions, int replacedTypedInSales) {
+                        int supersededTransactions, int replacedTypedInSales, int consultantsRegistered,
+                        int consultantEmailsAdded, int consultantAliasesAdded, int newClientsUnassigned) {
         }
 
         public record ConfirmRequest(

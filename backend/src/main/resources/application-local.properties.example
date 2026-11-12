@@ -12,3 +12,11 @@ app.mfa.required=false
 # Local admin created on start-up (local profile only)
 app.dev.admin-email=admin@local.test
 app.dev.admin-password=Local-Admin-Pass-2026
+
+# Consultant login emails (docs/consultant-onboarding.md). Without the MAIL settings the
+# onboarding page works but "Send login details" says email is not set up.
+app.onboarding.login-url=http://localhost:5173
+#app.mail.graph.tenant-id=
+#app.mail.graph.client-id=
+#app.mail.graph.client-secret=
+#app.mail.sender=no-reply@mafori.co.za
