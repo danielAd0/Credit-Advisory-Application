@@ -52,6 +52,30 @@
 .ac-field input[aria-invalid='true'] {
   border-color: #c0392b;
 }
+/* A tick box ("Also an administrator", "Counts toward banked"): a small box on the same line as its
+   label, not a full-width input like the rules above would make it. */
+.ac-field label:has(> input[type='checkbox']) {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+.ac-field input[type='checkbox'] {
+  width: 1.1rem;
+  height: 1.1rem;
+  margin: 0;
+  padding: 0;
+  flex: none;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.ac-field input[type='checkbox']:focus {
+  box-shadow: none;
+}
+.ac-field input[type='checkbox']:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 .ac-hint,
 .ac-err {
   margin: 0.35rem 0 0;

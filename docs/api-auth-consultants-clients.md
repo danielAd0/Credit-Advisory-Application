@@ -129,6 +129,7 @@ Every successful change below writes one row to `audit_logs` in the **same trans
 | `MFA_RECOVERY_CODE_USED` | user | `remaining` (unused recovery codes left) |
 | `MFA_RECOVERY_CODE_FAILED` | user | `locked` - a wrong or already-used recovery code |
 | `MFA_RESET` | user (the one reset) | `hadMfa`; the actor is the admin |
+| `MFA_CHANGED` | user | `recoveryCodes` (how many new ones were created - never the codes); the user moved two-step sign-in to a new phone |
 | `ID_REVEAL_LIMIT_REACHED` | user | `limit`, `window` - the user asked for more full ID numbers in an hour than allowed; written once per hour |
 | `FIRST_ADMIN_CREATED`            | user                         | `email` (no actor: created at start-up on a new server, see README "Running in production")                                           |
 | `SIGN_IN_RATE_LIMITED`           | -                            | `address`, `failures`, `window` (never the emails tried)                                                                              |
@@ -244,7 +245,7 @@ Every other request returns `403` with type `urn:credit-advisory:auth:mfa-requir
 
 **Every later sign-in (`CODE_REQUIRED`):** `POST /api/auth/mfa/verify` with `{"code": "123456"}` → `200` the me object with `mfa` `VERIFIED`.
 
-**Lost phone:** `POST /api/auth/mfa/recovery` with `{"recoveryCode": "K7QM2-XW4PD"}` → `200` the me object. Dashes, spaces and lower case are fine. If no recovery codes are left either, an admin resets the user's MFA (`POST /api/users/{id}/mfa-reset`, section 6) and the user sets up the app again.
+**Lost phone:** `POST /api/auth/mfa/recovery` with `{"recoveryCode": "K7QM2-XW4PD"}` → `200` the me object. Dashes, spaces and lower case are fine. Once signed in, the user moves two-step sign-in to their new phone themselves ("New phone" below). If no recovery codes are left either, an admin resets the user's MFA (`POST /api/users/{id}/mfa-reset`, section 6) and the user sets up the app again.
 
 **Rules**
 
@@ -260,6 +261,34 @@ Every other request returns `403` with type `urn:credit-advisory:auth:mfa-requir
 | 400 | `code` / `recoveryCode` missing; `urn:credit-advisory:auth:wrong-code` - wrong, already used, or not 6 digits |
 | 401 | not signed in; `urn:credit-advisory:auth:account-locked` - too many wrong codes, this session has been signed out |
 | 409 | `urn:credit-advisory:auth:mfa-not-pending` - this session already finished the second step; `urn:credit-advisory:auth:mfa-already-set-up` - `/setup` or `/enable` when an authenticator already exists (use `/verify`); `urn:credit-advisory:auth:mfa-setup-not-started` - `/enable` before `/setup`; `urn:credit-advisory:auth:mfa-setup-required` - `/verify` or `/recovery` before any authenticator was set up |
+
+### New phone: moving two-step sign-in
+
+For a user who is **fully signed in** (both steps done, for example with a recovery code after losing their phone, or
+on the old phone before swapping it). A session that has only passed the password gets `403 auth:mfa-required`.
+
+1. `POST /api/auth/reauthenticate` with their password (section 2): the next step is only allowed for 5 minutes
+   after it, so an open, unattended session is not enough. Without it: `403 auth:reauthentication-required`.
+2. `POST /api/auth/mfa/change` (no body) → `200 {"secret": "...", "otpauthUri": "otpauth://totp/..."}`, the same
+   shape as `/setup`: show the QR code for the new phone to scan. Nothing changes yet; the old phone still works.
+3. `POST /api/auth/mfa/change/confirm` with `{"code": "123456"}` (the code the **new** phone shows) →
+   `200 {"recoveryCodes": [...10 new codes], "account": {...the me object}}`.
+
+After step 3:
+
+- the new phone replaces the old one, and its codes are the only ones accepted;
+- the old recovery codes stop working. **Show the 10 new ones once**, as after the first set-up;
+- every other session of the user is signed out; this one stays signed in (with a new session id);
+- audited as `MFA_CHANGED`.
+
+A wrong code at step 3 changes nothing and does not count toward the lockout (the session already passed both
+steps); the user can try again with the next code.
+
+| Status | When |
+|---|---|
+| 400 | `code` missing; `urn:credit-advisory:auth:wrong-code` - not the code the new phone shows now |
+| 403 | `urn:credit-advisory:auth:mfa-required` - the second sign-in step is not done yet; `urn:credit-advisory:auth:reauthentication-required` - password not re-entered in the last 5 minutes; `urn:credit-advisory:auth:password-change-required` - choose a new password first |
+| 409 | `urn:credit-advisory:auth:mfa-change-not-started` - `/change/confirm` before `/change`; `urn:credit-advisory:auth:mfa-setup-required` - no authenticator set up yet (use the first-time set-up) |
 
 ### Password change required
 
@@ -334,8 +363,8 @@ For the next **5 minutes** (`app.auth.password-confirmation-window`), `GET /api/
 ### Account recovery (FR-01) - decision
 
 **Decided:** there is no self-service "Forgot password" link. An administrator recovers accounts, in the
-application, after checking who is asking. A user who lost their phone can still sign in alone, with a recovery
-code.
+application, after checking who is asking. A user who lost their phone but kept their recovery codes sorts it
+out alone: a recovery code to sign in, then the new phone.
 
 **Why:**
 
@@ -352,7 +381,7 @@ code.
 |---|---|---|
 | Locked out (5 wrong passwords or codes) | nobody, or an admin | opens by itself after 15 minutes; an admin can unlock at once (`POST /api/users/{id}/unlock`) |
 | Forgot password | an admin | sets a temporary password (`POST /api/users/{id}/password-reset`); every session of the user is signed out and they must choose their own password at the next sign-in. Audited `USER_PASSWORD_RESET` |
-| Lost phone, still has recovery codes | the user, then an admin | signs in with a recovery code instead of the app's code (`POST /api/auth/mfa/recovery`). Each code works once. Audited `MFA_RECOVERY_CODE_USED`. A user cannot set up the app on a new phone themselves yet (`/setup` answers `409 mfa-already-set-up`), so they ask an admin for the MFA reset below |
+| Lost phone, still has recovery codes | the user | signs in with a recovery code instead of the app's code (`POST /api/auth/mfa/recovery`), then moves two-step sign-in to the new phone ("New phone" above): new phone, 10 new recovery codes, other sessions signed out. Audited `MFA_RECOVERY_CODE_USED` and `MFA_CHANGED` |
 | Lost phone **and** recovery codes | an admin | resets two-step sign-in (`POST /api/users/{id}/mfa-reset`); the user sets up the app again at the next sign-in. Audited `MFA_RESET` |
 | The **only** administrator is stuck | IT, with the database | the break-glass steps in `it-handover.md` section 9. To avoid needing them, keep **at least two** administrator accounts |
 

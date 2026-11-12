@@ -105,10 +105,7 @@ public class MfaService {
             throw ApiException.conflict("auth:mfa-already-set-up", "Already set up",
                     "An authenticator is already set up for this account. Enter its code instead.");
         }
-        byte[] secret = new byte[SECRET_BYTES];
-        random.nextBytes(secret);
-        String base32 = Base32.encode(secret);
-        return new Setup(secret, base32, otpauthUri(principal.email(), base32));
+        return newSecret(principal.email());
     }
 
     /**
@@ -129,6 +126,46 @@ public class MfaService {
         store.enrol(userId, cipher.encrypt(pendingSecret), step.getAsLong(),
                 recoveryCodes.stream().map(RecoveryCodes::hash).toList());
         audit.record("MFA_ENABLED", "USER", userId, meta("recoveryCodes", recoveryCodes.size()));
+        return new Enabled(Result.OK, recoveryCodes);
+    }
+
+    // ---------- moving to a new phone ----------
+
+    /**
+     * A signed-in user with a new phone: a fresh secret for it. The old
+     * authenticator keeps working until confirmChange() succeeds.
+     */
+    @Transactional(readOnly = true)
+    public Setup startChange(AppUserPrincipal principal) {
+        if (!store.isEnrolled(principal.userId())) {
+            throw ApiException.conflict("auth:mfa-setup-required", "Set-up required",
+                    "No authenticator is set up for this account yet, so there is nothing to move.");
+        }
+        return newSecret(principal.email());
+    }
+
+    /**
+     * Replaces the authenticator with the new one if the code proves the new
+     * phone was set up correctly. The old recovery codes stop working and 10 new
+     * ones are made, and every session of the user is signed out (the caller
+     * keeps its own). A wrong code does not count toward the lockout, as in
+     * enable(): the session already passed both steps.
+     */
+    @Transactional
+    public Enabled confirmChange(long userId, byte[] newSecret, String code) {
+        if (!store.isEnrolled(userId)) {
+            return new Enabled(Result.NOT_SET_UP, List.of());
+        }
+        OptionalLong step = Totp.matchingStep(newSecret, normalise(code), Instant.now(clock));
+        if (step.isEmpty()) {
+            return new Enabled(Result.WRONG_CODE, List.of());
+        }
+        List<String> recoveryCodes = RecoveryCodes.generate();
+        store.remove(userId); // the old recovery codes go with it
+        store.enrol(userId, cipher.encrypt(newSecret), step.getAsLong(),
+                recoveryCodes.stream().map(RecoveryCodes::hash).toList());
+        store.signOutEverywhere(userId);
+        audit.record("MFA_CHANGED", "USER", userId, meta("recoveryCodes", recoveryCodes.size()));
         return new Enabled(Result.OK, recoveryCodes);
     }
 
@@ -203,6 +240,13 @@ public class MfaService {
             return Result.LOCKED;
         }
         return Result.WRONG_CODE;
+    }
+
+    private Setup newSecret(String email) {
+        byte[] secret = new byte[SECRET_BYTES];
+        random.nextBytes(secret);
+        String base32 = Base32.encode(secret);
+        return new Setup(secret, base32, otpauthUri(email, base32));
     }
 
     /** "123 456" -> "123456". */
