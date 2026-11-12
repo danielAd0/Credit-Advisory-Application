@@ -35,7 +35,6 @@ const STATUS_LABEL: Record<InviteStatus, string> = {
 
 const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString('en-ZA') : '-');
 
-/** Asks for the admin's own password again before passwords are made or sent. */
 function ConfirmPassword({
   onConfirmed,
   onCancel,
@@ -104,18 +103,18 @@ function NeedsAttention({ onChanged }: { onChanged: () => void }) {
   const [email, setEmail] = useState<Partial<Record<number, string>>>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<number | null>(null);
-
-  const load = useCallback(async () => {
-    try {
-      setList(await onboarding.blocked(page, SIZE));
-    } catch {
-      setError('Could not load the consultants that need attention.');
-    }
-  }, [page]);
+  const [refresh, setRefresh] = useState(0);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    let live = true;
+    onboarding
+      .blocked(page, SIZE)
+      .then((r) => live && setList(r))
+      .catch(() => live && setError('Could not load the consultants that need attention.'));
+    return () => {
+      live = false;
+    };
+  }, [page, refresh]);
 
   async function save(id: number) {
     const value = email[id]?.trim();
@@ -125,7 +124,7 @@ function NeedsAttention({ onChanged }: { onChanged: () => void }) {
     try {
       await onboarding.setConsultantEmail(id, value);
       setEmail({ ...email, [id]: '' });
-      await load();
+      setRefresh((n) => n + 1);
       onChanged();
     } catch (err) {
       setError(detailOf(err) ?? 'Could not save the email.');
@@ -360,10 +359,20 @@ export default function OnboardingPage() {
   }, []);
 
   useEffect(() => {
-    void reload();
-  }, [reload]);
+    let live = true;
+    onboarding
+      .summary()
+      .then((s) => {
+        if (!live) return;
+        setSummary(s);
+        setRefreshKey((k) => k + 1);
+      })
+      .catch(() => live && setLoadError('Could not load consultant logins.'));
+    return () => {
+      live = false;
+    };
+  }, []);
 
-  // While emails are going out, refresh every 5 seconds.
   const sending = summary ? summary.invites.QUEUED + summary.invites.SENDING > 0 : false;
   useEffect(() => {
     if (!sending) return;
@@ -371,7 +380,6 @@ export default function OnboardingPage() {
     return () => clearInterval(t);
   }, [sending, reload]);
 
-  /** Runs an action; if the server wants the password first, asks for it and runs it again. */
   async function withPassword(action: () => Promise<void>) {
     setNotice(null);
     try {
@@ -394,7 +402,6 @@ export default function OnboardingPage() {
     let made = 0;
     const left: GenerateResult['skipped'] = [];
     try {
-      // 25 per call; keep going while the server makes some and some remain.
       for (;;) {
         const r = await onboarding.generate();
         made += r.created;
