@@ -235,7 +235,6 @@
   max-width: 34rem;
 }
 
-/* Not .ca-actions: clientsactions.css uses that name for the Clients table cell. */
 .ca-done-actions {
   display: flex;
   flex-wrap: wrap;
@@ -263,4 +262,16 @@
     grid-template-columns: minmax(0, 1fr);
     gap: 0.1rem;
   }
+}
+
+.ca-retired-tag {
+  display: inline-block;
+  margin-left: 0.35rem;
+  padding: 0.5rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent-ink);
+  vertical-align: middle;
+  background: var(--accent-soft);
+  border-radius: 999px;
 }

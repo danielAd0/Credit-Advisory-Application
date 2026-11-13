@@ -11,6 +11,7 @@ import {
   type NewTransaction,
   type Product,
   type SaleDetail,
+  type SavedLine,
   type SavedTransaction,
 } from '../api';
 import { hasAnyRole, useSession } from '../auth/useAuth';
@@ -67,6 +68,11 @@ function groupProducts(products: Product[]) {
 }
 
 type Errors = Partial<Record<string, string>>;
+
+interface Entry {
+  product: Pick<Product, 'id' | 'name' | 'countsTowardQuotation' | 'countsTowardBanked'>;
+  cents: number;
+}
 
 interface Extras {
   amountToClient: string;
@@ -225,6 +231,7 @@ export default function ConsultantActionsPage() {
 
   const [editing, setEditing] = useState<SaleDetail | null>(null);
   const [blocked, setBlocked] = useState<string | null>(null);
+  const [retired, setRetired] = useState<SavedLine[]>([]);
 
   const [params] = useSearchParams();
   const wanted = Number(params.get('clientId')) || null;
@@ -260,11 +267,29 @@ export default function ConsultantActionsPage() {
   const products = useMemo(() => (load.kind === 'ready' ? load.lists.products : []), [load]);
   const groups = useMemo(() => groupProducts(products), [products]);
 
-  const lines = products.flatMap((p) => {
-    const cents = parseMoney(amounts[p.id] ?? '');
-    return typeof cents === 'number' && cents > 0 ? [{ product: p, cents }] : [];
-  });
-  const sum = (pick: (p: Product) => boolean) =>
+  const lines: Entry[] = [
+    ...products.flatMap((p) => {
+      const cents = parseMoney(amounts[p.id] ?? '');
+      return typeof cents === 'number' && cents > 0 ? [{ product: p, cents }] : [];
+    }),
+    ...retired.flatMap((l) => {
+      const cents = parseMoney(amounts[l.productId] ?? '');
+      return typeof cents === 'number' && cents > 0
+        ? [
+            {
+              product: {
+                id: l.productId,
+                name: l.name,
+                countsTowardQuotation: l.countsTowardQuotation,
+                countsTowardBanked: l.countsTowardBanked,
+              },
+              cents,
+            },
+          ]
+        : [];
+    }),
+  ];
+  const sum = (pick: (p: Entry['product']) => boolean) =>
     lines.filter((l) => pick(l.product)).reduce((s, l) => s + l.cents, 0);
   const toClient = parseMoney(extras.amountToClient);
   const quotation = sum((p) => p.countsTowardQuotation);
@@ -336,12 +361,9 @@ export default function ConsultantActionsPage() {
           secondaryLoan: moneyText(sale.secondaryStructureLoanAmount),
         });
         setEditing(sale);
+        setRetired(gone);
         if (!sale.editable)
           setBlocked('This sale can no longer be changed: its week has been imported.');
-        else if (gone.length > 0)
-          setBlocked(
-            `This sale includes ${gone.map((l) => l.name).join(', ')}, which is no longer on the product list, so it cannot be changed here.`,
-          );
       })
       .catch(() => live && setNotice('That sale could not be opened.'));
     return () => {
@@ -358,6 +380,11 @@ export default function ConsultantActionsPage() {
       const cents = parseMoney(amounts[p.id] ?? '');
       if (cents === 'bad' || cents === 0)
         e[`p-${p.id}`] = 'Enter an amount above 0, with at most two decimals.';
+    }
+    for (const l of retired) {
+      const cents = parseMoney(amounts[l.productId] ?? '');
+      if (cents === 'bad' || cents === 0)
+        e[`p-${l.productId}`] = 'Enter an amount above 0, with at most two decimals.';
     }
     if (lines.length === 0 && !Object.keys(e).some((k) => k.startsWith('p-')))
       e.lines = 'Enter an amount for at least one product.';
@@ -426,6 +453,7 @@ export default function ConsultantActionsPage() {
     setSaved(null);
     setEditing(null);
     setBlocked(null);
+    setRetired([]);
     if (editing) setDate(today);
     setAmounts(prefill(products));
     setExtras(keepClient && client ? { ...NO_EXTRAS, employerId: employerOf(client) } : NO_EXTRAS);
@@ -664,6 +692,39 @@ export default function ConsultantActionsPage() {
                 </div>
               </fieldset>
             ))}
+            {retired.length > 0 && (
+              <fieldset className="ca-group">
+                <legend>No longer on the product list</legend>
+                <p className="ca-hint">
+                  These products are already on this sale, so they stay. You can change the amount
+                  or clear it to remove the product, but you cannot add them to another sale.
+                </p>
+                <div className="ca-products">
+                  {retired.map((l) => (
+                    <div className="ca-field" key={l.productId}>
+                      <label htmlFor={`ca-p-${l.productId}`}>
+                        {l.name} <span className="ca-retired-tag">No longer sold</span>
+                      </label>
+                      <div className="ca-money">
+                        <span aria-hidden="true">R</span>
+                        <input
+                          id={`ca-p-${l.productId}`}
+                          type="text"
+                          inputMode="decimal"
+                          autoComplete="off"
+                          value={amounts[l.productId] ?? ''}
+                          onChange={setAmount(l.productId)}
+                          aria-invalid={errors[`p-${l.productId}`] ? true : undefined}
+                        />
+                      </div>
+                      {errors[`p-${l.productId}`] && (
+                        <p className="ca-err">{errors[`p-${l.productId}`]}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </fieldset>
+            )}
           </section>
 
           <section className="ca-card" aria-labelledby="ca-h-extra">

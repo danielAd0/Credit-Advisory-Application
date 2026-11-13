@@ -47,6 +47,22 @@ const products: Product[] = seed.map(([code, name, price, banked], i) => ({
   updatedAt: stamp,
 }));
 
+const retiredProducts: Product[] = [
+  {
+    id: 99,
+    code: 'FUNERAL_COVER',
+    name: 'Funeral Cover',
+    standardPrice: null,
+    countsTowardQuotation: true,
+    countsTowardBanked: true,
+    active: false,
+    displayOrder: 990,
+    version: 0,
+    createdAt: stamp,
+    updatedAt: stamp,
+  },
+];
+
 const problem = (status: number, code: string, detail: string) =>
   new ApiError(status, detail, { type: `urn:credit-advisory:${code}`, detail });
 
@@ -80,10 +96,13 @@ let nextId = 1000;
 
 const cents = (n: number) => Math.round(n * 100);
 
-function priceLines(t: {
-  transactionDate: string;
-  lines: { productId: number; amount: number }[];
-}) {
+function priceLines(
+  t: {
+    transactionDate: string;
+    lines: { productId: number; amount: number }[];
+  },
+  existing: SavedTransaction['lines'] = [],
+) {
   if (t.lines.length === 0)
     throw problem(400, 'validation', 'Add at least one product with an amount.');
   if (t.transactionDate > new Date().toISOString().slice(0, 10))
@@ -95,7 +114,11 @@ function priceLines(t: {
 
   const lines = t.lines.map((l) => {
     const p = products.find((x) => x.id === l.productId);
-    if (!p) throw problem(400, 'validation', 'Unknown or inactive product.');
+    if (!p) {
+      const old = existing.find((x) => x.productId === l.productId);
+      if (!old) throw problem(422, 'sale:product-not-active', 'That product is not active.');
+      return { ...old, amount: l.amount };
+    }
     return {
       productId: p.id,
       name: p.name,
@@ -156,6 +179,7 @@ const SAMPLE: [string, number][][] = [
   [
     ['INSURANCE', 225],
     ['IVC', 1200],
+    ['FUNERAL_COVER', 350],
   ],
   [
     ['CASH_ADVANCE_LITE', 2000],
@@ -186,7 +210,7 @@ function samples(): SavedTransaction[] {
     const client = clients[i % clients.length];
     if (!client) return [];
     const lines = picks.flatMap(([code, amount]) => {
-      const p = products.find((x) => x.code === code);
+      const p = [...products, ...retiredProducts].find((x) => x.code === code);
       return p
         ? [
             {
@@ -300,7 +324,10 @@ export async function update(id: number, body: EditSale): Promise<SaleDetail> {
   await delay(400);
   const sale = find(id);
   mustBeEditable(sale, body.version);
-  Object.assign(sale, { transactionDate: body.transactionDate, ...priceLines(body) });
+  Object.assign(sale, {
+    transactionDate: body.transactionDate,
+    ...priceLines(body, sale.lines),
+  });
   versions.set(id, body.version + 1);
   return toDetail(sale);
 }
