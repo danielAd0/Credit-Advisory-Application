@@ -12,13 +12,54 @@ import javax.crypto.Mac;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
-
+/**
+ * Turns an ID number into what may be stored, and back (SRS 8). Used by the
+ * client
+ * endpoints AND the Excel import, so both produce exactly the same hash for the
+ * same person.
+ *
+ * <ul>
+ * <li><b>Lookup hash</b>: HMAC-SHA256 with a secret key. The same ID always
+ * gives
+ * the same 32 bytes, so duplicates are found without storing the number.
+ * Without
+ * the key, nobody can work out the hash for a given ID.</li>
+ * <li><b>Encrypted copy</b>: AES-256-GCM with a fresh random nonce every time.
+ * GCM also detects any change to the stored bytes. Layout:
+ * {@code [key version: 1 byte][nonce: 12 bytes][ciphertext + 16-byte tag]}.</li>
+ * </ul>
+ *
+ * <p>
+ * <b>Keys</b> come from configuration (never from git) - see IdNumberConfig.
+ * <ul>
+ * <li>The <b>encryption</b> key can be rotated: add a new key with a higher
+ * version, keep the old one for decrypting, re-encrypt in the background.</li>
+ * <li>The <b>lookup</b> key can NOT simply be changed: every stored hash
+ * depends on
+ * it. Changing it means decrypting and re-hashing every client. IT must keep it
+ * safe and backed up - losing it, or the encryption key, makes the stored ID
+ * numbers unusable.</li>
+ * <li>The <b>encryption</b> key has a second job: {@link #sealText} seals the
+ * temporary passwords of consultant logins waiting to be emailed
+ * (consultant_login_invites, status PENDING, QUEUED or FAILED). The purpose is
+ * authenticated, so a sealed password can never be read as an ID number or the
+ * other way round. When the key is rotated, keep the old key until those
+ * invites
+ * are sent, or regenerate them on the Consultant logins page.</li>
+ * </ul>
+ *
+ * <p>
+ * Thread-safe: a new Mac / Cipher is created per call.
+ */
 public class IdNumberProtector {
 
     public static final int KEY_BYTES = 32;
     private static final int NONCE_BYTES = 12;
     private static final int TAG_BITS = 128;
-    
+    /**
+     * Domain separation: these hashes can never collide with any other use of the
+     * key.
+     */
     private static final byte[] HASH_PREFIX = "credit-advisory:sa-id:v1:".getBytes(StandardCharsets.US_ASCII);
 
     private final SecretKeySpec lookupKey;
@@ -26,7 +67,14 @@ public class IdNumberProtector {
     private final Map<Integer, SecretKeySpec> encryptionKeys;
     private final SecureRandom random = new SecureRandom();
 
-   
+    /**
+     * @param lookupKey                32 random bytes for the HMAC
+     * @param currentEncryptionVersion version used for new encryptions (1 to 255)
+     * @param encryptionKeysByVersion  every encryption key that may still be needed
+     *                                 to
+     *                                 decrypt, by version; must include the current
+     *                                 one
+     */
     public IdNumberProtector(byte[] lookupKey, int currentEncryptionVersion,
             Map<Integer, byte[]> encryptionKeysByVersion) {
         requireKey(lookupKey, "lookup key");
@@ -54,7 +102,10 @@ public class IdNumberProtector {
         return new ProtectedIdNumber(lookupHash(id), encrypt(id), id.last4());
     }
 
-   
+    /**
+     * 32 bytes. Same ID number in, same hash out - use it to find an existing
+     * client.
+     */
     public byte[] lookupHash(SaIdNumber id) {
         try {
             Mac mac = Mac.getInstance("HmacSHA256");
@@ -82,7 +133,12 @@ public class IdNumberProtector {
         }
     }
 
-   
+    /**
+     * @throws IllegalStateException if the bytes were changed, belong to an unknown
+     *                               key
+     *                               version, or were made with a different key. The
+     *                               message never contains data.
+     */
     public SaIdNumber decrypt(byte[] stored) {
         if (stored == null || stored.length < 1 + NONCE_BYTES + TAG_BITS / 8 + 1) {
             throw new IllegalStateException("Stored ID number is too short to be valid");
@@ -103,7 +159,13 @@ public class IdNumberProtector {
         }
     }
 
-    
+    /**
+     * Encrypts a short secret that must be read back once, for example a
+     * temporary password waiting to be emailed (consultant_login_invites). Same
+     * key and layout as ID numbers, but {@code purpose} is authenticated too: a
+     * sealed text can only be opened with the same purpose, and never as an ID
+     * number (or the other way round).
+     */
     public byte[] sealText(String purpose, String text) {
         byte[] nonce = new byte[NONCE_BYTES];
         random.nextBytes(nonce);
@@ -119,7 +181,11 @@ public class IdNumberProtector {
         }
     }
 
-    
+    /**
+     * @throws IllegalStateException if the bytes were changed, sealed for another
+     *                               purpose, or with an unknown key. The message
+     *                               never contains the secret.
+     */
     public String openText(String purpose, byte[] stored) {
         if (stored == null || stored.length < 1 + NONCE_BYTES + TAG_BITS / 8) {
             throw new IllegalStateException("Sealed text is too short to be valid");
@@ -139,7 +205,10 @@ public class IdNumberProtector {
         }
     }
 
-    /** version byte + "credit-advisory:text:" + purpose: never equal to the ID numbers' AAD (one byte). */
+    /**
+     * version byte + "credit-advisory:text:" + purpose: never equal to the ID
+     * numbers' AAD (one byte).
+     */
     private static byte[] textAad(byte version, String purpose) {
         byte[] label = ("credit-advisory:text:" + purpose).getBytes(StandardCharsets.UTF_8);
         return ByteBuffer.allocate(1 + label.length).put(version).put(label).array();

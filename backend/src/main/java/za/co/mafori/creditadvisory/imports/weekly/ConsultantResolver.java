@@ -12,7 +12,29 @@ import java.util.Set;
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportStore.ConsultantRef;
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportStore.SheetConsultant;
 
-
+/**
+ * Decides, for the consultant names and emails in one import, which consultant
+ * each name is (docs/consultant-onboarding.md, section 2). Pure: no database,
+ * so every rule has a unit test (ConsultantResolverTest).
+ *
+ * <p>
+ * The email is the reliable identifier; the name is only trusted when the row
+ * has no email. A name and an email that point at two different consultants
+ * are a {@link Conflict}: the import cannot be confirmed until the sheet or the
+ * consultant records are fixed, so a client is never given to the wrong person
+ * because two people have similar names.
+ *
+ * <ul>
+ * <li>Email already belongs to a consultant: that consultant. Sheet names that
+ * do not match them yet become aliases.</li>
+ * <li>New email, the name matches one consultant with no email: that
+ * consultant, and the email is added to their record.</li>
+ * <li>New email, the name matches nobody: a new consultant is registered (the
+ * most-used spelling is the name, the others aliases).</li>
+ * <li>No email on any row of a name: matched by name or alias as before, or
+ * listed as unmapped for an admin to resolve.</li>
+ * </ul>
+ */
 public final class ConsultantResolver {
 
     /** A consultant the import will create, with the sheet's spellings. */
@@ -58,7 +80,13 @@ public final class ConsultantResolver {
     private ConsultantResolver() {
     }
 
-    
+    /**
+     * @param sheet             name/email pairs of the import (email may be null)
+     * @param byName            consultants by name key and alias key
+     *                          (WeeklyImportStore.consultantsByName)
+     * @param byEmail           consultants by lower-case email
+     * @param emailOfConsultant consultant id -> email, for those that have one
+     */
     public static Plan plan(List<SheetConsultant> sheet, Map<String, ConsultantRef> byName,
             Map<String, ConsultantRef> byEmail, Map<Long, String> emailOfConsultant) {
         // name key -> spelling as written, emails seen with it, rows

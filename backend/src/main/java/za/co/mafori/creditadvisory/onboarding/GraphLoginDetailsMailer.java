@@ -16,7 +16,29 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-
+/**
+ * Sends email through Microsoft 365 with the Microsoft Graph API
+ * ({@code POST /users/{sender}/sendMail}), signed in as an Entra ID app
+ * registration (OAuth client credentials).
+ *
+ * <p>
+ * Why not SMTP with a username and password: Microsoft turns off "basic"
+ * SMTP authentication for Microsoft 365 tenants by default from the end of
+ * December 2026, and will remove it completely later. Graph needs no mail
+ * library either: this is plain HTTPS from the JDK.
+ *
+ * <p>
+ * IT sets these (docs/consultant-onboarding.md, "Mail set-up"):
+ * <ul>
+ * <li>{@code app.mail.graph.tenant-id}, {@code app.mail.graph.client-id},
+ * {@code app.mail.graph.client-secret}: the app registration, with the
+ * application permission Mail.Send (admin-consented), limited to the sender
+ * mailbox with an application access policy.</li>
+ * <li>{@code app.mail.sender}: the mailbox the emails come from, for example
+ * no-reply@mafori.co.za.</li>
+ * </ul>
+ * Until all four are set, {@link #isConfigured()} is false and nothing is sent.
+ */
 @Component
 public class GraphLoginDetailsMailer implements LoginDetailsMailer {
 
@@ -104,7 +126,8 @@ public class GraphLoginDetailsMailer implements LoginDetailsMailer {
         String form = "client_id=" + enc(clientId) + "&client_secret=" + enc(clientSecret)
                 + "&scope=" + enc("https://graph.microsoft.com/.default") + "&grant_type=client_credentials";
         HttpRequest request = HttpRequest.newBuilder(
-                URI.create(loginHost + "/" + URLEncoder.encode(tenantId, StandardCharsets.UTF_8) + "/oauth2/v2.0/token"))
+                URI.create(
+                        loginHost + "/" + URLEncoder.encode(tenantId, StandardCharsets.UTF_8) + "/oauth2/v2.0/token"))
                 .timeout(TIMEOUT)
                 .header("Content-Type", "application/x-www-form-urlencoded")
                 .POST(HttpRequest.BodyPublishers.ofString(form, StandardCharsets.UTF_8))
@@ -142,7 +165,10 @@ public class GraphLoginDetailsMailer implements LoginDetailsMailer {
         }
     }
 
-    /** {"error":{"code":"ErrorInvalidRecipients",...}} -> ErrorInvalidRecipients; "" if none. */
+    /**
+     * {"error":{"code":"ErrorInvalidRecipients",...}} -> ErrorInvalidRecipients; ""
+     * if none.
+     */
     static String errorCode(String body) {
         if (body == null) {
             return "";

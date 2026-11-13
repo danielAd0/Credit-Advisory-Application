@@ -22,6 +22,7 @@ class WeeklyReportSchemaTest extends ApiTestBase {
 
         @BeforeEach
         void createWeek() {
+                configureTargets("2026-01-01", "120000", "600000");
                 consultantA = createConsultant("C001", "Test One");
                 consultantB = createConsultant("C002", "Test Two");
                 client1 = createClient("Test", "Alpha", null);
@@ -107,6 +108,22 @@ class WeeklyReportSchemaTest extends ApiTestBase {
                 assertThat((BigDecimal) week.get("quotation_total")).isEqualByComparingTo("133400");
                 assertThat((BigDecimal) week.get("weekly_quotation_target")).isEqualByComparingTo("600000");
                 assertThat(week.get("target_met")).isEqualTo(false);
+        }
+
+        @Test
+        void withoutConfiguredTargetsTheViewsJudgeNothing() {
+                jdbc.update("delete from sales_targets");
+
+                Map<String, Object> week = jdbc.queryForMap("select * from v_week_totals where reporting_week_id = ?",
+                                weekId);
+                List<Map<String, Object>> days = jdbc.queryForList(
+                                "select * from v_week_daily_summary where reporting_week_id = ? order by day_of_week",
+                                weekId);
+
+                assertThat(week.get("weekly_quotation_target")).isNull();
+                assertThat(week.get("target_met")).isNull();
+                assertThat(days.get(1).get("daily_quotation_target")).isNull();
+                assertThat(days.get(1).get("target_met")).isNull();
         }
 
         @Test

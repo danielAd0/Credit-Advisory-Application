@@ -48,14 +48,19 @@ public class OnboardingController {
         return service.summary();
     }
 
-    /** Active consultants without a login who cannot get one yet, with the reason. */
+    /**
+     * Active consultants without a login who cannot get one yet, with the reason.
+     */
     @GetMapping("/blocked")
     public PageResponse<BlockedConsultant> blocked(@RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
         return service.blocked(page, size);
     }
 
-    /** "Generate temporary passwords": up to 25 logins per call; call again while remaining > 0. */
+    /**
+     * "Generate temporary passwords": up to 25 logins per call; call again while
+     * remaining > 0.
+     */
     @PostMapping("/logins")
     public GenerateResult generate(@AuthenticationPrincipal AppUserPrincipal caller,
             @Valid @RequestBody(required = false) GenerateRequest request, HttpServletRequest http) {
@@ -83,6 +88,17 @@ public class OnboardingController {
             @Valid @RequestBody(required = false) InviteIdsRequest request, HttpServletRequest http) {
         recentPassword.require(http, "Enter your password again to resend login details.");
         return service.retry(caller.userId(), request == null ? null : request.inviteIds());
+    }
+
+    /**
+     * "Regenerate": new temporary passwords for expired or failed login emails (up
+     * to 25 per call; call again while remaining > 0). Then "Send login details".
+     */
+    @PostMapping("/invites/regenerate")
+    public GenerateResult regenerate(@AuthenticationPrincipal AppUserPrincipal caller,
+            @Valid @RequestBody(required = false) InviteIdsRequest request, HttpServletRequest http) {
+        recentPassword.require(http, "Enter your password again to make new consultant passwords.");
+        return service.regenerate(caller.userId(), request == null ? null : request.inviteIds());
     }
 
     @PutMapping("/consultants/{id}/email")

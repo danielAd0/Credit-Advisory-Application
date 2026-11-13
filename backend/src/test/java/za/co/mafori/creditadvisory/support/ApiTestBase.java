@@ -129,6 +129,18 @@ public abstract class ApiTestBase {
         return users.save(user).getId();
     }
 
+    /**
+     * Saves a daily and weekly target from the given date, as a manager would
+     * on the Targets page. A fresh database has none (V25).
+     */
+    protected void configureTargets(String effectiveFrom, String daily, String weekly) {
+        jdbc.update("""
+                insert into sales_targets (effective_from, daily_quotation_target, weekly_quotation_target,
+                                           created_by_user_id)
+                values (cast(? as date), ?, ?, ?)
+                """, effectiveFrom, new java.math.BigDecimal(daily), new java.math.BigDecimal(weekly), adminId);
+    }
+
     protected long createConsultant(String code, String fullName) {
         return consultants.save(new Consultant(code, fullName)).getId();
     }

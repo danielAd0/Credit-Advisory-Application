@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { ApiError } from '../api';
+
+/** Sign-in refused because an emailed temporary password passed its time limit. */
+const TEMPORARY_PASSWORD_EXPIRED = 'urn:credit-advisory:auth:temporary-password-expired';
 import { useAuth } from '../auth/useAuth';
 import LoginGauge from '../components/LoginGauge';
 import './login.css';
@@ -41,11 +44,13 @@ export default function LoginPage() {
       setPassword('');
       setBusy(false);
       setError(
-        err instanceof ApiError && err.status === 401
-          ? 'Sign-in failed. Check your details , or try again later if your account is locked.'
-          : err instanceof ApiError && err.status === 429
-            ? err.message
-            : 'We could not sign you in right now. Check your connection and try again.',
+        err instanceof ApiError && err.type === TEMPORARY_PASSWORD_EXPIRED
+          ? 'This temporary password has expired. Ask your administrator to send you new login details.'
+          : err instanceof ApiError && err.status === 401
+            ? 'Sign-in failed. Check your details , or try again later if your account is locked.'
+            : err instanceof ApiError && err.status === 429
+              ? err.message
+              : 'We could not sign you in right now. Check your connection and try again.',
       );
 
       passwordRef.current?.focus();

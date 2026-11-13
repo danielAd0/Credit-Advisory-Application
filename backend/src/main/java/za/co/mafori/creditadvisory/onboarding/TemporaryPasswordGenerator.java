@@ -3,7 +3,16 @@ package za.co.mafori.creditadvisory.onboarding;
 import java.security.SecureRandom;
 import org.springframework.stereotype.Component;
 
-
+/**
+ * Random temporary passwords for new consultant logins.
+ *
+ * <p>
+ * 16 characters from 71 symbols (about 98 bits of randomness), with at least
+ * one upper-case letter, lower-case letter, digit and symbol. Characters that
+ * are easy to misread in an email (0/O, 1/l/I) are left out. With this much
+ * randomness two consultants getting the same password is not a practical
+ * possibility; OnboardingService also refuses a repeat within one batch.
+ */
 @Component
 public class TemporaryPasswordGenerator {
 

@@ -64,7 +64,7 @@ export default function TargetsPage() {
     const d = parseAmount(daily);
     const w = parseAmount(weekly);
     if (!from) return setError('Choose the date the new targets start.');
-    if (from < data.today) return setError('The start date must be today or later.');
+    if (first && from < data.today && from >= first.effectiveFrom) return setError(pastDateRule);
     if (!Number.isFinite(d) || d <= 0) return setError('Enter a daily target above R0.');
     if (!Number.isFinite(w) || w <= 0) return setError('Enter a weekly target above R0.');
     if (w < d) return setError('The weekly target cannot be less than the daily target.');
@@ -90,6 +90,14 @@ export default function TargetsPage() {
   }
 
   const current = data?.current ?? null;
+  // A past date can only get a target while none applies to it: before the
+  // first target ever saved. With no targets at all, any date is fine.
+  const first = data && data.history.length > 0 ? data.history[data.history.length - 1] : null;
+  const pastDateRule = first
+    ? `Targets already apply from ${dayLabel(first.effectiveFrom)}, so a change must start today or later. ` +
+      `A date before ${dayLabel(first.effectiveFrom)} can still be given a target.`
+    : '';
+  const pastAllowedBefore = first ? first.effectiveFrom : null;
   // history is newest first, so the last scheduled row is the next one to take effect.
   const scheduled = data ? data.history.filter((t) => t.effectiveFrom > data.today) : [];
   const next = scheduled.length > 0 ? scheduled[scheduled.length - 1] : null;
@@ -98,8 +106,9 @@ export default function TargetsPage() {
     <div className="tg">
       <h1>Sales targets</h1>
       <p className="muted">
-        The quotation targets the reports measure against. A new target applies from its start date
-        onward; past weeks keep the target they had.
+        The quotation targets the reports measure against. There are no built-in targets: until one
+        is saved here, reports show “Target not configured”. A new target applies from its start
+        date onward; weeks that already had a target keep it.
       </p>
 
       {loadError && (
@@ -111,14 +120,24 @@ export default function TargetsPage() {
 
       {data && (
         <>
+          {!current && (
+            <p className="alert" role="status">
+              {data.history.length === 0
+                ? 'No targets configured. Reports show actual sales only until a daily and weekly target is saved below.'
+                : 'No target is configured for today yet. Reports from before the first target show “Target not configured”.'}
+            </p>
+          )}
+
           <div className="tg-tiles">
             <div className="tg-tile">
               <span>Current daily target</span>
-              <strong>{rand(current?.dailyTarget ?? null)}</strong>
+              <strong>{current ? rand(current.dailyTarget) : 'Not configured'}</strong>
             </div>
             <div className="tg-tile">
               <span>Current weekly target</span>
-              <strong>{rand(current?.weeklyTarget ?? null)}</strong>
+              <strong>
+                {current?.weeklyTarget != null ? rand(current.weeklyTarget) : 'Not configured'}
+              </strong>
             </div>
             <div className="tg-tile">
               <span>In force since</span>
@@ -152,7 +171,7 @@ export default function TargetsPage() {
                   <input
                     id="tg-daily"
                     inputMode="decimal"
-                    placeholder={current ? String(current.dailyTarget) : '120000'}
+                    placeholder={current ? String(current.dailyTarget) : 'Amount in rand'}
                     value={daily}
                     onChange={(e) => setDaily(e.target.value)}
                     autoComplete="off"
@@ -163,7 +182,9 @@ export default function TargetsPage() {
                   <input
                     id="tg-weekly"
                     inputMode="decimal"
-                    placeholder={current?.weeklyTarget ? String(current.weeklyTarget) : '600000'}
+                    placeholder={
+                      current?.weeklyTarget ? String(current.weeklyTarget) : 'Amount in rand'
+                    }
                     value={weekly}
                     onChange={(e) => setWeekly(e.target.value)}
                     autoComplete="off"
@@ -174,12 +195,24 @@ export default function TargetsPage() {
                   <input
                     id="tg-from"
                     type="date"
-                    min={data.today}
                     value={from}
                     onChange={(e) => setFrom(e.target.value)}
                   />
                 </div>
               </div>
+              {pastAllowedBefore ? (
+                <p className="ac-hint">
+                  Dates before {dayLabel(pastAllowedBefore)} have no target yet, so they can still
+                  be given one (for example after importing older registers).
+                </p>
+              ) : (
+                !first && (
+                  <p className="ac-hint">
+                    Any date can be chosen, including a past one, to set targets for registers
+                    already imported.
+                  </p>
+                )
+              )}
               {from && (
                 <p className="ac-hint">
                   The daily target counts from {dayLabel(from)}. The weekly target counts from the
@@ -196,6 +229,7 @@ export default function TargetsPage() {
 
           <section className="tg-history">
             <h2>History</h2>
+            {data.history.length === 0 && <p className="muted">No targets have been saved yet.</p>}
             <div className="table-wrap">
               <table className="tg-table">
                 <thead>
@@ -213,7 +247,7 @@ export default function TargetsPage() {
                       <td>{dayLabel(t.effectiveFrom)}</td>
                       <td className="num">{rand(t.dailyTarget)}</td>
                       <td className="num">{rand(t.weeklyTarget)}</td>
-                      <td>{t.setByEmail ?? 'System'}</td>
+                      <td>{t.setByEmail ?? '-'}</td>
                       <td>
                         {t.id === current?.id ? (
                           <span className="badge active">current</span>

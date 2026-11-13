@@ -172,6 +172,10 @@ Rules:
 
 - **The ID-number keys must be backed up safely.** If they are lost, every stored ID number becomes unreadable.
   Never change them on a server that already has clients.
+- **`ID_NUMBER_ENCRYPTION_KEY` also protects queued login emails.** Temporary passwords of new consultant logins
+  waiting to be emailed (Consultant logins: not sent yet, waiting, or failed) are sealed with it. Before rotating
+  it, send those emails or keep the old key configured for decryption; otherwise they cannot be sent and must be
+  regenerated on the Consultant logins page.
 - **Every user signs in with an authenticator app** (Google or Microsoft Authenticator) after the password;
   production refuses to start without it. If `MFA_ENCRYPTION_KEY` is lost, nobody can sign in until an
   administrator resets their MFA (`POST /api/users/{id}/mfa-reset`) - and the first administrator then needs

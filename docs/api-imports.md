@@ -369,6 +369,7 @@ Returned by preview, `GET /api/imports/{id}`, consultant mappings and cancel.
 | Blocker | What the user must do |
 |---|---|
 | `UNMAPPED_CONSULTANTS` | for each name in `unmappedConsultants`: map it (consultant-mappings) or create it (new-consultants) |
+| `CONSULTANT_CONFLICTS` | a consultant name and its CONSULTANT EMAIL point at different consultants (`consultantRegistration.conflicts`): fix the workbook and upload it again. See `consultant-onboarding.md` |
 | `SHEET_ERRORS` | fix the workbook (see issues without a row) and upload it again |
 | `NAME_DIFFERENCES` | check the `nameDifferences` rows (issues with code `client:name-differs`), then either fix the workbook and upload again, or confirm with `acceptNameDifferences: true`. Show it as a tick box ("I checked these N clients"), not as a hard stop |
 | `EXPIRED` | upload the file again |
@@ -493,3 +494,10 @@ spelling shows it under `unmappedConsultants` again, and confirm refuses until i
 
 Frontend: a "Name spellings" tab on the consultant page (filter `consultantId`), with remove buttons.
 
+## 11. Consultant emails, registration and assignment (V23)
+
+The register may have a `CONSULTANT EMAIL` column. The summary then also has
+`consultantRegistration` (`toRegister`, `emailsToAdd`, `conflicts`, counts) and `assignment` (who
+the new clients go to), and the confirm result has `consultantsRegistered`,
+`consultantEmailsAdded`, `consultantAliasesAdded` and `newClientsUnassigned`. Rules, examples and
+the login emails that follow: `docs/consultant-onboarding.md`.

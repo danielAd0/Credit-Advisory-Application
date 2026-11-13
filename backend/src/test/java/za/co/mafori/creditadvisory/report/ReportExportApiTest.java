@@ -42,6 +42,7 @@ class ReportExportApiTest extends ApiTestBase {
      */
     @BeforeEach
     void createData() {
+        configureTargets("2026-01-01", "120000", "600000");
         thandiId = createConsultant("C001", "Thandi Test");
         formulaConsultantId = createConsultant("C002", FORMULA_NAME);
         long client1 = createClient("Test", "Alpha", null);
@@ -147,6 +148,17 @@ class ReportExportApiTest extends ApiTestBase {
         assertThat(lines.get(2)).isEqualTo("Tuesday,2026-09-15,1,1,130000.00,100000.00,120000.00,Yes");
         assertThat(lines.get(7)).isEqualTo("Sunday,2026-09-20,0,0,0.00,0.00,120000.00,No");
         assertThat(lines.get(8)).isEqualTo("Week,2026-09-14 to 2026-09-20,3,3,133100.00,102925.00,600000.00,No");
+    }
+
+    @Test
+    void summaryCsvSaysNotConfiguredWhenNoTargetIsSet() {
+        jdbc.update("delete from sales_targets");
+
+        List<String> lines = lines(admin.get(csv("summary")));
+
+        assertThat(lines.get(1)).isEqualTo("Monday,2026-09-14,2,2,3100.00,2925.00,Not configured,");
+        assertThat(lines.get(8))
+                .isEqualTo("Week,2026-09-14 to 2026-09-20,3,3,133100.00,102925.00,Not configured,");
     }
 
     @Test
