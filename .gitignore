@@ -72,3 +72,6 @@ logs/
 Thumbs.db
 desktop.ini
 ~$*
+
+# Emails saved by tools/fake-graph-mail.mjs (local testing only)
+mail-outbox/

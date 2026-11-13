@@ -121,7 +121,7 @@ function Columns({
         ))}
         {target !== null && (
           <span className="dc-target" style={{ bottom: `${(target / top) * 100}%` }}>
-            <span>Weekly target {compact(target)}</span>
+            <span>Target {compact(target)}</span>
           </span>
         )}
         <ol>
@@ -343,7 +343,13 @@ export default function DashboardCharts() {
       <div className="dc-grid-cards">
         <ChartCard
           title="Quotation per week"
-          note="Most recent weeks, newest on the right"
+          note={
+            state.target !== null
+              ? 'Most recent weeks, newest on the right. The dashed line is the latest week’s target.'
+              : state.summary.scope === 'ALL'
+                ? 'Most recent weeks, newest on the right. Target not configured for the latest week.'
+                : 'Most recent weeks, newest on the right'
+          }
           head={['Week starting', 'Quotation']}
           rows={weekBars}
         >

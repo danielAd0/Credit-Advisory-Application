@@ -22,7 +22,11 @@ public interface LoginDetailsMailer {
     /** Where the emails come from, for the admin screen (or null). */
     String senderAddress();
 
-    
+    /**
+     * @throws MailDeliveryException when the message was not accepted. Its
+     *                               {@code permanent} flag says whether trying
+     *                               again later can help.
+     */
     void send(Message message);
 
     class MailDeliveryException extends RuntimeException {

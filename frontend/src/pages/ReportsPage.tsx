@@ -1,55 +1,42 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   data,
   detailOf,
-  features,
   reports,
   type BudgetResponse,
   type ConsultantSummary,
   type ConsultantsResponse,
+  type MonthListItem,
   type ProductsResponse,
+  type RangeSummaryResponse,
   type SummaryResponse,
   type WeekListItem,
 } from '../api';
 import { hasAnyRole, useSession } from '../auth/useAuth';
+import {
+  RangeBudget,
+  RangeChart,
+  RangeConsultants,
+  RangeKpis,
+  RangeProducts,
+  RangeSummary,
+} from './RangeReport';
+import {
+  compact,
+  DAY_NAMES,
+  day,
+  Download,
+  Failed,
+  KpiRow,
+  monthLabel,
+  periodLabel,
+  rand,
+  useReport,
+} from './reportShared';
 import './reports.css';
 
-const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-const rand = (n: number, decimals = 0) =>
-  n.toLocaleString('en-ZA', {
-    style: 'currency',
-    currency: 'ZAR',
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  });
-const day = (iso: string) => new Date(iso).toLocaleDateString('en-ZA');
-
 type Tab = 'summary' | 'consultants' | 'products' | 'budget';
-
-function useReport<T>(load: () => Promise<T>, deps: unknown[]) {
-  const [state, setState] = useState<{ value: T | null; error: string | null; key: string }>({
-    value: null,
-    error: null,
-    key: '',
-  });
-  const key = JSON.stringify(deps);
-  useEffect(() => {
-    let live = true;
-    load()
-      .then((value) => live && setState({ value, error: null, key }))
-      .catch(
-        (err) =>
-          live &&
-          setState({ value: null, error: detailOf(err) ?? 'Could not load the report.', key }),
-      );
-    return () => {
-      live = false;
-    };
-  }, [key]);
-  const current = state.key === key;
-  return { value: current ? state.value : null, error: current ? state.error : null };
-}
 
 interface GridRow {
   key: string;
@@ -120,51 +107,26 @@ function DayGrid({
   );
 }
 
-function Download({ path }: { path: string }) {
-  if (!features.reportExport) return null;
-  return (
-    <a className="btn primary rp-download" href={`/api/reports/weeks/${path}`}>
-      Download as CSV
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-        <path d="M12 4v14M6 12l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    </a>
-  );
-}
-
-const compact = (n: number) =>
-  n >= 1_000_000
-    ? `R${+(n / 1_000_000).toFixed(1)}m`
-    : n >= 1000
-      ? `R${Math.round(n / 1000)}k`
-      : `R${Math.round(n)}`;
-
 function Kpis({ r }: { r: SummaryResponse }) {
   const own = r.scope === 'OWN';
-  const items = [
-    { label: 'Quotation', value: rand(r.week.quotationTotal), note: 'Quoted this week' },
-    { label: 'Banked', value: rand(r.week.bankedTotal), note: 'Banked this week' },
-    {
-      label: 'Sales',
-      value: r.week.transactionCount.toLocaleString('en-ZA'),
-      note: own ? 'Your sales this week' : 'Sales this week',
-    },
-    {
-      label: 'Clients',
-      value: r.week.clientCount.toLocaleString('en-ZA'),
-      note: 'Clients for the week',
-    },
-  ];
+  const label = `week of ${day(r.weekStarting)}`;
   return (
-    <div className="rp-kpis">
-      {items.map((k) => (
-        <div key={k.label} className="rp-kpi">
-          <span className="rp-kpi-label">{k.label}</span>
-          <strong>{k.value}</strong>
-          <span className="rp-kpi-note">{k.note}</span>
-        </div>
-      ))}
-    </div>
+    <KpiRow
+      items={[
+        { label: 'Quotation', value: rand(r.week.quotationTotal), note: `Quoted, ${label}` },
+        { label: 'Banked', value: rand(r.week.bankedTotal), note: `Banked, ${label}` },
+        {
+          label: 'Sales',
+          value: r.week.transactionCount.toLocaleString('en-ZA'),
+          note: own ? `Your sales, ${label}` : `Sales, ${label}`,
+        },
+        {
+          label: 'Clients',
+          value: r.week.clientCount.toLocaleString('en-ZA'),
+          note: `Clients, ${label}`,
+        },
+      ]}
+    />
   );
 }
 
@@ -245,18 +207,26 @@ function DailyChart({ r }: { r: SummaryResponse }) {
   );
 }
 
-function QuotedBanked({ r }: { r: SummaryResponse }) {
-  const top = Math.max(1, r.week.quotationTotal, r.week.bankedTotal);
+function QuotedBanked({
+  quotation,
+  banked,
+  note,
+}: {
+  quotation: number;
+  banked: number;
+  note: string;
+}) {
+  const top = Math.max(1, quotation, banked);
   const rows = [
-    { key: 'quotation', label: 'Quotation', value: r.week.quotationTotal },
-    { key: 'banked', label: 'Banked', value: r.week.bankedTotal },
+    { key: 'quotation', label: 'Quotation', value: quotation },
+    { key: 'banked', label: 'Banked', value: banked },
   ];
   return (
     <figure className="rp-card rp-qb">
       <figcaption className="rp-card-head">
         <div>
           <h2>Quoted and banked</h2>
-          <p className="muted">Weekly totals on the same scale</p>
+          <p className="muted">{note}</p>
         </div>
       </figcaption>
       {rows.map((row) => (
@@ -277,12 +247,6 @@ function QuotedBanked({ r }: { r: SummaryResponse }) {
   );
 }
 
-const Failed = ({ message }: { message: string }) => (
-  <p className="alert error" role="alert">
-    {message}
-  </p>
-);
-
 function Summary({ r }: { r: SummaryResponse }) {
   const own = r.scope === 'OWN';
   const pct = r.week.weeklyTarget
@@ -298,8 +262,8 @@ function Summary({ r }: { r: SummaryResponse }) {
         {!own && r.week.weeklyTarget !== null && (
           <div className={`rp-target ${r.week.targetMet ? 'met' : ''}`}>
             <p>
-              Weekly target {rand(r.week.weeklyTarget)}: {r.week.targetMet ? 'met' : 'not met'} (
-              {Math.round(pct)}%)
+              Target for that week {rand(r.week.weeklyTarget)}:{' '}
+              {r.week.targetMet ? 'met' : 'not met'} ({Math.round(pct)}%)
             </p>
             <div
               className="rp-bar"
@@ -308,6 +272,11 @@ function Summary({ r }: { r: SummaryResponse }) {
             >
               <div className="rp-fill" style={{ width: `${pct}%` }} />
             </div>
+          </div>
+        )}
+        {!own && r.week.weeklyTarget === null && (
+          <div className="rp-target">
+            <p>Target for that week: not configured</p>
           </div>
         )}
       </div>
@@ -342,7 +311,7 @@ function Summary({ r }: { r: SummaryResponse }) {
                 {!own && (
                   <td>
                     {d.dailyTarget === null ? (
-                      '-'
+                      <span className="muted">Not configured</span>
                     ) : (
                       <span className={d.targetMet ? 'rp-yes' : 'rp-no'}>
                         {d.targetMet ? 'Met' : 'Not met'}
@@ -506,12 +475,57 @@ function Budget({ week }: { week: string }) {
   );
 }
 
+type Mode = 'week' | 'day' | 'month' | 'custom';
+
+const pad = (n: number) => String(n).padStart(2, '0');
+const isoDate = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const MAX_DAYS = 366;
+
+const daysBetween = (from: string, to: string) =>
+  Math.round((Date.parse(to + 'T00:00:00Z') - Date.parse(from + 'T00:00:00Z')) / 86_400_000) + 1;
+
+/** Why a custom range can't be shown, or null when it's fine. */
+function rangeProblem(from: string, to: string) {
+  if (!DATE.test(from) || !DATE.test(to)) return 'Choose a start and an end date.';
+  if (to < from) return 'The end date is before the start date.';
+  if (daysBetween(from, to) > MAX_DAYS) return `A report can cover at most ${MAX_DAYS} days.`;
+  return null;
+}
+
 export default function ReportsPage() {
   const session = useSession();
   const manager = hasAnyRole(session, ['ADMIN', 'MANAGER']);
+  const [params] = useSearchParams();
+  // Links can open a period: ?week=2026-10-05, ?day=2026-10-07, ?month=2026-10,
+  // ?from=...&to=..., or just ?period=day / month / custom.
+  const [mode, setMode] = useState<Mode>(() =>
+    (params.get('from') && params.get('to')) || params.get('period') === 'custom'
+      ? 'custom'
+      : params.get('month') || params.get('period') === 'month'
+        ? 'month'
+        : params.get('day') || params.get('period') === 'day'
+          ? 'day'
+          : 'week',
+  );
   const [weeks, setWeeks] = useState<WeekListItem[] | null>(null);
+  const [months, setMonths] = useState<MonthListItem[] | null>(null);
   const [scope, setScope] = useState<'ALL' | 'OWN'>('ALL');
-  const [week, setWeek] = useState('');
+  const [week, setWeek] = useState(() => params.get('week') ?? '');
+  const [month, setMonth] = useState(() => params.get('month') ?? '');
+  const today = isoDate(new Date());
+  const [oneDay, setOneDay] = useState(() =>
+    DATE.test(params.get('day') ?? '') ? params.get('day')! : today,
+  );
+  const [draft, setDraft] = useState(() => ({
+    from: params.get('from') ?? today.slice(0, 8) + '01',
+    to: params.get('to') ?? today,
+  }));
+  const [custom, setCustom] = useState<{ from: string; to: string } | null>(() =>
+    params.get('from') && params.get('to') && !rangeProblem(params.get('from')!, params.get('to')!)
+      ? { from: params.get('from')!, to: params.get('to')! }
+      : null,
+  );
   const [tab, setTab] = useState<Tab>('summary');
   const [consultantId, setConsultantId] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -528,7 +542,9 @@ export default function ReportsPage() {
         if (!live) return;
         setWeeks(r.weeks);
         setScope(r.scope);
-        setWeek((w) => w || (r.weeks.at(0)?.weekStarting ?? ''));
+        setWeek((w) =>
+          w && r.weeks.some((x) => x.weekStarting === w) ? w : (r.weeks.at(0)?.weekStarting ?? ''),
+        );
       })
       .catch((err) => live && setError(detailOf(err) ?? 'Could not load the weeks.'));
     return () => {
@@ -536,9 +552,48 @@ export default function ReportsPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (mode !== 'month' || months !== null) return;
+    let live = true;
+    reports
+      .months()
+      .then((r) => {
+        if (!live) return;
+        setMonths(r.months);
+        setMonth((m) =>
+          m && r.months.some((x) => x.month === m) ? m : (r.months.at(0)?.month ?? ''),
+        );
+      })
+      .catch((err) => live && setError(detailOf(err) ?? 'Could not load the months.'));
+    return () => {
+      live = false;
+    };
+  }, [mode, months]);
+
+  // The period the month and custom modes report on.
+  const chosenMonth = months?.find((m) => m.month === month);
+  const range =
+    mode === 'month' && chosenMonth
+      ? { from: chosenMonth.from, to: chosenMonth.to }
+      : mode === 'custom'
+        ? custom
+        : mode === 'day' && DATE.test(oneDay)
+          ? { from: oneDay, to: oneDay }
+          : null;
+  const rangeName =
+    mode === 'month' && chosenMonth
+      ? monthLabel(chosenMonth.month)
+      : range
+        ? periodLabel(range.from, range.to)
+        : '';
+
   const summary = useReport<SummaryResponse | null>(
-    () => (week ? reports.summary(week) : Promise.resolve(null)),
-    [week],
+    () => (mode === 'week' && week ? reports.summary(week) : Promise.resolve(null)),
+    [mode, week],
+  );
+  const rangeSummary = useReport<RangeSummaryResponse | null>(
+    () => (range ? reports.rangeSummary(range.from, range.to) : Promise.resolve(null)),
+    [range?.from, range?.to],
   );
 
   const tabs: { id: Tab; label: string }[] = [
@@ -548,12 +603,26 @@ export default function ReportsPage() {
     ...(manager ? [{ id: 'budget' as Tab, label: 'Budget structure' }] : []),
   ];
 
-  const csv: Record<Tab, string> = {
+  const csvName: Record<Tab, string> = {
     summary: 'summary.csv',
     consultants: 'consultants.csv',
-    products: `products.csv${consultantId ? `?consultantId=${consultantId}` : ''}`,
+    products: 'products.csv',
     budget: 'budget-structures.csv',
   };
+  const consultantQuery = tab === 'products' && consultantId ? `consultantId=${consultantId}` : '';
+  const csvHref =
+    mode === 'week'
+      ? week
+        ? `/api/reports/weeks/${week}/${csvName[tab]}${consultantQuery ? `?${consultantQuery}` : ''}`
+        : null
+      : range
+        ? `/api/reports/range/${csvName[tab]}?from=${range.from}&to=${range.to}${
+            consultantQuery ? `&${consultantQuery}` : ''
+          }`
+        : null;
+
+  const draftProblem = rangeProblem(draft.from, draft.to);
+  const ready = mode === 'week' ? Boolean(week) : Boolean(range);
 
   return (
     <div className="rp">
@@ -567,7 +636,7 @@ export default function ReportsPage() {
               : 'Company figures from the imported weekly registers.'}
           </p>
         </div>
-        {week && <Download path={`${week}/${csv[tab]}`} />}
+        {csvHref && <Download href={csvHref} />}
       </header>
 
       {error && <Failed message={error} />}
@@ -579,66 +648,216 @@ export default function ReportsPage() {
       )}
       {weeks && weeks.length > 0 && (
         <>
-          <div className="rp-week">
-            <label htmlFor="rp-week">Week</label>
-            <select id="rp-week" value={week} onChange={(e) => setWeek(e.target.value)}>
-              {weeks.map((w) => (
-                <option key={w.weekStarting} value={w.weekStarting}>
-                  Week of {day(w.weekStarting)} ({rand(w.quotationTotal)})
-                </option>
+          <div className="rp-period">
+            <div className="rp-toggle rp-mode" role="group" aria-label="Report period">
+              {(
+                [
+                  ['week', 'Week'],
+                  ['day', 'Day'],
+                  ['month', 'Month'],
+                  ['custom', 'Date range'],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  className="btn"
+                  aria-pressed={mode === id}
+                  onClick={() => setMode(id)}
+                >
+                  {label}
+                </button>
               ))}
-            </select>
+            </div>
+
+            {mode === 'week' && (
+              <div className="rp-week">
+                <label htmlFor="rp-week">Week</label>
+                <select id="rp-week" value={week} onChange={(e) => setWeek(e.target.value)}>
+                  {weeks.map((w) => (
+                    <option key={w.weekStarting} value={w.weekStarting}>
+                      Week of {day(w.weekStarting)} ({rand(w.quotationTotal)})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {mode === 'day' && (
+              <div className="rp-range">
+                <label>
+                  Day
+                  <input
+                    type="date"
+                    value={oneDay}
+                    onChange={(e) => e.target.value && setOneDay(e.target.value)}
+                  />
+                </label>
+              </div>
+            )}
+
+            {mode === 'month' && months === null && <p className="muted">Loading...</p>}
+            {mode === 'month' && months && months.length === 0 && (
+              <p className="muted">No sales have been imported yet.</p>
+            )}
+            {mode === 'month' && months && months.length > 0 && (
+              <div className="rp-week">
+                <label htmlFor="rp-month">Month</label>
+                <select id="rp-month" value={month} onChange={(e) => setMonth(e.target.value)}>
+                  {months.map((m) => (
+                    <option key={m.month} value={m.month}>
+                      {monthLabel(m.month)} ({rand(m.quotationTotal)})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {mode === 'custom' && (
+              <form
+                className="rp-range"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!draftProblem) setCustom({ ...draft });
+                }}
+              >
+                <label>
+                  From
+                  <input
+                    type="date"
+                    value={draft.from}
+                    max={draft.to || undefined}
+                    onChange={(e) => setDraft((d) => ({ ...d, from: e.target.value }))}
+                  />
+                </label>
+                <label>
+                  To
+                  <input
+                    type="date"
+                    value={draft.to}
+                    min={draft.from || undefined}
+                    onChange={(e) => setDraft((d) => ({ ...d, to: e.target.value }))}
+                  />
+                </label>
+                <button type="submit" className="btn primary" disabled={draftProblem !== null}>
+                  Show report
+                </button>
+                {draftProblem && <span className="muted">{draftProblem}</span>}
+              </form>
+            )}
           </div>
 
-          {summary.error && tab === 'summary' && <Failed message={summary.error} />}
-          {summary.value && tab === 'summary' && (
+          {mode !== 'week' && range && (
+            <p className="rp-period-note muted">
+              Showing <strong>{rangeName}</strong>.{' '}
+              {mode === 'day'
+                ? 'Imported and typed-in sales dated that day.'
+                : 'Sales count on their own date, so a week that runs into the next month is split between the two months.'}
+            </p>
+          )}
+          {mode === 'custom' && !custom && (
+            <p className="muted">Choose the dates and press Show report.</p>
+          )}
+
+          {mode === 'week' && summary.error && tab === 'summary' && (
+            <Failed message={summary.error} />
+          )}
+          {mode === 'week' && summary.value && tab === 'summary' && (
             <>
               <Kpis r={summary.value} />
               <div className="rp-charts">
                 <DailyChart r={summary.value} />
-                <QuotedBanked r={summary.value} />
+                <QuotedBanked
+                  quotation={summary.value.week.quotationTotal}
+                  banked={summary.value.week.bankedTotal}
+                  note="Weekly totals on the same scale"
+                />
               </div>
             </>
           )}
 
-          <div className="rp-tabs" role="tablist" aria-label="Report">
-            {tabs.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                role="tab"
-                className="rp-tab"
-                aria-selected={tab === t.id}
-                onClick={() => setTab(t.id)}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-
-          {week && (
-            <section
-              className="rp-card rp-panel"
-              role="tabpanel"
-              aria-label={tabs.find((t) => t.id === tab)?.label}
-            >
-              {tab === 'summary' &&
-                (summary.value ? (
-                  <Summary r={summary.value} />
-                ) : (
-                  !summary.error && <p className="muted">Loading...</p>
-                ))}
-              {tab === 'consultants' && <Consultants week={week} />}
-              {tab === 'products' && (
-                <Products
-                  week={week}
-                  manager={manager}
-                  consultantId={consultantId}
-                  setConsultantId={setConsultantId}
+          {mode !== 'week' && rangeSummary.error && tab === 'summary' && (
+            <Failed message={rangeSummary.error} />
+          )}
+          {mode !== 'week' && rangeSummary.value && tab === 'summary' && (
+            <>
+              <RangeKpis r={rangeSummary.value} label={rangeName} />
+              <div className="rp-charts">
+                <RangeChart r={rangeSummary.value} />
+                <QuotedBanked
+                  quotation={rangeSummary.value.totals.quotationTotal}
+                  banked={rangeSummary.value.totals.bankedTotal}
+                  note="Period totals on the same scale"
                 />
-              )}
-              {tab === 'budget' && manager && <Budget week={week} />}
-            </section>
+              </div>
+            </>
+          )}
+
+          {ready && (
+            <>
+              <div className="rp-tabs" role="tablist" aria-label="Report">
+                {tabs.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    role="tab"
+                    className="rp-tab"
+                    aria-selected={tab === t.id}
+                    onClick={() => setTab(t.id)}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+
+              <section
+                className="rp-card rp-panel"
+                role="tabpanel"
+                aria-label={tabs.find((t) => t.id === tab)?.label}
+              >
+                {mode === 'week' && (
+                  <>
+                    {tab === 'summary' &&
+                      (summary.value ? (
+                        <Summary r={summary.value} />
+                      ) : (
+                        !summary.error && <p className="muted">Loading...</p>
+                      ))}
+                    {tab === 'consultants' && <Consultants week={week} />}
+                    {tab === 'products' && (
+                      <Products
+                        week={week}
+                        manager={manager}
+                        consultantId={consultantId}
+                        setConsultantId={setConsultantId}
+                      />
+                    )}
+                    {tab === 'budget' && manager && <Budget week={week} />}
+                  </>
+                )}
+                {mode !== 'week' && range && (
+                  <>
+                    {tab === 'summary' &&
+                      (rangeSummary.value ? (
+                        <RangeSummary r={rangeSummary.value} />
+                      ) : (
+                        !rangeSummary.error && <p className="muted">Loading...</p>
+                      ))}
+                    {tab === 'consultants' && <RangeConsultants from={range.from} to={range.to} />}
+                    {tab === 'products' && (
+                      <RangeProducts
+                        from={range.from}
+                        to={range.to}
+                        manager={manager}
+                        consultantId={consultantId}
+                        setConsultantId={setConsultantId}
+                      />
+                    )}
+                    {tab === 'budget' && manager && <RangeBudget from={range.from} to={range.to} />}
+                  </>
+                )}
+              </section>
+            </>
           )}
         </>
       )}

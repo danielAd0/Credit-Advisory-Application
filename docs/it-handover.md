@@ -95,12 +95,23 @@ databases, and the application refuses to start against one.
 
 | Variable | Protects | If it is lost |
 | --- | --- | --- |
-| `ID_NUMBER_ENCRYPTION_KEY` | the stored ID numbers (AES-256) | **every ID number is unreadable for good.** No way back except the backup of the key |
+| `ID_NUMBER_ENCRYPTION_KEY` | the stored ID numbers (AES-256), and the temporary passwords of new consultant logins waiting to be emailed | **every ID number is unreadable for good.** No way back except the backup of the key. Queued login emails cannot be sent either: regenerate them on the Consultant logins page |
 | `ID_NUMBER_LOOKUP_KEY` | finding a client by ID number, and the duplicate check | lookups and duplicate checks stop working. Same - only the backup helps |
 | `MFA_ENCRYPTION_KEY` | the authenticator-app secrets | nobody can finish signing in until their two-step sign-in is reset (section 9) |
 
 Each is 32 random bytes written as base64 (44 characters, ending in `=`). Make **three different** keys -
 the application refuses to start if two are the same.
+
+`ID_NUMBER_ENCRYPTION_KEY` has two jobs. Besides the ID numbers, it seals the temporary password of every new
+consultant login until its email is sent (`consultant_login_invites`, status PENDING, QUEUED or FAILED; the
+password is deleted as soon as the email is sent). The two uses are kept apart cryptographically, but they share
+the key. **Before rotating it**, either let those emails go out first, or keep the old key configured for
+decryption (`app.idnumber.previous-encryption-keys.<old version>`) until they have; any that cannot be read any more show as failed and must be regenerated on the
+Consultant logins page. Check with:
+
+```sql
+SELECT status, count(*) FROM consultant_login_invites WHERE status IN ('PENDING','QUEUED','FAILED') GROUP BY status;
+```
 
 Linux:
 

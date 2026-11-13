@@ -12,7 +12,9 @@ import java.util.Optional;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
-/** SQL for consultant onboarding (V23). Never reads or returns a plain password. */
+/**
+ * SQL for consultant onboarding (V23). Never reads or returns a plain password.
+ */
 @Component
 public class OnboardingStore {
 
@@ -44,7 +46,8 @@ public class OnboardingStore {
                     + " order by c.id limit ?", (rs, n) -> eligible(rs), limit);
         }
         return jdbc.query("select c.id, c.consultant_code, c.full_name, c.email " + ELIGIBLE
-                + " and c.id = any (cast(? as bigint[])) order by c.id limit ?", (rs, n) -> eligible(rs), longArray(onlyIds), limit);
+                + " and c.id = any (cast(? as bigint[])) order by c.id limit ?", (rs, n) -> eligible(rs),
+                longArray(onlyIds), limit);
     }
 
     public long countEligible() {
@@ -187,7 +190,10 @@ public class OnboardingStore {
                 rs.getBytes(5), rs.getInt(6), rs.getString(7)), limit);
     }
 
-    /** SENDING for longer than this (the server stopped mid-send): back in the queue. */
+    /**
+     * SENDING for longer than this (the server stopped mid-send): back in the
+     * queue.
+     */
     public int releaseStuck(java.time.Duration olderThan) {
         return jdbc.update("""
                 update consultant_login_invites set status = 'QUEUED', next_attempt_at = now()
@@ -205,6 +211,17 @@ public class OnboardingStore {
                 """, id);
     }
 
+    /**
+     * The emailed password now has {@code days} to be used (V24). Only while the
+     * login still has to change its password: one already changed never expires.
+     */
+    public void startPasswordClock(long userId, int days) {
+        jdbc.update("""
+                update users set temporary_password_expires_at = now() + make_interval(days => ?)
+                where id = ? and must_change_password
+                """, days, userId);
+    }
+
     public void markRetry(long id, String error, Instant nextAttempt) {
         jdbc.update("""
                 update consultant_login_invites set status = 'QUEUED', last_error = ?, next_attempt_at = ?
@@ -219,7 +236,9 @@ public class OnboardingStore {
                 """, truncate(error), id);
     }
 
-    /** Puts a claimed invite back untouched (sending stopped before it was tried). */
+    /**
+     * Puts a claimed invite back untouched (sending stopped before it was tried).
+     */
     public void unclaim(long id) {
         jdbc.update("""
                 update consultant_login_invites set status = 'QUEUED', attempts = greatest(attempts - 1, 0)
@@ -237,41 +256,126 @@ public class OnboardingStore {
         return counts;
     }
 
+    /**
+     * @param passwordExpiresAt when the emailed password stops working (null: not
+     *                          sent yet, or already changed by the consultant)
+     * @param expired           sent, never used to set a new password, and past
+     *                          its time limit: regenerate it
+     * @param signedIn          the consultant has chosen their own password
+     */
     public record InviteRow(long id, long consultantId, String consultantCode, String consultantName, long userId,
             String email, String status, int attempts, String lastError, Instant generatedAt, Instant queuedAt,
-            Instant lastAttemptAt, Instant nextAttemptAt, Instant sentAt) {
+            Instant lastAttemptAt, Instant nextAttemptAt, Instant sentAt, Instant passwordExpiresAt, boolean expired,
+            boolean signedIn) {
     }
 
     private static final String INVITE_COLUMNS = """
             select i.id, i.consultant_id, c.consultant_code, c.full_name, i.user_id, i.email, i.status, i.attempts,
-                   i.last_error, i.generated_at, i.queued_at, i.last_attempt_at, i.next_attempt_at, i.sent_at
-            from consultant_login_invites i join consultants c on c.id = i.consultant_id
+                   i.last_error, i.generated_at, i.queued_at, i.last_attempt_at, i.next_attempt_at, i.sent_at,
+                   u.temporary_password_expires_at,
+                   (i.status = 'SENT' and u.must_change_password and u.temporary_password_expires_at <= now()),
+                   (i.status = 'SENT' and not u.must_change_password)
+            from consultant_login_invites i
+            join consultants c on c.id = i.consultant_id
+            join users u on u.id = i.user_id
+            """;
+
+    /**
+     * Sent emails whose password expired unused. Used as the status filter
+     * "EXPIRED".
+     */
+    private static final String EXPIRED = """
+            i.status = 'SENT' and u.must_change_password and u.temporary_password_expires_at <= now()
             """;
 
     public List<InviteRow> invites(String status, int limit, long offset) {
         String order = " order by i.generated_at desc, i.id desc limit ? offset ?";
-        return status == null
-                ? jdbc.query(INVITE_COLUMNS + order, (rs, n) -> invite(rs), limit, offset)
-                : jdbc.query(INVITE_COLUMNS + " where i.status = ?" + order, (rs, n) -> invite(rs), status, limit,
-                        offset);
+        if (status == null) {
+            return jdbc.query(INVITE_COLUMNS + order, (rs, n) -> invite(rs), limit, offset);
+        }
+        if ("EXPIRED".equals(status)) {
+            return jdbc.query(INVITE_COLUMNS + " where " + EXPIRED + order, (rs, n) -> invite(rs), limit, offset);
+        }
+        return jdbc.query(INVITE_COLUMNS + " where i.status = ?" + order, (rs, n) -> invite(rs), status, limit,
+                offset);
     }
 
     public long countInvites(String status) {
-        return status == null
-                ? jdbc.queryForObject("select count(*) from consultant_login_invites", Long.class)
-                : jdbc.queryForObject("select count(*) from consultant_login_invites where status = ?", Long.class,
-                        status);
+        if (status == null) {
+            return jdbc.queryForObject("select count(*) from consultant_login_invites", Long.class);
+        }
+        if ("EXPIRED".equals(status)) {
+            return countExpired();
+        }
+        return jdbc.queryForObject("select count(*) from consultant_login_invites where status = ?", Long.class,
+                status);
+    }
+
+    public long countExpired() {
+        return jdbc.queryForObject("select count(*) from consultant_login_invites i join users u on u.id = i.user_id "
+                + "where " + EXPIRED, Long.class);
     }
 
     private static InviteRow invite(ResultSet rs) throws SQLException {
         return new InviteRow(rs.getLong(1), rs.getLong(2), rs.getString(3), rs.getString(4), rs.getLong(5),
                 rs.getString(6), rs.getString(7), rs.getInt(8), rs.getString(9), instant(rs, 10), instant(rs, 11),
-                instant(rs, 12), instant(rs, 13), instant(rs, 14));
+                instant(rs, 12), instant(rs, 13), instant(rs, 14), instant(rs, 15), rs.getBoolean(16),
+                rs.getBoolean(17));
+    }
+
+    // ---------- regenerating ----------
+
+    /**
+     * Invites that get a new password from "Regenerate": the login is enabled and
+     * still has to change its password, and the email either went out and expired
+     * unused, or FAILED (for example the sealed password can no longer be read
+     * after a key rotation).
+     */
+    public record Regeneratable(long inviteId, long userId, long consultantId, String consultantCode,
+            String consultantName, String email) {
+    }
+
+    public List<Regeneratable> regeneratable(Collection<Long> onlyIds, int limit) {
+        String sql = """
+                select i.id, i.user_id, i.consultant_id, c.consultant_code, c.full_name, i.email
+                from consultant_login_invites i
+                join users u on u.id = i.user_id
+                join consultants c on c.id = i.consultant_id
+                where u.enabled and u.must_change_password and c.status = 'ACTIVE'
+                  and ((""" + EXPIRED + ") or i.status = 'FAILED')";
+        String order = " order by i.id limit ?";
+        var mapper = (org.springframework.jdbc.core.RowMapper<Regeneratable>) (rs, n) -> new Regeneratable(
+                rs.getLong(1), rs.getLong(2), rs.getLong(3), rs.getString(4), rs.getString(5), rs.getString(6));
+        return onlyIds == null ? jdbc.query(sql + order, mapper, limit)
+                : jdbc.query(sql + " and i.id = any (cast(? as bigint[]))" + order, mapper, longArray(onlyIds), limit);
+    }
+
+    public long countRegeneratable() {
+        return jdbc.queryForObject("""
+                select count(*) from consultant_login_invites i
+                join users u on u.id = i.user_id
+                join consultants c on c.id = i.consultant_id
+                where u.enabled and u.must_change_password and c.status = 'ACTIVE'
+                  and ((""" + EXPIRED + ") or i.status = 'FAILED')", Long.class);
+    }
+
+    /** A new sealed password: back to "not sent yet", as if just generated. */
+    public void resetInvite(long id, byte[] sealedPassword, long byUserId) {
+        jdbc.update("""
+                update consultant_login_invites
+                set status = 'PENDING', password_sealed = ?, attempts = 0, last_error = null,
+                    generated_by_user_id = ?, generated_at = now(), queued_by_user_id = null, queued_at = null,
+                    next_attempt_at = null, last_attempt_at = null, sent_at = null
+                where id = ?
+                """, sealedPassword, byUserId, id);
     }
 
     // ---------- the login an invite belongs to ----------
 
-    /** consultantStatus: of the consultant the login belongs to, or null if it is no longer linked. */
+    /**
+     * consultantStatus: of the consultant the login belongs to, or null if it is no
+     * longer linked.
+     */
     public record LoginState(boolean enabled, boolean mustChangePassword, String passwordHash,
             String consultantStatus) {
 

@@ -7,6 +7,7 @@ import {
   type BlockedConsultant,
   type GenerateResult,
   type Invite,
+  type InviteFilter,
   type InviteStatus,
   type OnboardingSummary,
 } from '../api/onboarding';
@@ -205,14 +206,16 @@ function DeliveryReport({
   summary,
   refreshKey,
   onRetry,
+  onRegenerate,
   busy,
 }: {
   summary: OnboardingSummary;
   refreshKey: number;
   onRetry: () => void;
+  onRegenerate: () => void;
   busy: boolean;
 }) {
-  const [status, setStatus] = useState<InviteStatus | ''>('');
+  const [status, setStatus] = useState<InviteFilter>('');
   const [page, setPage] = useState(0);
   const [list, setList] = useState<PageResponse<Invite> | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -230,7 +233,7 @@ function DeliveryReport({
 
   const total = Object.values(summary.invites).reduce((a, b) => a + b, 0);
   if (total === 0) return null;
-  const filters: (InviteStatus | '')[] = ['', 'PENDING', 'QUEUED', 'SENT', 'FAILED'];
+  const filters: InviteFilter[] = ['', 'PENDING', 'QUEUED', 'SENT', 'EXPIRED', 'FAILED'];
 
   return (
     <section className="wi-card" aria-label="Email delivery report">
@@ -252,7 +255,27 @@ function DeliveryReport({
           <strong>{summary.invites.FAILED}</strong>
           <span>Failed</span>
         </div>
+        <div className={`wi-stat ${summary.expiredLogins > 0 ? 'bad' : ''}`}>
+          <strong>{summary.expiredLogins}</strong>
+          <span>Expired unused</span>
+        </div>
       </div>
+      <p className="muted">
+        An emailed temporary password works for {summary.passwordDays} days after it is sent. After
+        that it stops working and you regenerate it here. Passwords you reset on the Users page
+        never expire.
+      </p>
+      {summary.canRegenerate > 0 && (
+        <div className="wi-actions">
+          <button type="button" className="btn" onClick={onRegenerate} disabled={busy}>
+            Regenerate {summary.canRegenerate} expired or failed login
+            {summary.canRegenerate === 1 ? '' : 's'}
+          </button>
+          <span className="muted">
+            Makes new temporary passwords; then press Send login details.
+          </span>
+        </div>
+      )}
       {summary.invites.FAILED > 0 && (
         <div className="wi-actions">
           <button type="button" className="btn" onClick={onRetry} disabled={busy}>
@@ -274,7 +297,7 @@ function DeliveryReport({
               setPage(0);
             }}
           >
-            {f ? STATUS_LABEL[f] : 'All'}
+            {f === 'EXPIRED' ? 'Expired' : f ? STATUS_LABEL[f] : 'All'}
           </button>
         ))}
       </div>
@@ -294,6 +317,7 @@ function DeliveryReport({
                   <th>Status</th>
                   <th>Attempts</th>
                   <th>Sent</th>
+                  <th>Password works until</th>
                   <th>Problem</th>
                 </tr>
               </thead>
@@ -307,14 +331,25 @@ function DeliveryReport({
                     <td>
                       <span
                         className={`badge ${
-                          i.status === 'SENT' ? 'active' : i.status === 'FAILED' ? 'suspended' : ''
+                          i.expired || i.status === 'FAILED'
+                            ? 'suspended'
+                            : i.status === 'SENT'
+                              ? 'active'
+                              : ''
                         }`}
                       >
-                        {STATUS_LABEL[i.status]}
+                        {i.expired ? 'Expired' : i.signedIn ? 'Signed in' : STATUS_LABEL[i.status]}
                       </span>
                     </td>
                     <td>{i.attempts}</td>
                     <td>{when(i.sentAt)}</td>
+                    <td>
+                      {i.signedIn ? (
+                        <span className="muted">Own password set</span>
+                      ) : (
+                        when(i.passwordExpiresAt)
+                      )}
+                    </td>
                     <td>
                       {i.lastError ?? <span className="muted">-</span>}
                       {i.status === 'QUEUED' && i.nextAttemptAt && i.attempts > 0 && (
@@ -428,6 +463,30 @@ export default function OnboardingPage() {
       setNotice({
         kind: 'ok',
         text: `${r.queued} email${r.queued === 1 ? ' is' : 's are'} being sent in the background, about 20 a minute. You can leave this page.`,
+      });
+    } finally {
+      setBusy(false);
+      await reload();
+    }
+  }
+
+  async function regenerateExpired() {
+    setBusy(true);
+    setSkipped([]);
+    let made = 0;
+    const left: GenerateResult['skipped'] = [];
+    try {
+      // 25 per call; keep going while the server makes some and some remain.
+      for (;;) {
+        const r = await onboarding.regenerate();
+        made += r.created;
+        left.push(...r.skipped);
+        if (r.remaining === 0 || r.created === 0) break;
+      }
+      setSkipped(left);
+      setNotice({
+        kind: 'ok',
+        text: `${made} new temporary password${made === 1 ? ' was' : 's were'} made. Press Send login details to email them.`,
       });
     } finally {
       setBusy(false);
@@ -582,6 +641,7 @@ export default function OnboardingPage() {
           refreshKey={refreshKey}
           busy={busy}
           onRetry={() => void withPassword(retryFailed)}
+          onRegenerate={() => void withPassword(regenerateExpired)}
         />
         <NeedsAttention onChanged={() => void reload()} />
       </div>

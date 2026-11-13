@@ -437,6 +437,70 @@
   background: var(--accent-soft);
 }
 
+/* ---- period picker: week, month or date range ---- */
+.rp-period {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1.25rem;
+}
+
+.rp-period .rp-week {
+  flex: 1 1 22rem;
+}
+
+.rp-mode {
+  margin-bottom: 0;
+}
+
+.rp-range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 1rem;
+}
+
+.rp-range label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.rp-range input {
+  height: 2.5rem;
+  padding: 0 0.75rem;
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.rp-period-note {
+  margin: 0;
+}
+
+.rp-sub {
+  margin: 1.25rem 0 0.5rem;
+  font-size: 1rem;
+}
+
+.rp-details summary {
+  cursor: pointer;
+  margin-bottom: 0.5rem;
+  color: var(--accent);
+}
+
+.rp-cols.dense {
+  gap: 0.2rem;
+}
+
+.rp-cols.dense .rp-col-day {
+  font-size: 0.7rem;
+}
+
 @media (max-width: 1100px) {
   .rp-charts {
     grid-template-columns: minmax(0, 1fr);

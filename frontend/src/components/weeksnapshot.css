@@ -139,3 +139,69 @@
     font-size: 0.8rem;
   }
 }
+
+/* ---- week picker, "latest import" badge and today's target ---- */
+.ws-latest {
+  margin-left: 0.6rem;
+  vertical-align: middle;
+  font-size: 0.75rem;
+}
+
+.ws-pick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding-top: 1.25rem;
+}
+.ws-pick label {
+  color: var(--muted);
+  font-weight: 500;
+}
+.ws-pick select {
+  height: 2.4rem;
+  padding: 0 0.75rem;
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.ws-behind {
+  margin: 1rem 0 0;
+  padding: 0.6rem 0.8rem;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  font-size: 0.9rem;
+}
+
+.ws-target-sub {
+  margin-top: 0.35rem !important;
+  font-size: 0.9rem;
+}
+
+.ws-now {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 1rem;
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px dashed var(--line);
+  font-size: 0.9rem;
+}
+.ws-now p {
+  margin: 0;
+}
+.ws-now .muted {
+  flex-basis: 100%;
+}
+.ws-now-label {
+  color: var(--muted);
+  font-weight: 500;
+}
+.ws-unset {
+  color: var(--muted);
+  font-size: clamp(1.2rem, 1.8vw, 1.5rem) !important;
+}

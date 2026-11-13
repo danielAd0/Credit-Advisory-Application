@@ -64,6 +64,21 @@ final class ReportCsv {
     }
 
     /** "Monday" for 1 ... "Sunday" for 7. */
+    /**
+     * The Target cell of a summary row. Company reports (scope ALL) say "Not
+     * configured" when no target was set for that day or week, instead of
+     * leaving it blank; a consultant's own report never has targets, so it
+     * stays empty.
+     */
+    static Object target(String scope, BigDecimal target) {
+        if (target != null) {
+            return target;
+        }
+        return ReportService.ALL.equals(scope) ? NOT_CONFIGURED : null;
+    }
+
+    static final String NOT_CONFIGURED = "Not configured";
+
     static String dayName(int dayOfWeek) {
         return DayOfWeek.of(dayOfWeek).getDisplayName(TextStyle.FULL, Locale.ENGLISH);
     }

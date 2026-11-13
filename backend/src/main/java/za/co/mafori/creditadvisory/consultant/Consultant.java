@@ -14,7 +14,9 @@ import jakarta.persistence.Version;
 import java.time.Instant;
 import java.util.Locale;
 
-
+/**
+ * A consultant clients can be assigned to. Maps to the consultants table (V1).
+ */
 @Entity
 @Table(name = "consultants")
 public class Consultant {
@@ -29,6 +31,10 @@ public class Consultant {
     @Column(name = "full_name", nullable = false, length = 200)
     private String fullName;
 
+    /**
+     * Lower-case, unique, or null (V23). How the weekly import recognises the
+     * consultant.
+     */
     @Column(name = "email", length = 254)
     private String email;
 
@@ -49,20 +55,24 @@ public class Consultant {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    /** Required by JPA. NOt for application code - use the public constructor. */
     protected Consultant() {
     }
 
+    /** A new consultant always starts ACTIVE */
     public Consultant(String consultantCode, String fullName) {
         this.consultantCode = normalizeCode(consultantCode);
         this.fullName = fullName;
         this.status = ConsultantStatus.ACTIVE;
     }
 
+    // -------- behaviour --------
     public void rename(String fullName) {
         this.fullName = fullName.strip();
     }
 
- 
+    /** Changes status and records when. Does nothing if the status is unchanged. */
+    /** Sets or clears the email (stored lower-case and trimmed). */
     public void changeEmail(String email) {
         this.email = email == null || email.isBlank() ? null : email.strip().toLowerCase(Locale.ROOT);
     }
@@ -79,10 +89,12 @@ public class Consultant {
         this.statusChangedAt = Instant.now();
     }
 
+    /** "c004" becomes "C004" - the database only accepts upper-case codes */
     public static String normalizeCode(String code) {
         return code.strip().toUpperCase(Locale.ROOT);
     }
 
+    // -------- timestamps --------
 
     @PrePersist
     void onCreate() {
@@ -97,7 +109,8 @@ public class Consultant {
         this.updatedAt = Instant.now();
     }
 
-    
+    // -------- getters (no setters - change state through the methods above)
+    // --------
 
     public Long getId() {
         return id;

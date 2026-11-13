@@ -15,7 +15,10 @@ import za.co.mafori.creditadvisory.audit.AuditLogWriter;
 import za.co.mafori.creditadvisory.auth.AppUserPrincipal;
 import za.co.mafori.creditadvisory.common.web.ApiException;
 
-/** Reads and sets the daily and weekly quotation targets. Role checks live on the controller. */
+/**
+ * Reads and sets the daily and weekly quotation targets. Role checks live on
+ * the controller.
+ */
 @Service
 public class TargetService {
 
@@ -57,15 +60,27 @@ public class TargetService {
 
     /**
      * Adds a target row, or replaces the one already set for that date (so a
-     * mistake can be corrected the same day). Past dates are refused: they would
-     * change reports that have already been read.
+     * mistake can be corrected the same day).
+     *
+     * <p>
+     * There are no built-in targets (V25), so a period can have none. A past
+     * date is allowed only while it has no target: before the first target
+     * ever saved, which fills in a period that showed "Target not configured"
+     * (useful after importing old registers). Once a date is covered by a
+     * target, changes must start today or later, so reports already read keep
+     * the target they had.
      */
     @Transactional
     public TargetResponse set(SetTargetRequest request) {
         LocalDate today = LocalDate.now(BUSINESS_ZONE);
         if (request.effectiveFrom().isBefore(today)) {
-            throw ApiException.unprocessable("target:past-date", "Date in the past",
-                    "A new target must start today or later. Past weeks keep the target they had.");
+            LocalDate first = firstEffectiveFrom();
+            if (first != null && !request.effectiveFrom().isBefore(first)) {
+                throw ApiException.unprocessable("target:past-date", "Date in the past",
+                        "A target already applies to that date. A change must start today or later, "
+                                + "so past weeks keep the target they had. Past dates can only be given a "
+                                + "target before " + first + ", when no target was set yet.");
+            }
         }
         Long id = jdbc.queryForObject("""
                 insert into sales_targets (effective_from, daily_quotation_target, weekly_quotation_target,
@@ -84,6 +99,11 @@ public class TargetService {
                         "dailyTarget", request.dailyTarget(),
                         "weeklyTarget", request.weeklyTarget()));
         return jdbc.queryForObject(SELECT + " where s.id = ?", ROW, id);
+    }
+
+    /** The start of the earliest target ever saved, or null when none has been. */
+    private LocalDate firstEffectiveFrom() {
+        return jdbc.queryForObject("select min(effective_from) from sales_targets", LocalDate.class);
     }
 
     private static Long currentUserId() {

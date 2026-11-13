@@ -7,6 +7,9 @@ import type { PageResponse } from './types';
 
 export type InviteStatus = 'PENDING' | 'QUEUED' | 'SENDING' | 'SENT' | 'FAILED';
 
+/** The report's filter: a status, or EXPIRED (sent, unused, past its time limit). */
+export type InviteFilter = InviteStatus | 'EXPIRED' | '';
+
 export interface OnboardingSummary {
   consultants: number;
   activeConsultants: number;
@@ -21,6 +24,12 @@ export interface OnboardingSummary {
   mailConfigured: boolean;
   mailSender: string | null;
   loginUrl: string | null;
+  /** Emails sent whose temporary password expired unused. */
+  expiredLogins: number;
+  /** Expired or failed logins that Regenerate gives a new password. */
+  canRegenerate: number;
+  /** How long an emailed temporary password works. */
+  passwordDays: number;
 }
 
 export interface GenerateResult {
@@ -49,6 +58,12 @@ export interface Invite {
   lastAttemptAt: string | null;
   nextAttemptAt: string | null;
   sentAt: string | null;
+  /** When the emailed password stops working (null: not sent yet, or already changed). */
+  passwordExpiresAt: string | null;
+  /** Sent, never used, past its time limit: regenerate it. */
+  expired: boolean;
+  /** The consultant has chosen their own password. */
+  signedIn: boolean;
 }
 
 export interface BlockedConsultant {
@@ -68,7 +83,7 @@ const real = {
     api<PageResponse<BlockedConsultant>>(`/api/onboarding/blocked?page=${page}&size=${size}`),
   /** Up to 25 logins per call. 403 REAUTHENTICATION_REQUIRED: ask for the password first. */
   generate: () => post<GenerateResult>('/api/onboarding/logins', {}),
-  invites: (status: InviteStatus | '', page = 0, size = 50) =>
+  invites: (status: InviteFilter, page = 0, size = 50) =>
     api<PageResponse<Invite>>(
       `/api/onboarding/invites?page=${page}&size=${size}${status ? `&status=${status}` : ''}`,
     ),
@@ -76,6 +91,9 @@ const real = {
     post<{ queued: number }>('/api/onboarding/invites/send', inviteIds ? { inviteIds } : {}),
   retry: (inviteIds?: number[]) =>
     post<{ queued: number }>('/api/onboarding/invites/retry', inviteIds ? { inviteIds } : {}),
+  /** New passwords for expired or failed logins, up to 25 per call; then send them. */
+  regenerate: (inviteIds?: number[]) =>
+    post<GenerateResult>('/api/onboarding/invites/regenerate', inviteIds ? { inviteIds } : {}),
   setConsultantEmail: (consultantId: number, email: string) =>
     api<{ consultantId: number; email: string }>(
       `/api/onboarding/consultants/${consultantId}/email`,
@@ -118,7 +136,13 @@ function mockDeliverSoon() {
     mockInvites = mockInvites.map(
       (i): Invite =>
         i.status === 'QUEUED'
-          ? { ...i, status: 'SENT', attempts: i.attempts + 1, sentAt: new Date().toISOString() }
+          ? {
+              ...i,
+              status: 'SENT',
+              attempts: i.attempts + 1,
+              sentAt: new Date().toISOString(),
+              passwordExpiresAt: new Date(Date.now() + 7 * 864e5).toISOString(),
+            }
           : i,
     );
   }, 1000);
@@ -146,6 +170,9 @@ const fake: typeof real = {
       mailConfigured: true,
       mailSender: 'no-reply@example.test',
       loginUrl: 'http://localhost:5173',
+      expiredLogins: mockInvites.filter((i) => i.expired).length,
+      canRegenerate: mockInvites.filter((i) => i.expired || i.status === 'FAILED').length,
+      passwordDays: 7,
     };
   },
   blocked: async (page = 0, size = 50) => {
@@ -184,6 +211,9 @@ const fake: typeof real = {
           lastAttemptAt: null,
           nextAttemptAt: null,
           sentAt: null,
+          passwordExpiresAt: null,
+          expired: false,
+          signedIn: false,
         });
       }
     }
@@ -191,7 +221,9 @@ const fake: typeof real = {
   },
   invites: async (status, page = 0, size = 50) => {
     await mock.delay();
-    const items = mockInvites.filter((i) => !status || i.status === status);
+    const items = mockInvites.filter((i) =>
+      !status ? true : status === 'EXPIRED' ? i.expired : i.status === status,
+    );
     return { items, page, size, totalItems: items.length, totalPages: 1 };
   },
   send: async () => {
@@ -217,6 +249,25 @@ const fake: typeof real = {
     });
     mockDeliverSoon();
     return { queued };
+  },
+  regenerate: async () => {
+    await mock.delay(600);
+    requireMockPassword();
+    let created = 0;
+    mockInvites = mockInvites.map((i): Invite => {
+      if (!i.expired && i.status !== 'FAILED') return i;
+      created++;
+      return {
+        ...i,
+        status: 'PENDING',
+        attempts: 0,
+        lastError: null,
+        sentAt: null,
+        passwordExpiresAt: null,
+        expired: false,
+      };
+    });
+    return { created, remaining: 0, skipped: [] };
   },
   setConsultantEmail: async (consultantId, email) => {
     await mock.delay();

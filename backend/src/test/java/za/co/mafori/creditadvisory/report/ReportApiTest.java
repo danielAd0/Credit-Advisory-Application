@@ -43,6 +43,7 @@ class ReportApiTest extends ApiTestBase {
      */
     @BeforeEach
     void createData() {
+        configureTargets("2026-01-01", "120000", "600000");
         thandiId = createConsultant("C001", "Thandi Test");
         siphoId = createConsultant("C002", "Sipho Test");
         long client1 = createClient("Test", "Alpha", null);
@@ -196,6 +197,36 @@ class ReportApiTest extends ApiTestBase {
         assertThat(summary.number("$.week.quotationTotal")).isEqualTo(133_600);
         assertThat(summary.number("$.week.weeklyTarget")).isEqualTo(600_000);
         assertThat(summary.value("$.week.targetMet")).isEqualTo(false);
+    }
+
+    @Test
+    void withoutConfiguredTargetsTheSummaryHasNoTargetsAndJudgesNothing() {
+        jdbc.update("delete from sales_targets");
+
+        ApiClient.Response summary = admin.get(reports(WEEK, "summary"));
+
+        assertThat(summary.status()).as(summary.body()).isEqualTo(200);
+        assertThat(summary.text("$.scope")).isEqualTo("ALL");
+        // The figures are still there...
+        assertThat(summary.number("$.week.quotationTotal")).isEqualTo(133_600);
+        // ...but no target is assumed, so nothing is met or missed.
+        assertThat(summary.value("$.days[1].dailyTarget")).isNull();
+        assertThat(summary.value("$.days[1].targetMet")).isNull();
+        assertThat(summary.value("$.week.weeklyTarget")).isNull();
+        assertThat(summary.value("$.week.targetMet")).isNull();
+    }
+
+    @Test
+    void aTargetSetAfterTheWeekDoesNotApplyToIt() {
+        jdbc.update("delete from sales_targets");
+        configureTargets("2026-09-21", "100000", "500000"); // the Monday after WEEK
+
+        ApiClient.Response summary = admin.get(reports(WEEK, "summary"));
+        ApiClient.Response next = admin.get(reports(NEXT_WEEK, "summary"));
+
+        assertThat(summary.value("$.week.weeklyTarget")).isNull();
+        assertThat(next.number("$.week.weeklyTarget")).isEqualTo(500_000);
+        assertThat(next.number("$.days[0].dailyTarget")).isEqualTo(100_000);
     }
 
     @Test

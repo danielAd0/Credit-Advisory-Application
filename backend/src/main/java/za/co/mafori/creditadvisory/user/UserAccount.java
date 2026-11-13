@@ -84,6 +84,14 @@ public class UserAccount {
     private Instant lastLoginAt;
 
     /**
+     * When an EMAILED temporary password stops working (V24), or null. Set by
+     * LoginDetailsSender when the login email is sent; cleared by every password
+     * change, so a password an admin hands over in person never expires.
+     */
+    @Column(name = "temporary_password_expires_at")
+    private Instant temporaryPasswordExpiresAt;
+
+    /**
      * Roles are few and needed on every sign-in, so they are loaded with the user.
      */
     @ManyToMany(fetch = FetchType.EAGER)
@@ -157,8 +165,25 @@ public class UserAccount {
 
     // -------- account management --------
 
+    /**
+     * Any new password (the user's own or an admin reset) ends an emailed one's
+     * time limit.
+     */
     public void changePasswordHash(String newPasswordHash) {
         this.passwordHash = newPasswordHash;
+        this.temporaryPasswordExpiresAt = null;
+    }
+
+    /**
+     * True when the password is still an emailed temporary one whose time limit
+     * has passed (docs/consultant-onboarding.md, section 3).
+     */
+    public boolean temporaryPasswordExpired(Instant now) {
+        return mustChangePassword && temporaryPasswordExpiresAt != null && !now.isBefore(temporaryPasswordExpiresAt);
+    }
+
+    public Instant getTemporaryPasswordExpiresAt() {
+        return temporaryPasswordExpiresAt;
     }
 
     /** An admin chose this password: the user must replace it on first use. */

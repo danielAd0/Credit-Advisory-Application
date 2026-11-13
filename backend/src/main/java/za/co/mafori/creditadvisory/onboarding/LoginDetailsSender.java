@@ -15,12 +15,37 @@ import za.co.mafori.creditadvisory.audit.AuditLogWriter;
 import za.co.mafori.creditadvisory.common.idnumber.IdNumberProtector;
 import za.co.mafori.creditadvisory.onboarding.LoginDetailsMailer.MailDeliveryException;
 
-
+/**
+ * The background job that emails queued login details, a few at a time.
+ *
+ * <p>
+ * Microsoft 365 accepts about 30 messages a minute from one mailbox, so the
+ * default is {@code app.onboarding.send-batch} = 10 every
+ * {@code app.onboarding.send-interval} = 30 s (20 a minute): 300 consultants
+ * take about a quarter of an hour. No request waits for this, so nothing
+ * times out.
+ *
+ * <p>
+ * Before each email it checks the login is still enabled and still has the
+ * generated password (an admin may have reset it meanwhile): an outdated
+ * password is never sent. After Microsoft 365 accepts the email, the sealed
+ * password is deleted. A temporary failure is tried again later (after 2, 4
+ * and 8 minutes); after {@code app.onboarding.max-attempts} the email is
+ * FAILED and an admin can retry it.
+ *
+ * <p>
+ * Once sent, the temporary password works for
+ * {@code app.onboarding.temporary-password-days} (default 7); after that
+ * sign-in refuses it and the admin regenerates it
+ * (OnboardingService.regenerate).
+ */
 @Component
 public class LoginDetailsSender {
 
     private static final Logger log = LoggerFactory.getLogger(LoginDetailsSender.class);
-    /** A SENDING invite older than this belonged to a server that stopped mid-send. */
+    /**
+     * A SENDING invite older than this belonged to a server that stopped mid-send.
+     */
     private static final Duration STUCK = Duration.ofMinutes(10);
 
     private final OnboardingStore store;
@@ -33,6 +58,7 @@ public class LoginDetailsSender {
     private final String loginUrl;
     private final String companyName;
     private final String supportContact;
+    private final int passwordDays;
 
     public LoginDetailsSender(OnboardingStore store, LoginDetailsMailer mailer, IdNumberProtector protector,
             PasswordEncoder passwordEncoder, AuditLogWriter audit,
@@ -40,7 +66,8 @@ public class LoginDetailsSender {
             @Value("${app.onboarding.max-attempts:4}") int maxAttempts,
             @Value("${app.onboarding.login-url:}") String loginUrl,
             @Value("${app.onboarding.company-name:Mafori}") String companyName,
-            @Value("${app.onboarding.support-contact:your manager}") String supportContact) {
+            @Value("${app.onboarding.support-contact:your manager}") String supportContact,
+            @Value("${app.onboarding.temporary-password-days:7}") int passwordDays) {
         this.store = store;
         this.mailer = mailer;
         this.protector = protector;
@@ -51,10 +78,10 @@ public class LoginDetailsSender {
         this.loginUrl = loginUrl.strip();
         this.companyName = companyName.strip();
         this.supportContact = supportContact.strip();
+        this.passwordDays = Math.max(1, passwordDays);
     }
 
-    @Scheduled(initialDelayString = "${app.onboarding.send-initial-delay:PT30S}",
-            fixedDelayString = "${app.onboarding.send-interval:PT30S}")
+    @Scheduled(initialDelayString = "${app.onboarding.send-initial-delay:PT30S}", fixedDelayString = "${app.onboarding.send-interval:PT30S}")
     public void scheduled() {
         try {
             int sent = sendDue();
@@ -67,7 +94,10 @@ public class LoginDetailsSender {
         }
     }
 
-    /** One round. Returns how many emails Microsoft 365 accepted. Public for the tests. */
+    /**
+     * One round. Returns how many emails Microsoft 365 accepted. Public for the
+     * tests.
+     */
     public int sendDue() {
         if (!mailer.isConfigured() || loginUrl.isEmpty()) {
             return 0;
@@ -126,7 +156,7 @@ public class LoginDetailsSender {
 
         try {
             mailer.send(LoginDetailsEmail.build(invite.email(), invite.consultantName(), loginUrl, password,
-                    companyName, supportContact));
+                    companyName, supportContact, passwordDays));
         } catch (MailDeliveryException e) {
             if (e.permanent() || invite.attempts() >= maxAttempts) {
                 fail(invite, e.getMessage());
@@ -138,6 +168,8 @@ public class LoginDetailsSender {
             return e.throttled() ? Outcome.THROTTLED : Outcome.NOT_SENT;
         }
         store.markSent(invite.id());
+        // From now on the emailed password has passwordDays to be used (V24).
+        store.startPasswordClock(invite.userId(), passwordDays);
         audit.record("LOGIN_DETAILS_SENT", "CONSULTANT", invite.consultantId(),
                 meta("inviteId", invite.id(), "userId", invite.userId(), "email", invite.email(), "attempts",
                         invite.attempts()));

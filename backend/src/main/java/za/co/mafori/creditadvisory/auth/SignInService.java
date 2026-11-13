@@ -5,10 +5,12 @@ import java.time.Instant;
 import java.util.Optional;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 import jakarta.transaction.Transactional;
 import za.co.mafori.creditadvisory.audit.AuditLogWriter;
+import za.co.mafori.creditadvisory.common.web.ApiException;
 import za.co.mafori.creditadvisory.user.UserAccount;
 import za.co.mafori.creditadvisory.user.UserAccountRepository;
 
@@ -36,7 +38,12 @@ public class SignInService {
         this.timingHash = passwordEncoder.encode("timing-equaliser-not-a-real-password");
     }
 
-    @Transactional
+    /**
+     * dontRollbackOn: the expired-password refusal below is an ApiException, and
+     * its
+     * audit entry must still be saved.
+     */
+    @Transactional(dontRollbackOn = ApiException.class)
     public Optional<AppUserPrincipal> attempt(String email, String rawPassword) {
         Instant now = Instant.now(clock);
 
@@ -68,6 +75,16 @@ public class SignInService {
         if (!user.canSignIn(now)) {
             // Disabled, or the linked consultant is INACTIVE / SUSPENDED (FR-18).
             return Optional.empty();
+        }
+
+        if (user.temporaryPasswordExpired(now)) {
+            // Only said once the password was right, so it tells a guesser nothing. Not
+            // counted as a failed attempt: the person did know the password.
+            audit.record("TEMPORARY_PASSWORD_EXPIRED", "USER", user.getId(),
+                    AuditLogWriter.meta("expiredAt", user.getTemporaryPasswordExpiresAt().toString()));
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "auth:temporary-password-expired",
+                    "Temporary password expired",
+                    "This temporary password has expired. Ask your administrator to send you new login details.");
         }
 
         user.recordSuccessfulSignIn(now);

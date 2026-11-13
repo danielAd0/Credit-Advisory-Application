@@ -39,16 +39,17 @@ const todayText = () => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 };
 
-let rows: Target[] = [
-  {
-    id: 1,
-    effectiveFrom: '2026-01-01',
-    dailyTarget: 120000,
-    weeklyTarget: 600000,
-    setByEmail: null,
-    createdAt: '2026-01-01T00:00:00Z',
-  },
-];
+// Like a fresh database: no targets until a manager saves some (V25).
+let rows: Target[] = [];
+
+/** The target row in force on a yyyy-mm-dd date, as the reports look it up. */
+export function mockTargetOn(date: string): Target | null {
+  return (
+    [...rows]
+      .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom))
+      .find((t) => t.effectiveFrom <= date) ?? null
+  );
+}
 
 const mock = {
   async list(): Promise<TargetsResponse> {
@@ -59,13 +60,16 @@ const mock = {
   },
   async set(t: NewTarget): Promise<Target> {
     await delay();
-    if (t.effectiveFrom < todayText())
+    const first = rows.map((r) => r.effectiveFrom).sort()[0];
+    if (t.effectiveFrom < todayText() && first !== undefined && t.effectiveFrom >= first)
       throw new ApiError(422, 'Date in the past', {
         type: 'urn:credit-advisory:target:past-date',
-        detail: 'A new target must start today or later. Past weeks keep the target they had.',
+        detail:
+          'A target already applies to that date. A change must start today or later, so past weeks ' +
+          `keep the target they had. Past dates can only be given a target before ${first}, when no target was set yet.`,
       });
     const saved: Target = {
-      id: Math.max(...rows.map((r) => r.id)) + 1,
+      id: Math.max(0, ...rows.map((r) => r.id)) + 1,
       ...t,
       setByEmail: 'manager@mock.local',
       createdAt: new Date().toISOString(),

@@ -49,13 +49,13 @@ public class ReportExportService {
         for (WeekSummaryResponse.Day day : report.days()) {
             // Arrays.asList, not List.of: for scope OWN the target cells are null (empty).
             rows.add(Arrays.<Object>asList(ReportCsv.dayName(day.dayOfWeek()), day.date(), day.transactionCount(),
-                    day.clientCount(), day.quotationTotal(), day.bankedTotal(), day.dailyTarget(),
-                    day.targetMet()));
+                    day.clientCount(), day.quotationTotal(), day.bankedTotal(),
+                    ReportCsv.target(report.scope(), day.dailyTarget()), day.targetMet()));
         }
         WeekSummaryResponse.Week week = report.week();
         rows.add(Arrays.<Object>asList("Week", report.weekStarting() + " to " + report.weekEnding(),
                 week.transactionCount(), week.clientCount(), week.quotationTotal(), week.bankedTotal(),
-                week.weeklyTarget(), week.targetMet()));
+                ReportCsv.target(report.scope(), week.weeklyTarget()), week.targetMet()));
 
         String csv = ReportCsv.document(
                 List.of("Day", "Date", "Sales", "Clients", "Quotation", "Banked", "Target", "Target met"), rows);

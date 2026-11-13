@@ -34,12 +34,13 @@ class TargetApiTest extends ApiTestBase {
     }
 
     @Test
-    void theSeededTargetIsCurrent() {
+    void aFreshDatabaseHasNoTargets() {
         ApiClient.Response response = manager.get("/api/targets");
 
         assertThat(response.status()).as(response.body()).isEqualTo(200);
-        assertThat(response.number("$.current.dailyTarget")).isEqualTo(120_000);
-        assertThat(response.number("$.current.weeklyTarget")).isEqualTo(600_000);
+        assertThat(response.value("$.current")).isNull();
+        assertThat(response.size("$.history")).isZero();
+        assertThat(jdbc.queryForObject("select count(*) from sales_targets", Long.class)).isZero();
     }
 
     @Test
@@ -68,17 +69,44 @@ class TargetApiTest extends ApiTestBase {
 
         ApiClient.Response list = manager.get("/api/targets");
         assertThat(list.number("$.history[0].dailyTarget")).isEqualTo(140_000);
-        // A future target does not change today's.
-        assertThat(list.number("$.current.dailyTarget")).isEqualTo(120_000);
+        // A future target does not apply yet: today still has none.
+        assertThat(list.value("$.current")).isNull();
     }
 
     @Test
-    void pastDatesAndBadAmountsAreRefused() {
-        assertThat(manager.post("/api/targets", body(today().minusDays(1), "150000", "750000")).status())
-                .isEqualTo(422);
+    void aPastDateCanBeGivenATargetWhileNoneAppliesToIt() {
+        // After importing old registers, a manager can fill in the weeks that
+        // show "Target not configured".
+        ApiClient.Response first = manager.post("/api/targets", body(today().minusDays(60), "100000", "500000"));
+        assertThat(first.status()).as(first.body()).isEqualTo(200);
+
+        // Still allowed: earlier than every saved target, so it changes no week that
+        // had one.
+        ApiClient.Response earlier = manager.post("/api/targets", body(today().minusDays(90), "90000", "450000"));
+        assertThat(earlier.status()).as(earlier.body()).isEqualTo(200);
+
+        ApiClient.Response list = manager.get("/api/targets");
+        assertThat(list.number("$.current.dailyTarget")).isEqualTo(100_000);
+        assertThat(list.size("$.history")).isEqualTo(2);
+    }
+
+    @Test
+    void aPastDateThatAlreadyHasATargetIsRefused() {
+        manager.post("/api/targets", body(today().minusDays(60), "100000", "500000"));
+
+        ApiClient.Response change = manager.post("/api/targets", body(today().minusDays(30), "150000", "750000"));
+
+        assertThat(change.status()).isEqualTo(422);
+        assertThat(change.body()).contains("target:past-date");
+        assertThat(jdbc.queryForObject("select count(*) from sales_targets", Long.class)).isEqualTo(1);
+    }
+
+    @Test
+    void badAmountsAreRefused() {
         assertThat(manager.post("/api/targets", body(today(), "0", "750000")).status()).isEqualTo(400);
         assertThat(manager.post("/api/targets", """
                 {"effectiveFrom":"%s","dailyTarget":150000}""".formatted(today())).status()).isEqualTo(400);
+        assertThat(jdbc.queryForObject("select count(*) from sales_targets", Long.class)).isZero();
     }
 
     @Test

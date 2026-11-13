@@ -26,18 +26,45 @@ import za.co.mafori.creditadvisory.onboarding.OnboardingViews.QueueResult;
 import za.co.mafori.creditadvisory.onboarding.OnboardingViews.Skipped;
 import za.co.mafori.creditadvisory.onboarding.OnboardingViews.Summary;
 import za.co.mafori.creditadvisory.user.CreateUserRequest;
+import za.co.mafori.creditadvisory.user.ResetPasswordRequest;
 import za.co.mafori.creditadvisory.user.RoleName;
 import za.co.mafori.creditadvisory.user.UserResponse;
 import za.co.mafori.creditadvisory.user.UserService;
 
-
+/**
+ * Bulk consultant logins (docs/consultant-onboarding.md, sections 3 and 4).
+ *
+ * <ol>
+ * <li>{@link #generate}: every eligible consultant (active, has an email, no
+ * login) gets a CONSULTANT login with a random temporary password, through
+ * UserService.create, so every existing rule applies: password policy, unique
+ * email, one login per consultant, "must change password" at first sign-in.
+ * Consultants who already have a login are never touched, so their password
+ * is never overwritten.</li>
+ * <li>The temporary password is kept ONLY sealed (AES-256-GCM) in
+ * consultant_login_invites, until its email is sent. The users table only
+ * ever has the BCrypt hash.</li>
+ * <li>{@link #queue}: the admin's "Send login details" puts the emails in the
+ * queue; LoginDetailsSender sends them in the background and deletes each
+ * sealed password once Microsoft 365 has accepted the email.</li>
+ * <li>{@link #retry}: failed emails go back in the queue with the SAME
+ * password; nothing is generated again.</li>
+ * </ol>
+ */
 @Service
 public class OnboardingService {
 
-    /** The purpose the temporary passwords are sealed for (IdNumberProtector.sealText). */
+    /**
+     * The purpose the temporary passwords are sealed for
+     * (IdNumberProtector.sealText).
+     */
     static final String SEAL_PURPOSE = "consultant-temporary-password:v1";
 
-    
+    /**
+     * Logins made per call. Each needs one BCrypt hash (about 0.1 s), so a call
+     * stays well under a browser's timeout; the admin screen calls again until
+     * nothing remains.
+     */
     static final int BATCH = 25;
 
     private static final int MAX_PAGE_SIZE = 200;
@@ -50,11 +77,13 @@ public class OnboardingService {
     private final AuditLogWriter audit;
     private final TransactionTemplate tx;
     private final String loginUrl;
+    private final int passwordDays;
 
     public OnboardingService(OnboardingStore store, UserService users, TemporaryPasswordGenerator passwords,
             IdNumberProtector protector, LoginDetailsMailer mailer, AuditLogWriter audit,
             PlatformTransactionManager transactions,
-            @Value("${app.onboarding.login-url:}") String loginUrl) {
+            @Value("${app.onboarding.login-url:}") String loginUrl,
+            @Value("${app.onboarding.temporary-password-days:7}") int passwordDays) {
         this.store = store;
         this.users = users;
         this.passwords = passwords;
@@ -63,16 +92,23 @@ public class OnboardingService {
         this.audit = audit;
         this.tx = new TransactionTemplate(transactions);
         this.loginUrl = loginUrl.strip();
+        this.passwordDays = Math.max(1, passwordDays);
     }
 
     public Summary summary() {
         OnboardingStore.ConsultantCounts c = store.consultantCounts();
         return new Summary(c.total(), c.active(), c.withEmail(), c.withLogin(), store.countEligible(),
                 store.countBlocked(), store.inviteCounts(), mailer.isConfigured(), mailer.senderAddress(),
-                loginUrl.isEmpty() ? null : loginUrl);
+                loginUrl.isEmpty() ? null : loginUrl, store.countExpired(), store.countRegeneratable(), passwordDays);
     }
 
-   
+    /**
+     * Makes logins for up to {@link #BATCH} eligible consultants. Each consultant
+     * is its own transaction: one that fails (for example an email another login
+     * took a moment ago) is reported in {@code skipped} and the rest go ahead.
+     *
+     * @param consultantIds only these, or null for every eligible consultant
+     */
     public GenerateResult generate(long adminId, List<Long> consultantIds) {
         Set<Long> only = consultantIds == null ? null : new LinkedHashSet<>(consultantIds);
         List<Skipped> skipped = new ArrayList<>();
@@ -122,6 +158,54 @@ public class OnboardingService {
         return new GenerateResult(created, store.countEligible(), skipped);
     }
 
+    /**
+     * "Regenerate": a new temporary password for logins whose emailed one expired
+     * unused, or whose email FAILED (docs/consultant-onboarding.md, section 3).
+     * The login gets the new password through UserService.resetPassword (which
+     * also clears a lockout and its old time limit), the invite goes back to
+     * PENDING with the new password sealed, and "Send login details" emails it.
+     * Up to {@link #BATCH} per call, each in its own transaction.
+     *
+     * @param inviteIds only these, or null for every one that can be regenerated
+     */
+    public GenerateResult regenerate(long adminId, List<Long> inviteIds) {
+        List<Skipped> skipped = new ArrayList<>();
+        if (inviteIds != null) {
+            Set<Long> ok = new HashSet<>();
+            store.regeneratable(inviteIds, inviteIds.size()).forEach(r -> ok.add(r.inviteId()));
+            for (Long id : new LinkedHashSet<>(inviteIds)) {
+                if (!ok.contains(id)) {
+                    skipped.add(new Skipped(id, null, null, "Not expired or failed, already signed in, "
+                            + "or the login or consultant is not active (invite " + id + ")."));
+                }
+            }
+        }
+        Set<String> usedInBatch = new HashSet<>();
+        int created = 0;
+        for (OnboardingStore.Regeneratable r : store.regeneratable(inviteIds, BATCH)) {
+            String password = passwords.next();
+            while (!usedInBatch.add(password)) {
+                password = passwords.next();
+            }
+            String temporary = password;
+            try {
+                tx.executeWithoutResult(status -> {
+                    users.resetPassword(r.userId(), new ResetPasswordRequest(temporary));
+                    store.resetInvite(r.inviteId(), protector.sealText(SEAL_PURPOSE, temporary), adminId);
+                    audit.record("LOGIN_INVITE_REGENERATED", "CONSULTANT", r.consultantId(),
+                            meta("userId", r.userId(), "inviteId", r.inviteId(), "email", r.email()));
+                });
+                created++;
+            } catch (ApiException e) {
+                skipped.add(new Skipped(r.consultantId(), r.consultantCode(), r.consultantName(), e.getMessage()));
+            } catch (DataIntegrityViolationException e) {
+                skipped.add(new Skipped(r.consultantId(), r.consultantCode(), r.consultantName(),
+                        "Conflicts with a change made at the same time. Try again."));
+            }
+        }
+        return new GenerateResult(created, store.countRegeneratable(), skipped);
+    }
+
     /** "Send login details": PENDING emails go into the background queue. */
     public QueueResult queue(long adminId, List<Long> inviteIds) {
         requireMail();
@@ -142,9 +226,9 @@ public class OnboardingService {
 
     public PageResponse<Invite> invites(String status, int page, int size) {
         String s = status == null || status.isBlank() ? null : status.strip().toUpperCase(Locale.ROOT);
-        if (s != null && !List.of("PENDING", "QUEUED", "SENDING", "SENT", "FAILED").contains(s)) {
+        if (s != null && !List.of("PENDING", "QUEUED", "SENDING", "SENT", "FAILED", "EXPIRED").contains(s)) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "validation:invalid-request", "Unknown status",
-                    "status must be PENDING, QUEUED, SENDING, SENT or FAILED.");
+                    "status must be PENDING, QUEUED, SENDING, SENT, FAILED or EXPIRED.");
         }
         int pageSize = clamp(size);
         int p = Math.max(page, 0);
