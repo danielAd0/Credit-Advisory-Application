@@ -1,10 +1,70 @@
 .np {
-  max-width: 1rem;
+  width: 100%;
+  max-width: 40rem;
+}
+
+.np > .muted {
+  max-width: 34rem;
+  margin: 0.35rem 0 0;
+}
+
+.np-steps {
+  display: flex;
+  gap: 0.5rem;
+  margin: 1.5rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.np-steps li {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.np-steps .np-num {
+  display: grid;
+  flex: none;
+  width: 1.6rem;
+  height: 1.6rem;
+  place-items: center;
+  font-size: 0.8rem;
+  color: var(--muted);
+  background: var(--paper);
+  border-radius: 50%;
+}
+
+.np-steps li[aria-current='step'] {
+  color: var(--ink);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(255, 90, 0, 0.12);
+}
+
+.np-steps li[aria-current='step'] .np-num {
+  color: #ffffff;
+  background: var(--accent);
+}
+
+.np-steps li.np-done .np-num {
+  color: var(--ink);
+}
+
+.np-steps li.np-done .np-num {
+  color: var(--accent-ink);
+  background: var(--accent-soft);
 }
 
 .np-card {
   margin-top: 1rem;
-  padding: 1.5rem;
+  padding: 1.75rem;
   background: var(--surface);
   border: 1px solid var(--line);
   border-top: 3px solid var(--accent);
@@ -15,6 +75,11 @@
 .np-card h2 {
   margin: 0 0 0.35rem;
   font-size: 1.25rem;
+}
+
+.np-card > form > .muted,
+.np-card > .muted {
+  margin: 0 0 1rem;
 }
 
 .np-card input.np-password {
@@ -36,7 +101,32 @@
   box-shadow: 0 0 0 3px rgba(255, 90, 0, 0.25);
 }
 
-@media (max-width: 480px) {
+.np-card .ts-qr {
+  margin: 1.25rem auto;
+}
+
+.np-card .ts-codes {
+  margin: 1.25rem 0;
+}
+
+.np-card .ts-actions {
+  margin-top: 1.25rem;
+}
+
+.np-card .ts-check {
+  margin: 1.25 0 0;
+}
+
+@media (max-width: 560px) {
+  .np-steps li {
+    justify-content: center;
+    padding: 0.5rem;
+  }
+
+  .np-steps .np-label {
+    display: none;
+  }
+
   .np-card {
     padding: 1.1rem;
   }

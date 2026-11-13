@@ -20,6 +20,12 @@ const digitsOnly = (value: string) => value.replace(/\D/g, '').slice(0, 6);
 
 const grouped = (secret: string) => secret.replace(/(.{4})(?=.)/g, '$1 ');
 
+const STEPS: { key: Step; label: string }[] = [
+  { key: 'password', label: 'Confirm it is you' },
+  { key: 'scan', label: 'Scan the code' },
+  { key: 'codes', label: 'Save recovery codes' },
+];
+
 export default function NewPhonePage() {
   const session = useSession();
   const { refreshSession } = useAuth();
@@ -132,6 +138,22 @@ export default function NewPhonePage() {
         Use this when you have a new phone, or after you signed in with a recovery code because the
         old one was lost.
       </p>
+
+      <ol className="np-steps" aria-label="Progress">
+        {STEPS.map((s, i) => {
+          const at = STEPS.findIndex((x) => x.key === step);
+          return (
+            <li
+              key={s.key}
+              aria-current={i === at ? 'step' : undefined}
+              className={i < at ? 'np-done' : undefined}
+            >
+              <span className="np-num">{i < at ? '\u2713' : i + 1}</span>
+              <span className="np-label">{s.label}</span>
+            </li>
+          );
+        })}
+      </ol>
 
       <div className="np-card">
         {step === 'password' && (
