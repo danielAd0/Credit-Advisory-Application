@@ -20,13 +20,17 @@ Replacing a week that was already imported also needs a reason (section 7).
 ```
 1. GET  /api/imports/weekly-register/week-guess?fileName=...   (optional: pre-fill the week)
 2. POST /api/imports/weekly-register/preview                    upload -> import job in state PREVIEWED
-3. GET  /api/imports/{id}                                       summary: counts, days, blockers
+3. GET  /api/imports/{id}                                       summary: counts, days, consultants, blockers
    GET  /api/imports/{id}/rows      GET /api/imports/{id}/issues  (details, paged)
-4. POST /api/imports/{id}/consultant-mappings                   per unknown consultant name: map it,
-   or POST /api/imports/{id}/new-consultants                       or create it as a new consultant
-5. POST /api/imports/{id}/confirm   (when canConfirm is true)    -> COMMITTED
-   or POST /api/imports/{id}/cancel                              -> CANCELLED
+4. POST /api/imports/{id}/consultants/confirm                   "Confirm Consultants and Proceed"
+5. POST /api/imports/{id}/confirm   (when canConfirm is true)    -> COMMITTED: consultants registered,
+   or POST /api/imports/{id}/cancel                              -> CANCELLED   clients and sales linked
 ```
+
+- **No consultant is matched by hand.** Every consultant name (and CONSULTANT EMAIL) in the workbook is
+  resolved automatically (section 11): an existing consultant by email, name or alias, otherwise a new
+  consultant. The admin only **checks the list** and confirms it (step 4). A name that cannot be linked
+  safely is a conflict: fix the workbook and upload it again.
 
 - **Preview writes no clients and no sales.** It only stores the parsed rows (with the ID number protected: keyed hash
   and, for new clients, encrypted) so confirm can apply them.
@@ -193,49 +197,26 @@ The same issues as a **file to download** (FR-12), for fixing the workbook in Ex
 Frontend: a "Download issues" button next to the issues list, linking straight to this URL (the session cookie
 goes with it; it's a GET, so no CSRF header is needed).
 
-### POST /api/imports/{id}/consultant-mappings
+### POST /api/imports/{id}/consultants/confirm
 
-Matches a consultant name as written in the sheet to a consultant. It is **remembered for later imports**.
+"Confirm Consultants and Proceed": the admin checked `consultants` in the summary (section 5) and agrees
+these are the consultants of the workbook. **Nothing is registered or linked yet**; confirm does that, in
+its one transaction.
 
-**Request**
+**Request** (the `consultants.fingerprint` from the summary the admin looked at)
 ```json
-{ "nameInSheet": "Thandi X", "consultantId": 4 }
+{ "fingerprint": "9c1d...64 hex characters..." }
 ```
-**200 OK** - the updated **Import summary**: the name disappears from `unmappedConsultants`.
+**200 OK** - the updated **Import summary**: `consultants.confirmed` is `true` and the
+`CONSULTANTS_NOT_CONFIRMED` blocker is gone.
 
-**Errors:** `400` invalid fields, `404` `consultant:not-found`, `409` `import:name-already-mapped`,
-`409` `import:not-previewed` or `import:expired`, `422` `import:name-not-in-import` (no row has that name).
+The fingerprint is a SHA-256 of the list. If the list changes afterwards (a consultant is added or
+renamed, an alias is removed), `consultants.confirmed` turns back to `false` and the blocker returns,
+so the admin always confirms the list as it is at confirm time. Audited as `IMPORT_CONSULTANTS_CONFIRMED`.
 
-### POST /api/imports/{id}/new-consultants
-
-The other way to resolve an unknown name: **create** it as a new consultant ("import the consultants"). For
-people who aren't in the system yet. A typo of someone who is should be mapped instead (see `similarConsultants`).
-
-**Request** (1-100 names, as in `unmappedConsultants`; case and spaces don't matter)
-```json
-{ "namesInSheet": ["AMBITIOUS", "VICTORIA"] }
-```
-**200 OK**
-```json
-{ "created": [ { "consultantId": 14, "consultantCode": "C0014", "fullName": "AMBITIOUS" },
-               { "consultantId": 15, "consultantCode": "C0015", "fullName": "VICTORIA" } ],
-  "summary": { "...": "the updated Import summary" } }
-```
-Each new consultant:
-- gets a **generated code** and the name as written in the sheet; an admin can rename it later (add the surname);
-- is `ACTIVE`, so the week's new clients are assigned to them at confirm;
-- keeps the sheet's spelling as an alias, so next week's sheet still matches after a rename;
-- gets **no login**: an admin adds one later (users screen or `POST /api/consultant-accounts`).
-
-All or nothing. Audited as `CONSULTANT_CREATED` with `importJobId`. **Who:** ADMIN (only the admin adds staff).
-
-**Errors:** `400` empty list or over 100, `422` `import:no-names` (a blank name), `422` `import:name-not-in-import`,
-`409` `import:name-already-mapped` (it already matches someone), `409` `import:not-previewed` / `import:expired`.
-
-Frontend: for each unknown name, show the `similarConsultants` first ("Did you mean C0003 Ambitious Mokoena?" →
-map), then **Create as new consultant**, with a "Create all remaining" button that sends every name left.
-
-Audited as `CONSULTANT_ALIAS_CREATED`.
+**Errors:** `400` fingerprint missing or not 64 hex characters, `409` `import:consultants-changed` (the
+list is not the one with that fingerprint: reload and check again), `422` `import:consultant-conflicts`
+(a consultant with outcome `CONFLICT`: fix the workbook), `409` `import:not-previewed` / `import:expired`.
 
 ### POST /api/imports/{id}/confirm
 
@@ -267,12 +248,31 @@ Applies the whole import in **one transaction**: if anything fails, nothing is s
   "staleRows": 0,
   "replacedImportJobId": null,
   "supersededTransactions": 0,
-  "replacedTypedInSales": 3
+  "replacedTypedInSales": 3,
+  "consultantsRegistered": 1,
+  "consultantEmailsAdded": 0,
+  "consultantAliasesAdded": 0,
+  "newClientsUnassigned": 3,
+  "consultantsIdentified": 6,
+  "consultantsMatched": 5,
+  "clientsLinked": 76,
+  "transactionsLinked": 79,
+  "transactionsUnattributed": 3,
+  "rejectedRows": 2,
+  "possibleDuplicateRows": 0,
+  "rowsNeedingAttention": 5
 }
 ```
+The **import summary**: `consultantsIdentified` (in the confirmed list), `consultantsRegistered` (new),
+`consultantsMatched` (existing), `clientsLinked` (distinct clients that got a sale), `transactions` =
+`transactionsLinked` (client and consultant) + `transactionsUnattributed` (client only: no consultant in
+the sheet), `rejectedRows`, `possibleDuplicateRows`, and `rowsNeedingAttention` = rejected +
+unattributed + possible duplicates. The same figures stay on the import as `result` (section 5).
 
 What confirm does:
 
+- registers the new consultants of the confirmed list (section 11), fills in missing emails and saves
+  the sheet's spellings as aliases, before any client is assigned
 - creates the `NEW` clients (assigned to the row's consultant if that consultant is ACTIVE, otherwise unassigned),
   with `IMPORT` assignment history
 - an existing client **without** a consultant is assigned to the row's ACTIVE consultant, **unless a manager
@@ -280,7 +280,10 @@ What confirm does:
   transfer, and also when the transfer happened while the preview was open. The sale is still recorded for the
   consultant in the sheet.
 - writes a `CLIENT_CREATED` audit entry for **every** client it creates (`consultantId`, `importJobId`)
-- saves one sale per row, its product lines, and any extra columns; creates new employers, structures and payment terms
+- saves one sale per row, its product lines, and any extra columns; creates new employers, structures and payment terms.
+  Every sale stores the **client id**, the **consultant id of the row** (not the client's current
+  consultant), the **date from the sheet**, the week, the product amounts, quotation and banked. A later
+  transfer of the client never changes it, so reports for a past period show who made the sale then
 - **replaces the sales typed into the app for this week** (the spreadsheet wins; `docs/api-sales.md` section 1):
   they are kept, marked as replaced, and no report counts them again. `replacedTypedInSales` says how many
 - audits `IMPORT_CONFIRMED` (with `nameDifferencesAccepted` and `replacedTypedInSales`), and `WEEK_REPLACED` when
@@ -297,7 +300,9 @@ What confirm does:
 | 409 | `import:not-previewed`, `import:expired` | already confirmed / cancelled, or older than 24 hours |
 | 409 | `import:stale-preview` | a client in the preview was removed since; upload again |
 | 422 | `import:blocking-errors` | there are sheet-level errors (`SHEET_ERRORS`) |
-| 422 | `import:unmapped-consultants` | some consultant names are not mapped yet |
+| 422 | `import:consultant-conflicts` | a consultant cannot be linked safely (outcome `CONFLICT`) |
+| 422 | `import:consultants-not-confirmed` | the consultant list was not confirmed (`POST .../consultants/confirm`) |
+| 409 | `import:consultants-changed` | the list changed since it was confirmed: confirm it again |
 | 422 | `import:replace-reason-required` | replacing a week without a reason |
 | 422 | `import:name-differences-unconfirmed` | `NAME_DIFFERENCES` and no `acceptNameDifferences: true` (checked after the role and reason checks) |
 
@@ -339,19 +344,54 @@ Returned by preview, `GET /api/imports/{id}`, consultant mappings and cancel.
     { "sheetName": "Monday", "dayOfWeek": 1, "date": "2026-09-14", "rows": 12, "rejected": 0,
       "quotation": 81200.00, "banked": 70100.00 }
   ],
-  "unmappedConsultants": [ { "nameInSheet": "Thandi X", "rows": 4,
-                             "similarConsultants": [ { "consultantId": 4, "consultantCode": "C004",
-                                                       "fullName": "Thandi Xundu", "status": "ACTIVE" } ] } ],
+  "consultants": {
+    "items": [
+      { "outcome": "NEW", "matchedBy": null, "namesInSheet": ["AMBITIOUS"], "email": null, "rows": 4,
+        "newClients": 3, "consultantId": null, "consultantCode": null, "consultantName": null,
+        "consultantStatus": null, "attention": ["NO_EMAIL", "SIMILAR_NAME"], "reason": null,
+        "similarConsultants": [ { "consultantId": 4, "consultantCode": "C004",
+                                  "fullName": "Ambitious Mokoena", "status": "ACTIVE" } ] },
+      { "outcome": "EXISTING", "matchedBy": "NAME", "namesInSheet": ["Thandi X", "THANDI"],
+        "email": "thandi@example.com", "rows": 12, "newClients": 9, "consultantId": 3,
+        "consultantCode": "C003", "consultantName": "Thandi Xundu", "consultantStatus": "ACTIVE",
+        "attention": [], "reason": null, "similarConsultants": [] }
+    ],
+    "identified": 2, "existing": 1, "toRegister": 1, "conflicts": 0, "withoutEmail": 1,
+    "fingerprint": "9c1d...", "confirmed": false, "confirmedAt": null, "confirmedBy": null
+  },
   "weekImportedByJobId": null,
   "replaceRequired": false,
   "canConfirm": false,
-  "blockers": ["UNMAPPED_CONSULTANTS"],
+  "blockers": ["CONSULTANTS_NOT_CONFIRMED"],
   "reconciliationStatus": "DIFFERENCES",
   "reportDifferences": 77,
   "nameDifferences": 0,
-  "typedInSales": 3
+  "typedInSales": 3,
+  "possibleDuplicateRows": 0,
+  "result": null
 }
 ```
+- `consultants.items`: **one entry per consultant** the workbook's names become (spellings of one person
+  are grouped). Conflicts first, then new, then existing. `outcome`:
+
+| outcome | What confirm does |
+|---|---|
+| `EXISTING` | links the rows to that consultant (`matchedBy`: `EMAIL` or `NAME`, which includes aliases); new spellings become aliases |
+| `EMAIL_ADDED` | the same, and adds the sheet's email to a consultant who had none |
+| `NEW` | registers a consultant: generated code, the most-used spelling as name, the email if the sheet has one, `ACTIVE` |
+| `CONFLICT` | nothing: the import is blocked (`CONSULTANT_CONFLICTS`). `reason` says why |
+
+  `attention`: `NO_EMAIL` (no login can be made until an email is added on Consultant logins),
+  `NOT_ACTIVE` (new clients stay unassigned; the sales still count for them), `SIMILAR_NAME` (a new
+  consultant whose name looks like an existing one, see `similarConsultants`, or another new one: if it
+  is the same person, add the CONSULTANT EMAIL column or fix the spelling and upload again), `CONFLICT`.
+- `consultants.fingerprint` / `confirmed`: see `POST .../consultants/confirm`. After the import is
+  finished `items` is empty and `fingerprint` null; `confirmedAt` / `confirmedBy` stay.
+- `possibleDuplicateRows`: rows with the same client, date, consultant and amounts as an earlier row
+  (`row:possible-duplicate-sale`, warning). They are still imported (one person can buy twice a day),
+  but listed so the admin can check the workbook.
+- `result`: what confirm did (the import summary of section 4), kept with the import; `null` until it
+  is confirmed (and for imports confirmed before V26).
 
 - `days` always has **7 entries**, Monday to Sunday; a day without a sheet has `sheetName: null` and zeros.
 - `newClients` / `existingClients` / `repeatRows` / `rejectedRows` match the row actions `NEW` / `UNCHANGED` /
@@ -368,8 +408,8 @@ Returned by preview, `GET /api/imports/{id}`, consultant mappings and cancel.
 
 | Blocker | What the user must do |
 |---|---|
-| `UNMAPPED_CONSULTANTS` | for each name in `unmappedConsultants`: map it (consultant-mappings) or create it (new-consultants) |
-| `CONSULTANT_CONFLICTS` | a consultant name and its CONSULTANT EMAIL point at different consultants (`consultantRegistration.conflicts`): fix the workbook and upload it again. See `consultant-onboarding.md` |
+| `CONSULTANTS_NOT_CONFIRMED` | check `consultants` and confirm the list (`POST .../consultants/confirm`) |
+| `CONSULTANT_CONFLICTS` | a consultant cannot be linked safely (`consultants.items` with outcome `CONFLICT`): a name and its CONSULTANT EMAIL point at different consultants, or a name matches two consultants. Fix the workbook and upload it again. See `consultant-onboarding.md` |
 | `SHEET_ERRORS` | fix the workbook (see issues without a row) and upload it again |
 | `NAME_DIFFERENCES` | check the `nameDifferences` rows (issues with code `client:name-differs`), then either fix the workbook and upload again, or confirm with `acceptNameDifferences: true`. Show it as a tick box ("I checked these N clients"), not as a hard stop |
 | `EXPIRED` | upload the file again |
@@ -464,9 +504,10 @@ Also done: **same ID number, different name** is now the `NAME_DIFFERENCES` bloc
 
 ## 10. Consultant name spellings (aliases)
 
-When a preview maps a name from the sheet to a consultant (section 4, consultant mappings), the spelling is saved as
-an **alias** so later imports match it automatically. These endpoints list them, add one before an import, and
-remove a wrong one. **Who:** ADMIN.
+When an import matches a new spelling to a consultant by email, or registers a consultant, the spelling is
+saved as an **alias** so later imports match it automatically. These endpoints list them, add one **before**
+an import (for example "AMBITIOUS" for Ambitious Mokoena, so the next sheet does not register a second
+consultant), and remove a wrong one. **Who:** ADMIN.
 
 ### GET /api/consultant-aliases?consultantId=&search=&page=0&size=50
 ```json
@@ -489,7 +530,7 @@ the spelling or the consultant's name. Sorted by consultant, then spelling.
 
 ### DELETE /api/consultant-aliases/{id}
 `204`. Affects **later imports only**: sales already imported keep their consultant. An open preview that used the
-spelling shows it under `unmappedConsultants` again, and confirm refuses until it is mapped. Audited as
+spelling now lists that name as a `NEW` consultant, so its consultant list must be confirmed again. Audited as
 `CONSULTANT_ALIAS_REMOVED` (adding: `CONSULTANT_ALIAS_CREATED`). `404 consultant-alias:not-found`.
 
 Frontend: a "Name spellings" tab on the consultant page (filter `consultantId`), with remove buttons.
@@ -501,3 +542,16 @@ The register may have a `CONSULTANT EMAIL` column. The summary then also has
 the new clients go to), and the confirm result has `consultantsRegistered`,
 `consultantEmailsAdded`, `consultantAliasesAdded` and `newClientsUnassigned`. Rules, examples and
 the login emails that follow: `docs/consultant-onboarding.md`.
+
+Since V26 the summary's `consultants` list (section 5) is what the admin checks and confirms; a name
+without an email that matches nobody is registered too (without an email), and a name that matches two
+consultants is a conflict. Nothing is mapped by hand: `POST /api/imports/{id}/consultant-mappings` and
+`POST /api/imports/{id}/new-consultants` were removed.
+
+### Historical reporting
+
+Imported and typed-in sales are the same rows (`client_transactions`): client id, consultant id,
+transaction date (from the sheet), product lines, quotation and banked. The period reports
+(`docs/api-reports.md` section 9: any range up to a year, any year back, per consultant and product)
+select by that date and group by that consultant, never by the import date or the client's current
+consultant.

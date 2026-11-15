@@ -7,8 +7,9 @@ Admin only. Built on the weekly register import (`weekly-register-import-design.
 
 | Step | Who / where | What happens |
 | --- | --- | --- |
-| 1 | Admin, **Import** | Uploads the weekly register. The preview shows which consultants will be registered, matched or are in conflict, and who the new clients go to. |
-| 2 | Admin, **Confirm import** | New consultants are registered from their emails, missing emails are filled in, new clients are assigned. All in one transaction. No login is made yet. |
+| 1 | Admin, **Import** | Uploads the weekly register. The preview lists every consultant found in it: existing (matched by email or name), new (to register) or in conflict, and who the new clients go to. Nobody is matched by hand. |
+| 1b | Admin, **Confirm Consultants and Proceed** | Confirms that list. Nothing is saved yet. |
+| 2 | Admin, **Confirm import** | New consultants are registered (with their email when the sheet has one), missing emails are filled in, new clients are assigned and every sale is linked to its client and consultant. All in one transaction. No login is made yet. |
 | 3 | Admin, **Consultant logins** → *Generate temporary passwords* | Every active consultant with an email and no login gets a CONSULTANT login with a random temporary password. |
 | 4 | Admin, *Send login details* | The emails go into a queue. A background job sends them through Microsoft 365, about 20 a minute. |
 | 5 | Admin, *Email delivery report* | Sent / waiting / not sent / failed per consultant. *Retry* resends failed emails with the **same** password. |
@@ -40,7 +41,9 @@ The email is the reliable identifier. The name is only trusted when the row has 
 | email X, name N | N matches A, who already has another email | **conflict** (change the sheet, or the consultant's email) |
 | name N with two different emails | | **conflict** |
 | one email X for names of two different consultants | | **conflict** |
-| name only, no email on any of its rows | | unchanged rules: name or alias, else *unmapped* (map it or create it) |
+| name only, no email on any of its rows | N matches one consultant by name or alias | that consultant |
+| name only, no email on any of its rows | N matches nobody | **registered** without an email (flagged `NO_EMAIL`: no login until an admin adds one) |
+| name only, or with a new email | N matches **two** consultants (same name, or one's alias is the other's name) | **conflict**: never guessed. An email that belongs to one of them decides instead |
 
 A conflict blocks confirm (`blockers: CONSULTANT_CONFLICTS`, `422 import:consultant-conflicts`), so a
 client is never given to the wrong consultant because two people have similar names. A consultant

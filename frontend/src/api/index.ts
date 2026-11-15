@@ -13,16 +13,20 @@ export { imports } from './imports';
 
 export type {
   ConfirmResult,
+  ConsultantAttention,
+  ConsultantFound,
+  ConsultantList,
+  ConsultantOutcome,
   ImportBlocker,
   ImportDay,
   ImportHistoryItem,
   ImportIssue,
+  ImportResult,
   ImportRow,
   ImportState,
   ImportSummary,
   RowAction,
   Severity,
-  UnmappedConsultant,
 } from './imports';
 
 export { reports } from './reports';

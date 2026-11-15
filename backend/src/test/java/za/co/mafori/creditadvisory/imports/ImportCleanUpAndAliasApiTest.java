@@ -69,13 +69,14 @@ class ImportCleanupAndAliasApiTest extends ApiTestBase {
 
     @Test
     void aliasesCanBeListedAddedAndRemoved() {
+        // An admin can still record a spelling ahead of an import (Consultants page).
+        assertThat(admin.post("/api/consultant-aliases", """
+                {"consultantId":%d,"alias":"%s"}""".formatted(one, FakeWeeklyRegisterWorkbook.UNMAPPED_CONSULTANT))
+                .status()).isEqualTo(201);
         long id = preview();
-        assertThat(admin
-                .post("/api/imports/" + id + "/consultant-mappings",
-                        """
-                                {"nameInSheet":"%s","consultantId":%d}"""
-                                .formatted(FakeWeeklyRegisterWorkbook.UNMAPPED_CONSULTANT, one))
-                .status()).isEqualTo(200);
+        assertThat(admin.get("/api/imports/" + id).number("$.consultants.toRegister"))
+                .as("the spelling now matches consultant one").isZero();
+        assertThat(confirmConsultants(admin, id).status()).isEqualTo(200);
 
         ApiClient.Response list = admin.get("/api/consultant-aliases");
         assertThat(list.status()).as(list.body()).isEqualTo(200);
@@ -94,8 +95,11 @@ class ImportCleanupAndAliasApiTest extends ApiTestBase {
 
         assertThat(admin.send("DELETE", "/api/consultant-aliases/" + aliasId, null).status()).isEqualTo(204);
         assertThat(admin.get("/api/consultant-aliases?search=unmapped").number("$.totalItems")).isZero();
-        // The open preview needs the name mapped again before it can be confirmed.
-        assertThat(admin.get("/api/imports/" + id).texts("$.blockers")).contains("UNMAPPED_CONSULTANTS");
+        // The open preview now registers the name as a new consultant: the list the admin
+        // confirmed changed, so it must be confirmed again.
+        ApiClient.Response changed = admin.get("/api/imports/" + id);
+        assertThat(changed.number("$.consultants.toRegister")).isEqualTo(1);
+        assertThat(changed.texts("$.blockers")).contains("CONSULTANTS_NOT_CONFIRMED");
 
         long consultantId = createConsultant("C009", "Some Consultant");
         createUser("consultant@test.local", consultantId, RoleName.CONSULTANT);

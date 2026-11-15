@@ -5,8 +5,8 @@ import type { PageResponse } from './types';
 
 export type ImportState = 'PREVIEWED' | 'COMMITTED' | 'CANCELLED' | 'EXPIRED';
 export type ImportBlocker =
-  | 'UNMAPPED_CONSULTANTS'
   | 'CONSULTANT_CONFLICTS'
+  | 'CONSULTANTS_NOT_CONFIRMED'
   | 'NAME_DIFFERENCES'
   | 'SHEET_ERRORS'
   | 'EXPIRED'
@@ -24,9 +24,49 @@ export interface ImportDay {
   banked: number;
 }
 
-export interface UnmappedConsultant {
-  nameInSheet: string;
+export type ConsultantOutcome = 'EXISTING' | 'EMAIL_ADDED' | 'NEW' | 'CONFLICT';
+export type ConsultantAttention = 'NO_EMAIL' | 'NOT_ACTIVE' | 'SIMILAR_NAME' | 'CONFLICT';
+
+/** One consultant found in the workbook and what confirm will do with them. */
+export interface ConsultantFound {
+  outcome: ConsultantOutcome;
+  matchedBy: 'EMAIL' | 'NAME' | null;
+  namesInSheet: string[];
+  email: string | null;
   rows: number;
+  newClients: number;
+  consultantId: number | null;
+  consultantCode: string | null;
+  consultantName: string | null;
+  consultantStatus: string | null;
+  attention: ConsultantAttention[];
+  reason: string | null;
+  similarConsultants: { consultantId: number; consultantCode: string; fullName: string }[];
+}
+
+export interface ConsultantList {
+  items: ConsultantFound[];
+  identified: number;
+  existing: number;
+  toRegister: number;
+  conflicts: number;
+  withoutEmail: number;
+  /** Send back to confirm the list; null once the import is finished. */
+  fingerprint: string | null;
+  confirmed: boolean;
+  confirmedAt: string | null;
+  confirmedBy: string | null;
+}
+
+/** What a confirmed import did (kept with the import). */
+export interface ImportResult {
+  consultantsIdentified: number;
+  consultantsRegistered: number;
+  consultantsMatched: number;
+  clientsLinked: number;
+  transactionsLinked: number;
+  transactionsUnattributed: number;
+  rowsNeedingAttention: number;
 }
 
 export interface ConsultantRegistration {
@@ -36,7 +76,7 @@ export interface ConsultantRegistration {
 
   toRegister: {
     fullName: string;
-    email: string;
+    email: string | null;
     otherSpellings: string[];
     rows: number;
 
@@ -86,14 +126,18 @@ export interface ImportSummary {
   quotationTotal: number;
   bankedTotal: number;
   days: ImportDay[];
-  unmappedConsultants: UnmappedConsultant[];
+  consultants: ConsultantList;
   weekImportedByJobId: number | null;
   replaceRequired: boolean;
   canConfirm: boolean;
   blockers: ImportBlocker[];
   typedInSales: number;
+  /** Rows whose ID number belongs to a client stored under another name (NAME_DIFFERENCES). */
+  nameDifferences: number;
+  possibleDuplicateRows: number;
   consultantRegistration?: ConsultantRegistration;
   assignment?: AssignmentPreview;
+  result: ImportResult | null;
 }
 
 export interface ImportHistoryItem {
@@ -157,6 +201,14 @@ export interface ConfirmResult {
   consultantEmailsAdded?: number;
   consultantAliasesAdded?: number;
   newClientsUnassigned?: number;
+  consultantsIdentified: number;
+  consultantsMatched: number;
+  clientsLinked: number;
+  transactionsLinked: number;
+  transactionsUnattributed: number;
+  rejectedRows: number;
+  possibleDuplicateRows: number;
+  rowsNeedingAttention: number;
 }
 
 function query(params: Record<string, string | number | undefined>): string {
@@ -209,16 +261,22 @@ const real = {
     saveFile(await res.blob(), named?.[1] ?? `import-${id}-issues.csv`);
   },
 
-  mapConsultant: (id: number, nameInSheet: string, consultantId: number) =>
-    api<ImportSummary>(`/api/imports/${id}/consultant-mappings`, {
+  /** "Confirm Consultants and Proceed": the admin checked the consultant list. */
+  confirmConsultants: (id: number, fingerprint: string) =>
+    api<ImportSummary>(`/api/imports/${id}/consultants/confirm`, {
       method: 'POST',
-      body: JSON.stringify({ nameInSheet, consultantId }),
+      body: JSON.stringify({ fingerprint }),
     }),
 
-  confirm: (id: number, fileDigest: string, replaceReason: string | null) =>
+  confirm: (
+    id: number,
+    fileDigest: string,
+    replaceReason: string | null,
+    acceptNameDifferences = false,
+  ) =>
     api<ConfirmResult>(`/api/imports/${id}/confirm`, {
       method: 'POST',
-      body: JSON.stringify({ fileDigest, replaceReason }),
+      body: JSON.stringify({ fileDigest, replaceReason, acceptNameDifferences }),
     }),
 
   cancel: (id: number) => api<ImportSummary>(`/api/imports/${id}/cancel`, { method: 'POST' }),
