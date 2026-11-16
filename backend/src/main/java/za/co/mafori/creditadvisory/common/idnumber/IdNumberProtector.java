@@ -214,6 +214,14 @@ public class IdNumberProtector {
         return ByteBuffer.allocate(1 + label.length).put(version).put(label).array();
     }
 
+    /**
+     * The key version new encryptions get. Anything stored with another version is
+     * re-encrypted (keys package).
+     */
+    public int currentKeyVersion() {
+        return currentVersion;
+    }
+
     /** True if this was encrypted with an older key and should be re-encrypted. */
     public boolean needsReEncryption(byte[] stored) {
         return stored != null && stored.length > 0 && (stored[0] & 0xFF) != currentVersion;

@@ -1,5 +1,6 @@
 package za.co.mafori.creditadvisory.common.idnumber;
 
+import java.security.MessageDigest;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
@@ -19,13 +20,27 @@ public class IdNumberConfig {
 
     @Bean
     public IdNumberProtector idNumberProtector(IdNumberProperties properties) {
+        byte[] current = decode(properties.encryptionKey(), "app.idnumber.encryption-key");
         Map<Integer, byte[]> encryptionKeys = new HashMap<>();
-        if (properties.previousEncryptionKeys() != null) {
-            properties.previousEncryptionKeys().forEach((version, key) -> encryptionKeys.put(version,
-                    decode(key, "app.idnumber.previous-encryption-keys." + version)));
+        encryptionKeys.put(properties.encryptionKeyVersion(), current);
+
+        // During a key rotation the old key stays, only to read what is not
+        // re-encrypted yet.
+        String previousKey = properties.previousEncryptionKey();
+        if (previousKey != null && !previousKey.isBlank()) {
+            int previousVersion = properties.previousEncryptionKeyVersion();
+            if (previousVersion < 1 || previousVersion > 255 || previousVersion == properties.encryptionKeyVersion()) {
+                throw new IllegalStateException("app.idnumber.previous-encryption-key-version must be 1 to 255 and"
+                        + " differ from app.idnumber.encryption-key-version ("
+                        + properties.encryptionKeyVersion() + ").");
+            }
+            byte[] previous = decode(previousKey, "app.idnumber.previous-encryption-key");
+            if (MessageDigest.isEqual(previous, current)) {
+                throw new IllegalStateException("app.idnumber.previous-encryption-key is the same as"
+                        + " app.idnumber.encryption-key: a rotation needs a new key.");
+            }
+            encryptionKeys.put(previousVersion, previous);
         }
-        encryptionKeys.put(properties.encryptionKeyVersion(),
-                decode(properties.encryptionKey(), "app.idnumber.encryption-key"));
 
         return new IdNumberProtector(decode(properties.lookupKey(), "app.idnumber.lookup-key"),
                 properties.encryptionKeyVersion(), encryptionKeys);

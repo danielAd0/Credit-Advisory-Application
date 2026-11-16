@@ -1490,3 +1490,54 @@ Every successful call writes an audit entry `CASE_VIEWED` (who and when - never 
 - **Manager scope:** all clients for now; department-level scope if departments are confirmed (SRS 4).
 - **Case stages and fields (SRS 63):** cases have `OPEN` / `IN_PROGRESS` / `CLOSED` and a title for now. The business must define the real workflow stages, extra case fields, what a "credit record" holds, and any SLA targets.
 - **Reopening cases:** anyone who can see a case may reopen it for now. Should only managers be allowed to?
+
+---
+
+## 11. ID-number key rotation (ADMIN only)
+
+After IT rotates `ID_NUMBER_ENCRYPTION_KEY` (`it-handover.md` section 4.1), everything stored with the previous
+key is re-encrypted with the new one: every client's ID number, the rows of import previews still open, and the
+temporary passwords of login emails not sent yet. A background job does it about a minute after the start and
+every 15 minutes while anything is left; these two endpoints let an admin follow it or start it at once. They
+only ever return counts and key versions, never a key or a stored value. MANAGER and CONSULTANT: `403`.
+
+### GET /api/id-number-keys
+
+**200**
+
+```json
+{
+  "currentKeyVersion": 2,
+  "oldKeyVersions": [1],
+  "remaining": { "clients": 1250, "importRows": 0, "loginInvites": 3 },
+  "totalRemaining": 1253
+}
+```
+
+`oldKeyVersions` lists the older versions still in use: each needs its key configured. `totalRemaining` `0` means
+the previous key can be removed.
+
+### POST /api/id-number-keys/re-encrypt
+
+No body. Re-encrypts everything still on an older key, in batches of 200, each in its own transaction, so the
+application stays usable. Safe to repeat and to run while the background job runs.
+
+**200**
+
+```json
+{
+  "currentKeyVersion": 2,
+  "reEncrypted": { "clients": 1250, "importRows": 0, "loginInvites": 3 },
+  "failed": 0,
+  "totalRemaining": 0
+}
+```
+
+- A re-encrypted client's `version` goes up, so a client edit that was open during the run gets
+  `409 conflict:stale-version` (reload and save again) instead of writing the old value back.
+- A value that cannot be decrypted (its key is not configured, or the bytes are damaged) is left as it is and
+  counted in `failed`; the server log names its table and row id, never its contents. While `failed` is not 0,
+  `totalRemaining` is not 0 either, and the previous key must stay.
+- Audited as `ID_NUMBERS_REENCRYPTED` (counts per place, `failed`, `remaining`, `keyVersion`) whenever it changed
+  or failed anything; the background job's entries have no actor. A run with nothing to do writes nothing.
+- The lookup key is never rotated: every stored hash depends on it.

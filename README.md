@@ -155,6 +155,9 @@ java -jar credit-advisory-0.0.1-SNAPSHOT.jar
 | `ID_NUMBER_LOOKUP_KEY`     | yes              | 32 random bytes, base64 - made on the server by a key holder                                                         |
 | `ID_NUMBER_ENCRYPTION_KEY` | yes              | another 32 random bytes, base64 - a **different** key                                                                |
 | `MFA_ENCRYPTION_KEY`       | yes              | a third 32 random bytes, base64 - encrypts the authenticator secrets; must differ from both ID-number keys          |
+| `ID_NUMBER_ENCRYPTION_KEY_VERSION`          | only in a rotation | version of `ID_NUMBER_ENCRYPTION_KEY`, default `1`; goes up by one with each rotation (`docs/it-handover.md` section 4.1) |
+| `ID_NUMBER_PREVIOUS_ENCRYPTION_KEY`         | only in a rotation | the key that was current before the rotation, kept only until nothing uses it                                    |
+| `ID_NUMBER_PREVIOUS_ENCRYPTION_KEY_VERSION` | only in a rotation | its version                                                                                                        |
 | `SERVER_ADDRESS`           | no               | the one address the application listens on; default `127.0.0.1` (proxy on the same machine), otherwise the private address the proxy connects to. Never `0.0.0.0` |
 | `MANAGEMENT_PORT`          | no               | port of the health check, default `8081`; must differ from the application port (`8080`)                             |
 | `MANAGEMENT_ADDRESS`       | no               | address of the health check, default `127.0.0.1`; set the private address only if the load balancer is on another machine |
@@ -171,11 +174,11 @@ java -jar credit-advisory-0.0.1-SNAPSHOT.jar
 Rules:
 
 - **The ID-number keys must be backed up safely.** If they are lost, every stored ID number becomes unreadable.
-  Never change them on a server that already has clients.
+  `ID_NUMBER_ENCRYPTION_KEY` can be rotated, only with the steps in `docs/it-handover.md` section 4.1.
+  `ID_NUMBER_LOOKUP_KEY` can never be changed on a server that already has clients.
 - **`ID_NUMBER_ENCRYPTION_KEY` also protects queued login emails.** Temporary passwords of new consultant logins
-  waiting to be emailed (Consultant logins: not sent yet, waiting, or failed) are sealed with it. Before rotating
-  it, send those emails or keep the old key configured for decryption; otherwise they cannot be sent and must be
-  regenerated on the Consultant logins page.
+  waiting to be emailed (Consultant logins: not sent yet, waiting, or failed) are sealed with it. A rotation
+  re-encrypts them too, as long as the previous key stays configured until it has finished.
 - **Every user signs in with an authenticator app** (Google or Microsoft Authenticator) after the password;
   production refuses to start without it. If `MFA_ENCRYPTION_KEY` is lost, nobody can sign in until an
   administrator resets their MFA (`POST /api/users/{id}/mfa-reset`) - and the first administrator then needs
