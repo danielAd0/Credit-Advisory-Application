@@ -288,6 +288,25 @@ git push
   production database (`docs/it-handover.md`, section 10).
 - Never use `git push --force`.
 
+## Dependency updates
+
+GitHub's Dependabot watches the libraries in `backend/pom.xml`, `frontend/package.json` and the CI workflow
+(`.github/dependabot.yml`). Every Monday morning it opens a pull request with the week's small updates, one for the
+backend and one for the frontend. It opens a separate one for each major version, and one **straight away** for any
+library with a known security problem. CI runs the tests on each of them.
+
+- **Green, minor or patch:** merge it on GitHub (Merge pull request), then everybody runs `git pull`.
+- **Red:** do not merge. Open the CI run, see what broke, and fix it in a normal commit, or close the pull request
+  with a comment saying why.
+- **Major version** (for example Spring Boot 4 to 5, React 19 to 20): read its upgrade notes first. It may need
+  code changes. Leave it open until someone has time, but never leave a **security** one waiting.
+- TypeScript 7 is skipped on purpose (see "Known pins").
+
+**One-time set-up, by the repository owner:** on GitHub, open the repository's **Settings > Advanced Security**
+(called **Code security** on some accounts). Turn on **Dependency graph**, **Dependabot alerts** and
+**Dependabot security updates**. The weekly pull requests come from the file alone; the security ones need these
+switches.
+
 ## Known pins
 
 - TypeScript is pinned to `~6.0.3` because `typescript-eslint` does not support TypeScript 7 yet.

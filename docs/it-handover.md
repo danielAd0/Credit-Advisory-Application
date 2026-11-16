@@ -367,6 +367,10 @@ keep copies.
 
 Everybody is signed out by a restart. Users are also signed out after 30 minutes without activity.
 
+**Library security fixes:** GitHub opens a pull request when a library the application uses has a known
+security problem (README, "Dependency updates"). Once the team has merged it and CI is green, it goes out like any
+other update (above). Ask the team for a new jar at least monthly, and at once after a security fix.
+
 ## 9. When something goes wrong
 
 | Situation | What to do |

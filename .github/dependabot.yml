@@ -1,0 +1,54 @@
+# Dependabot: GitHub opens a pull request when a library we use has a newer version, and at once when
+# one has a known security problem (with "Dependabot security updates" on: README, "Dependency updates").
+# CI runs the tests on every such pull request; never merge one that is red.
+#
+# Small updates (minor and patch) arrive together, one pull request per area per week, so there is
+# less to review. Major versions arrive one by one, because they can need code changes.
+
+version: 2
+
+updates:
+  # Backend: Spring Boot, the PostgreSQL driver, Flyway, Apache POI and the rest of backend/pom.xml.
+  - package-ecosystem: maven
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: Africa/Johannesburg
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "Backend dependencies"
+    groups:
+      backend-minor-and-patch:
+        update-types: [minor, patch]
+
+  # Frontend: React, Vite, ESLint and the rest of frontend/package.json.
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: Africa/Johannesburg
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "Frontend dependencies"
+    groups:
+      frontend-minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      # Pinned to 6.x until typescript-eslint supports TypeScript 7 (README, "Known pins").
+      - dependency-name: typescript
+        versions: [">=7.0.0"]
+
+  # The actions CI uses (checkout, setup-java, setup-node, upload-artifact).
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "CI actions"
+    groups:
+      actions:
+        patterns: ["*"]
