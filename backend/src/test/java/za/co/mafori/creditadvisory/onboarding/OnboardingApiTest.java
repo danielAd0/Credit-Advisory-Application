@@ -8,6 +8,7 @@ import java.util.regex.Pattern;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import za.co.mafori.creditadvisory.support.ApiClient;
 import za.co.mafori.creditadvisory.support.ApiTestBase;
 import za.co.mafori.creditadvisory.user.RoleName;
@@ -24,6 +25,11 @@ class OnboardingApiTest extends ApiTestBase {
 
     @Autowired
     private LoginDetailsSender sender;
+
+    /** The URL the email must show. Your application-local.properties (imported by the test
+     *  profile) may override the test value, so read what is actually configured. */
+    @Value("${app.onboarding.login-url}")
+    private String loginUrl;
 
     private ApiClient admin;
     private long naledi;
@@ -97,7 +103,7 @@ class OnboardingApiTest extends ApiTestBase {
                 .containsExactlyInAnyOrder("naledi@test.local", "sipho@test.local");
         LoginDetailsMailer.Message toNaledi = sent.stream().filter(m -> m.to().equals("naledi@test.local"))
                 .findFirst().orElseThrow();
-        assertThat(toNaledi.html()).contains("naledi@test.local").contains("https://credit-advisory.test.local")
+        assertThat(toNaledi.html()).contains("naledi@test.local").contains(loginUrl.strip())
                 .as("only her own details").doesNotContain("sipho@test.local");
         String nalediPassword = passwordIn(toNaledi.html());
         String siphoPassword = passwordIn(sent.stream().filter(m -> m.to().equals("sipho@test.local"))

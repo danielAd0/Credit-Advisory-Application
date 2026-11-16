@@ -216,7 +216,7 @@ function ProductPanel({ product, canEdit, onSaved, onClose }: PanelProps) {
 export default function ProductsPage() {
   const session = useSession();
   const isAdmin = hasAnyRole(session, ['ADMIN']);
-  const canAdd = hasAnyRole(session, ['ADMIN', 'MANAGER']);
+  const canAdd = isAdmin; // only an admin adds products
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
   const [state, setState] = useState<'all' | 'active' | 'inactive'>('all');
@@ -298,7 +298,13 @@ export default function ProductsPage() {
           </p>
         )}
         {!error && result === null && <p className="lp-empty">Loading...</p>}
-        {result && result.items.length === 0 && <p className="lp-empty">No products found.</p>}
+        {result && result.items.length === 0 && (
+          <p className="lp-empty">
+            {!query && state === 'all'
+              ? 'No products yet. The first weekly import adds them from the sheet’s columns; add any the sheet does not have with the button above.'
+              : 'No products found.'}
+          </p>
+        )}
         {result && result.items.length > 0 && (
           <>
             <div className="lp-table">

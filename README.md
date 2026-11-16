@@ -112,6 +112,9 @@ npm run dev
 Open http://localhost:5173 and sign in with the admin email and password from your
 `application-local.properties`. Use `localhost`, not `127.0.0.1`.
 
+A new database has **no products and no employers**. The first weekly-register import (Import page) adds them from
+the sheet; add any others on the Products and Employers pages (`docs/api-imports.md` section 12).
+
 ## Everyday commands
 
 | Where      | Command                      | What it does                        |

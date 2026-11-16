@@ -7,6 +7,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.jdbc.datasource.init.ScriptUtils;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
@@ -41,7 +43,7 @@ public abstract class ApiTestBase {
     private int port;
 
     @Autowired
-    private Flyway flyway;
+    protected Flyway flyway;
 
     @Autowired
     protected JdbcTemplate jdbc;
@@ -84,12 +86,27 @@ public abstract class ApiTestBase {
         }
         flyway.clean();
         flyway.migrate();
+        if (standardCatalogue()) {
+            jdbc.execute((java.sql.Connection c) -> {
+                ScriptUtils.executeSqlScript(c, new ClassPathResource("db/standard-catalogue.sql"));
+                return null;
+            });
+        }
         // Every test signs in from 127.0.0.1, so start each test with a clean rate
         // limit.
         loginRateLimiter.clear();
         idRevealLimiter.clear();
         mailer.reset();
         adminId = createUser(ADMIN_EMAIL, null, RoleName.ADMIN);
+    }
+
+    /**
+     * A new install has no products or employers (V27). Tests start with the 15
+     * products and 63 employers that were seeded before V27, unless they override
+     * this to test an empty install.
+     */
+    protected boolean standardCatalogue() {
+        return true;
     }
 
     /** A new browser with no cookies (not signed in). */

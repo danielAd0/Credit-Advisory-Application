@@ -167,8 +167,8 @@ Errors, warnings and notes found while checking, paged. `severity` (`ERROR`, `WA
 - Common codes: `row:missing-id-number`, `row:invalid-id-number`, `row:id-leading-zero-restored`, `row:missing-name`,
   `row:invalid-amount`, `row:no-consultant`, `row:repeat-client`, `sheet:missing-day`, `sheet:missing-header`,
   `sheet:quotation-rule-differs`, `sheet:banked-rule-differs`, `client:name-differs`, `client:consultant-differs`,
-  `client:unassigned-by-manager`, `row:consultant-not-active`, `lookup:new-employer`, `lookup:new-structure`,
-  `lookup:new-payment-term`. The full list is in `imports/register/IssueCodes.java`.
+  `client:unassigned-by-manager`, `row:consultant-not-active`, `lookup:new-product`, `lookup:new-employer`,
+  `lookup:new-structure`, `lookup:new-payment-term`. The full list is in `imports/register/IssueCodes.java`.
 - `client:name-differs` (WARNING): the row's ID number belongs to a client stored under another name. It makes the
   `NAME_DIFFERENCES` blocker (section 5): the admin must check these rows before confirming.
 - `client:unassigned-by-manager` (WARNING): a manager removed this client's consultant; the import will **not**
@@ -555,3 +555,24 @@ transaction date (from the sheet), product lines, quotation and banked. The peri
 (`docs/api-reports.md` section 9: any range up to a year, any year back, per consultant and product)
 select by that date and group by that consultant, never by the import date or the client's current
 consultant.
+
+## 12. Products and employers come from the register (V27)
+
+A new install starts with **no products and no employers**. V27 removes the rows V6 and V10 seeded, but only on a
+database with no clients, sales or imports yet. A database already in use keeps them.
+
+- **Products, at preview.** On every day sheet, each header between QUOTATION and the next known field (AMOUNT TO
+  CLIENT in the real workbook) that is not a known product becomes a new product. A known misspelling becomes the
+  right product (`GROECRY` is GROCERY). The code comes from the header (`MAFORI CARD` is `MAFORI_CARD`) and the name is
+  written as words (`Mafori Card`; short words such as `IVC` stay as they are). The preview lists them in one
+  `lookup:new-product` (INFO) issue, and each one is audited as `PRODUCT_CREATED` with `source` `WEEKLY_REGISTER_IMPORT`.
+- **The flags follow the sheet.** A product counts toward quotation if the QUOTATION formula on the first data row adds
+  up its column, and toward banked if the BANKED formula does, on any day it appears. So CREDIT REPAIR counts toward
+  quotation only. A product that no formula covers (typed-in values) gets both flags. The admin checks them on the
+  Products page.
+- **Products are created at preview**, because the preview's staged rows and report figures refer to them. They stay
+  if the preview is cancelled or expires, and the admin deactivates one that is not wanted.
+- **Employers, at confirm**, as before: each new EMPLOYER name is created, marked for review (`lookup:new-employer`).
+- **Anything the sheet does not have** the admin adds by hand on the Products and Employers pages.
+- Tests keep the old 15 products and 63 employers (`src/test/resources/db/standard-catalogue.sql`, run by
+  `ApiTestBase`). `CatalogueFromRegisterApiTest` covers an empty install.

@@ -78,6 +78,14 @@ public final class ImportDictionary {
         return code == null ? Optional.empty() : Optional.ofNullable(productsByCode.get(code));
     }
 
+    /**
+     * The product code a header spelling stands for ("GROECRY" is GROCERY), even when
+     * no such product exists yet: what a product found in the sheet is created as.
+     */
+    public Optional<String> productCodeOf(String header) {
+        return Optional.ofNullable(productAliases.get(normalize(header)));
+    }
+
     public Optional<DayOfWeek> day(String sheetName) {
         return Optional.ofNullable(sheets.get(normalize(sheetName)));
     }

@@ -80,6 +80,10 @@ Headers are matched after trimming, upper-casing and collapsing spaces, and thro
 `client_transaction_extras` and the preview warns "unknown column X on Tuesday – stored as an extra field; ask an
 admin to map it to a product". If the column is empty in every data row, the preview just reports it.
 
+**Since V27 the products themselves come from the sheet:** a header between QUOTATION and the next known field that
+is no known product becomes a new product at preview, with flags read from the row's QUOTATION and BANKED formulas
+(`docs/api-imports.md` section 12). So only columns outside that range, or without a header, end up as extras.
+
 **Required headers:** NAME, SURNAME, ID NUMBER, CONSULTANT, BANKED, QUOTATION. A day sheet missing one of these
 fails the preview (`sheet:missing-header`). A day sheet that has no data rows at all, like Saturday and Sunday in
 the analysed file, is fine and reported as "0 rows".
