@@ -11,10 +11,9 @@
   padding: 1rem 1.25rem;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 12px;
 }
 
-.ms-field {
+.ms-filed {
   display: grid;
   gap: 0.3rem;
 }
@@ -120,4 +119,29 @@
   display: flex;
   justify-content: space-between;
   gap: 1rem;
+}
+
+.ms-check {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding-top: 1.6rem;
+}
+
+.ms-check input {
+  width: auto;
+  height: auto;
+  padding: 0;
+}
+
+.ms-flag {
+  margin-top: 0.3rem;
+  max-width: 18rem;
+  white-space: normal;
+  font-size: 0.85rem;
+  color: var(--accent-ink);
+}
+
+.ms-flag p {
+  margin: 0.15rem 0 0;
 }

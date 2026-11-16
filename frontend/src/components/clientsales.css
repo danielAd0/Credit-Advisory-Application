@@ -42,3 +42,84 @@
   gap: 0.4rem;
   white-space: nowrap;
 }
+
+.cds-flag {
+  margin-top: 0.4rem;
+  max-width: 18rem;
+  white-space: normal;
+  font-size: 0.85rem;
+}
+
+.cds-flag p {
+  margin: 0.25rem 0;
+}
+
+.cds-flag-tag {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+.cds-flag-row td {
+  padding: 0 0 1rem;
+  background: var(--surface);
+  border-top: 0;
+}
+
+.cds-flag-panel {
+  display: grid;
+  gap: 0.5rem;
+  max-width: 40rem;
+  margin: 0 0 0 0.5rem;
+  padding: 1rem 1.25rem;
+  white-space: normal;
+  background: var(--accent-soft);
+  border-left: 4px solid var(--accent);
+  border-radius: 8px;
+}
+
+.cds-flag-panel h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.cds-flag-panel p {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.cds-flag-panel label {
+  margin-top: 0.25rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.cds-flag-panel textarea {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  font: inherit;
+  color: var(--ink);
+  resize: vertical;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.cds-flag-panel textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(255, 90, 0, 0.25);
+}
+
+.cds-flag-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+}

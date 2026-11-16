@@ -32,6 +32,12 @@ export interface SavedLine {
   countsTowardBanked: boolean;
 }
 
+export interface SaleFlag {
+  note: string;
+  flaggedBy: string;
+  flaggedAt: string;
+}
+
 export interface SavedTransaction {
   id: number;
   clientId: number;
@@ -44,6 +50,7 @@ export interface SavedTransaction {
   weekStarting?: string | null;
   replaced?: boolean;
   typedIn?: boolean;
+  flag?: SaleFlag | null;
 }
 
 export interface SaleDetail extends SavedTransaction {
@@ -71,6 +78,7 @@ export interface SaleFilter {
   from: string;
   to: string;
   consultantId?: number;
+  flagged?: boolean;
 }
 
 export interface SalesPage extends PageResponse<SaleRow> {
@@ -125,6 +133,7 @@ const real = {
       size: String(size),
     });
     if (filter.consultantId !== undefined) q.set('consultantId', String(filter.consultantId));
+    if (filter.flagged) q.set('flagged', 'true');
     return api<SalesPage>(`/api/transactions?${q.toString()}`);
   },
 
@@ -138,6 +147,14 @@ const real = {
 
   remove: (id: number, version: number) =>
     api<undefined>(`/api/transactions/${id}?version=${version}`, { method: 'DELETE' }),
+
+  flag: (id: number, note: string) =>
+    api<SavedTransaction>(`/api/transactions/${id}/flag`, {
+      method: 'POST',
+      body: JSON.stringify({ note }),
+    }),
+
+  unflag: (id: number) => api<undefined>(`/api/transactions/${id}/flag`, { method: 'DELETE' }),
 
   save: (t: NewTransaction, key: string) =>
     api<SavedTransaction>('/api/transactions', {

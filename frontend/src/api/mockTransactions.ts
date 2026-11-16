@@ -238,6 +238,14 @@ function samples(): SavedTransaction[] {
         bankedTotal: sum((l) => l.countsTowardBanked),
         typedIn: i < 7,
         replaced: i === 6,
+        flag:
+          i === 2
+            ? {
+                note: 'The Insurance amount looks wrong. Please check it against the client form.',
+                flaggedBy: 'A manager',
+                flaggedAt: new Date().toISOString(),
+              }
+            : null,
       },
     ];
   });
@@ -249,6 +257,7 @@ export async function list(filter: SaleFilter, page: number, size = 25): Promise
   const all = [...samples(), ...saved.values()]
     .filter((t) => t.transactionDate >= filter.from && t.transactionDate <= filter.to)
     .filter((t) => filter.consultantId === undefined || t.consultantId === filter.consultantId)
+    .filter((t) => !filter.flagged || Boolean(t.flag))
     .sort((a, b) => b.transactionDate.localeCompare(a.transactionDate) || b.id - a.id);
   const total = (pick: (t: SavedTransaction) => number) =>
     all.reduce((s, t) => s + cents(pick(t)), 0) / 100;
@@ -328,8 +337,25 @@ export async function update(id: number, body: EditSale): Promise<SaleDetail> {
     transactionDate: body.transactionDate,
     ...priceLines(body, sale.lines),
   });
+  sale.flag = null;
   versions.set(id, body.version + 1);
   return toDetail(sale);
+}
+
+export async function flag(id: number, note: string): Promise<SavedTransaction> {
+  await delay(300);
+  const sale = find(id);
+  if (!isEditable(sale)) throw problem(409, 'sale:imported', 'This sale can no longer be flagged.');
+  const text = note.trim();
+  if (text === '') throw problem(422, 'validation', 'Tell the consultant what to correct.');
+  sale.flag = { note: text, flaggedBy: 'A manager', flaggedAt: new Date().toISOString() };
+  return sale;
+}
+
+export async function unflag(id: number): Promise<undefined> {
+  await delay(300);
+  find(id).flag = null;
+  return undefined;
 }
 
 export async function remove(id: number, version: number): Promise<undefined> {

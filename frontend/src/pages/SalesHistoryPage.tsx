@@ -33,13 +33,14 @@ export default function SalesHistoryPage() {
   const [from, setFrom] = useState(() => dayText(mondayOf(new Date())));
   const [to, setTo] = useState(() => dayText(new Date()));
   const [consultantId, setConsultantId] = useState('');
+  const [flaggedOnly, setFlaggedOnly] = useState(false);
   const [page, setPage] = useState(0);
   const [staff, setStaff] = useState<ConsultantSummary[]>([]);
   const [result, setResult] = useState<{ key: string; data: SalesPage } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const valid = from !== '' && to !== '' && from <= to;
-  const key = `${from}|${to}|${consultantId}|${page}`;
+  const key = `${from}|${to}|${consultantId}|${flaggedOnly}|${page}`;
 
   useEffect(() => {
     if (!manager) return;
@@ -57,7 +58,15 @@ export default function SalesHistoryPage() {
     if (!valid) return;
     let live = true;
     transactions
-      .list({ from, to, ...(consultantId ? { consultantId: Number(consultantId) } : {}) }, page)
+      .list(
+        {
+          from,
+          to,
+          ...(consultantId ? { consultantId: Number(consultantId) } : {}),
+          ...(flaggedOnly ? { flagged: true } : {}),
+        },
+        page,
+      )
       .then((r) => {
         if (!live) return;
         setResult({ key, data: r });
@@ -69,7 +78,7 @@ export default function SalesHistoryPage() {
     return () => {
       live = false;
     };
-  }, [valid, from, to, consultantId, page, key]);
+  }, [valid, from, to, consultantId, flaggedOnly, page, key]);
 
   const paged = valid && result && result.key === key ? result.data : null;
 
@@ -136,6 +145,19 @@ export default function SalesHistoryPage() {
             </select>
           </div>
         )}
+        <div className="ms-field">
+          <label className="ms-check">
+            <input
+              type="checkbox"
+              checked={flaggedOnly}
+              onChange={(e) => {
+                setFlaggedOnly(e.target.checked);
+                setPage(0);
+              }}
+            />
+            Needs correction only
+          </label>
+        </div>
         <div className="ms-presets">
           <button type="button" className="btn" onClick={() => preset(thisMonday, today)}>
             This week
@@ -226,7 +248,15 @@ export default function SalesHistoryPage() {
                       </td>
                       <td className="num">{rand(s.quotationTotal)}</td>
                       <td className="num">{rand(s.bankedTotal)}</td>
-                      <td>{s.typedIn === false ? 'Imported' : 'Typed in'}</td>
+                      <td>
+                        {s.typedIn === false ? 'Imported' : 'Typed in'}
+                        {s.flag && (
+                          <div className="ms-flag">
+                            <strong>Needs correction</strong>
+                            <p>{s.flag.note}</p>
+                          </div>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

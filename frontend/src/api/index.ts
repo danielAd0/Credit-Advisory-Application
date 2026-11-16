@@ -30,6 +30,7 @@ export type {
 } from './imports';
 
 export { reports } from './reports';
+
 export type {
   BudgetResponse,
   ConsultantsResponse,
@@ -55,6 +56,7 @@ export type {
   Option,
   SaleDetail,
   SaleFilter,
+  SaleFlag,
   SaleRow,
   SalesPage,
   SavedLine,

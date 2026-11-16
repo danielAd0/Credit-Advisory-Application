@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { detailOf, transactions, type SavedTransaction } from '../api';
 import { hasAnyRole, useSession } from '../auth/useAuth';
@@ -38,6 +38,8 @@ export default function ClientSales({ clientId }: { clientId: number }) {
   const [asking, setAsking] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [flagging, setFlagging] = useState<number | null>(null);
+  const [note, setNote] = useState('');
 
   useEffect(() => {
     let live = true;
@@ -75,6 +77,38 @@ export default function ClientSales({ clientId }: { clientId: number }) {
       }
     } catch (err) {
       setActionError(detailOf(err) ?? 'Could not delete the sale.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function flag(id: number) {
+    if (note.trim() === '') {
+      setActionError('Tell the consultant what to correct.');
+      return;
+    }
+    setBusy(true);
+    setActionError(null);
+    try {
+      await transactions.flag(id, note.trim());
+      setFlagging(null);
+      setNote('');
+      setReload((n) => n + 1);
+    } catch (err) {
+      setActionError(detailOf(err) ?? 'Could not flag the sale.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function withdraw(id: number) {
+    setBusy(true);
+    setActionError(null);
+    try {
+      await transactions.unflag(id);
+      setReload((n) => n + 1);
+    } catch (err) {
+      setActionError(detailOf(err) ?? 'Could not withdraw the flag.');
     } finally {
       setBusy(false);
     }
@@ -130,72 +164,149 @@ export default function ClientSales({ clientId }: { clientId: number }) {
                 {current.sales.map((s) => {
                   const from = source(s);
                   return (
-                    <tr key={s.id} className={from.muted ? 'cds-muted' : undefined}>
-                      <td>{day(s.transactionDate)}</td>
-                      <td className="cds-products">
-                        <ul className="cds-lines">
-                          {s.lines.map((l) => (
-                            <li key={l.productId}>{l.name}</li>
-                          ))}
-                        </ul>
-                      </td>
-                      <td className="num">
-                        <ul className="cds-lines">
-                          {s.lines.map((l) => (
-                            <li key={l.productId}>{rand(l.amount)}</li>
-                          ))}
-                        </ul>
-                      </td>
-                      <td className="num cds-total">{rand(s.quotationTotal)}</td>
-                      <td className="num cds-total">{rand(s.bankedTotal)}</td>
-                      <td>
-                        <span className="cd-pill">{from.label}</span>
-                      </td>
-                      {showActions && (
+                    <Fragment key={s.id}>
+                      <tr className={from.muted ? 'cds-muted' : undefined}>
+                        <td>{day(s.transactionDate)}</td>
+                        <td className="cds-products">
+                          <ul className="cds-lines">
+                            {s.lines.map((l) => (
+                              <li key={l.productId}>{l.name}</li>
+                            ))}
+                          </ul>
+                        </td>
+                        <td className="num">
+                          <ul className="cds-lines">
+                            {s.lines.map((l) => (
+                              <li key={l.productId}>{rand(l.amount)}</li>
+                            ))}
+                          </ul>
+                        </td>
+                        <td className="num cds-total">{rand(s.quotationTotal)}</td>
+                        <td className="num cds-total">{rand(s.bankedTotal)}</td>
                         <td>
-                          <div className="cds-actions">
-                            {canChange(s) && consultant && (
-                              <Link className="btn" to={`/consultant-actions?saleId=${s.id}`}>
-                                Edit
-                              </Link>
-                            )}
-                            {canChange(s) && manager && asking !== s.id && (
-                              <button
-                                type="button"
-                                className="btn"
-                                onClick={() => {
-                                  setAsking(s.id);
-                                  setActionError(null);
-                                }}
-                              >
-                                Delete
-                              </button>
-                            )}
-                            {manager && asking === s.id && (
-                              <>
-                                <span>Delete this sale?</span>
+                          <span className="cd-pill">{from.label}</span>
+                          {s.flag && (
+                            <div className="cds-flag">
+                              <span className="cds-flag-tag">Needs correction</span>
+                              <p>{s.flag.note}</p>
+                              <span className="muted">Asked by {s.flag.flaggedBy}</span>
+                            </div>
+                          )}
+                        </td>
+                        {showActions && (
+                          <td>
+                            <div className="cds-actions">
+                              {canChange(s) && consultant && (
+                                <Link className="btn" to={`/consultant-actions?saleId=${s.id}`}>
+                                  Edit
+                                </Link>
+                              )}
+                              {canChange(s) && manager && !s.flag && flagging !== s.id && (
                                 <button
                                   type="button"
-                                  className="btn primary"
-                                  disabled={busy}
-                                  onClick={() => void remove(s.id)}
+                                  className="btn"
+                                  onClick={() => {
+                                    setFlagging(s.id);
+                                    setNote('');
+                                    setAsking(null);
+                                    setActionError(null);
+                                  }}
                                 >
-                                  {busy ? 'Deleting...' : 'Yes, delete'}
+                                  Flag for correction
                                 </button>
+                              )}
+                              {canChange(s) && manager && s.flag && (
                                 <button
                                   type="button"
                                   className="btn"
                                   disabled={busy}
-                                  onClick={() => setAsking(null)}
+                                  onClick={() => void withdraw(s.id)}
                                 >
-                                  No
+                                  Withdraw flag
                                 </button>
-                              </>
-                            )}
-                          </div>
-                        </td>
+                              )}
+                              {canChange(s) && manager && asking !== s.id && (
+                                <button
+                                  type="button"
+                                  className="btn"
+                                  onClick={() => {
+                                    setAsking(s.id);
+                                    setFlagging(null);
+                                    setActionError(null);
+                                  }}
+                                >
+                                  Delete
+                                </button>
+                              )}
+                              {manager && asking === s.id && (
+                                <>
+                                  <span>Delete this sale?</span>
+                                  <button
+                                    type="button"
+                                    className="btn primary"
+                                    disabled={busy}
+                                    onClick={() => void remove(s.id)}
+                                  >
+                                    {busy ? 'Deleting...' : 'Yes, delete'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn"
+                                    disabled={busy}
+                                    onClick={() => setAsking(null)}
+                                  >
+                                    No
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                      {manager && flagging === s.id && (
+                        <tr className="cds-flag-row">
+                          <td colSpan={showActions ? 7 : 6}>
+                            <div className="cds-flag-panel">
+                              <h3>Flag this sale for correction</h3>
+                              <p className="muted">
+                                The consultant will see your note and fix the sale. The flag clears
+                                when they save their changes.
+                              </p>
+                              <label htmlFor={`cds-note-${s.id}`}>What should be corrected?</label>
+                              <textarea
+                                id={`cds-note-${s.id}`}
+                                rows={3}
+                                maxLength={300}
+                                placeholder="For example: the Insurance amount looks wrong."
+                                value={note}
+                                onChange={(e) => setNote(e.target.value)}
+                              />
+                              <div className="cds-flag-foot">
+                                <span className="muted">{note.length} / 300</span>
+                                <div className="cds-actions">
+                                  <button
+                                    type="button"
+                                    className="btn"
+                                    disabled={busy}
+                                    onClick={() => setFlagging(null)}
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn primary"
+                                    disabled={busy || note.trim() === ''}
+                                    onClick={() => void flag(s.id)}
+                                  >
+                                    {busy ? 'Sending...' : 'Send to consultant'}
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
                       )}
-                    </tr>
+                    </Fragment>
                   );
                 })}
               </tbody>

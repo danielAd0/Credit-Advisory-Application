@@ -589,6 +589,12 @@ export default function ConsultantActionsPage() {
               {notice}
             </p>
           )}
+          {editing?.flag && (
+            <p className="ca-flag" role="status">
+              <strong>{editing.flag.flaggedBy} asked for a correction:</strong> {editing.flag.note}{' '}
+              The request clears when you save your changes.
+            </p>
+          )}
           {blocked && (
             <p className="alert error" role="alert">
               {blocked} {client && <Link to={`/clients/${client.id}`}>Back to the client</Link>}

@@ -275,3 +275,12 @@
   background: var(--accent-soft);
   border-radius: 999px;
 }
+
+.ca-flag {
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  border-left: 4px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
