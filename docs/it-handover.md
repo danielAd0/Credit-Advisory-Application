@@ -332,7 +332,7 @@ only believes `X-Forwarded-For` from such addresses, and uses it for the sign-in
 ## 7. Before go-live
 
 - Work through the **Network checklist** in the README (8 items: what is public, firewall rules,
-  `pg_hba.conf`, no outgoing connections, backups, testing from outside).
+  `pg_hba.conf`, no outgoing connections except the database and Microsoft 365, backups, testing from outside).
 - From the application server: `curl http://127.0.0.1:8081/actuator/health` answers `{"status":"UP"}`.
 - From outside the network: only port 443 answers; `https://<address>/actuator/health` is a 404.
 - Sign in on a phone and on a laptop; make sure the browser shows a valid certificate.
