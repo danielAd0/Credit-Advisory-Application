@@ -105,9 +105,9 @@ the application refuses to start if two are the same.
 `ID_NUMBER_ENCRYPTION_KEY` has two jobs. Besides the ID numbers, it seals the temporary password of every new
 consultant login until its email is sent (`consultant_login_invites`, status PENDING, QUEUED or FAILED; the
 password is deleted as soon as the email is sent). The two uses are kept apart cryptographically, but they share
-the key. **Before rotating it**, either let those emails go out first, or keep the old key configured for
-decryption (`app.idnumber.previous-encryption-keys.<old version>`) until they have; any that cannot be read any more show as failed and must be regenerated on the
-Consultant logins page. Check with:
+the key. A rotation (section 4.1) re-encrypts those passwords along with the ID numbers. If the previous key is
+removed too early, any that cannot be read any more show as failed and must be regenerated on the Consultant
+logins page. Check with:
 
 ```sql
 SELECT status, count(*) FROM consultant_login_invites WHERE status IN ('PENDING','QUEUED','FAILED') GROUP BY status;
@@ -136,8 +136,46 @@ Rules:
 - Store each in the vault **and** in a second, offline place (e.g. a sealed envelope in a safe, or an
   encrypted USB stick in a different building), held by the key holder who is **not** a developer. Keep
   this apart from the database backups: a stolen backup must not come with its key.
-- **Never change `ID_NUMBER_*` keys on a server that has clients.** Changing a key is not supported yet;
-  the stored numbers would no longer match it.
+- **`ID_NUMBER_ENCRYPTION_KEY` is changed only by rotating it (section 4.1)**, never by just putting a new key in.
+  A new key on its own makes every stored ID number unreadable.
+- **`ID_NUMBER_LOOKUP_KEY` can never be changed on a server that has clients:** every client is found by a hash
+  made with it. If it is ever exposed, tell the information officer; changing it needs a development job.
+
+### 4.1 Rotating the encryption key
+
+Rotate `ID_NUMBER_ENCRYPTION_KEY` when a key holder leaves, when the key may have been seen, or on the schedule
+the information officer sets. The application re-encrypts everything in the background; nobody has to stop
+using it, but do it outside working hours: anyone with a client's page open at that moment gets "someone else
+changed this client" when they save, and simply reloads.
+
+One rotation at a time. The version numbers below are for the first rotation (from version 1 to 2); for the next
+one, use 2 and 3, and so on.
+
+1. **A key holder makes the new key on the server** (the commands above) and stores it in the vault and offline,
+   like the first one.
+2. **Change the settings file** (section 5.2), then restart the application:
+
+   ```
+   ID_NUMBER_PREVIOUS_ENCRYPTION_KEY=<the key that was in ID_NUMBER_ENCRYPTION_KEY until now>
+   ID_NUMBER_PREVIOUS_ENCRYPTION_KEY_VERSION=1
+   ID_NUMBER_ENCRYPTION_KEY=<the new key>
+   ID_NUMBER_ENCRYPTION_KEY_VERSION=2
+   ```
+
+   The application refuses to start if the new key is the same as the previous one, or if both have the same
+   version. `ID_NUMBER_LOOKUP_KEY` does not change.
+3. **Wait for the re-encryption.** About a minute after the start, the application re-encrypts every ID number,
+   every row of an import preview that is still open, and every temporary password of a login email that has not
+   gone out yet, and writes `ID_NUMBERS_REENCRYPTED` in the audit log. An administrator can follow it at
+   `GET /api/id-number-keys`, or start it at once with `POST /api/id-number-keys/re-encrypt`
+   (`docs/api-auth-consultants-clients.md`, section 11). It is finished when `totalRemaining` is `0`.
+4. **If `failed` is not 0**, some values could not be read: they stay as they were and keep needing the previous
+   key. Do **not** go on; the server log names the table and row (never the value). Ask the development team.
+5. **Remove the previous key** once `totalRemaining` is `0`: delete the two `ID_NUMBER_PREVIOUS_*` lines and
+   restart. Keep `ID_NUMBER_ENCRYPTION_KEY_VERSION=2`.
+6. **Keep the old key in the vault** for as long as any database backup made before the rotation is kept:
+   restoring such a backup needs it again (put it back as the previous key, restart, and let it re-encrypt).
+   Only then may it be destroyed.
 
 ## 5. Install
 
@@ -294,7 +332,7 @@ only believes `X-Forwarded-For` from such addresses, and uses it for the sign-in
 ## 7. Before go-live
 
 - Work through the **Network checklist** in the README (8 items: what is public, firewall rules,
-  `pg_hba.conf`, no outgoing connections, backups, testing from outside).
+  `pg_hba.conf`, no outgoing connections except the database and Microsoft 365, backups, testing from outside).
 - From the application server: `curl http://127.0.0.1:8081/actuator/health` answers `{"status":"UP"}`.
 - From outside the network: only port 443 answers; `https://<address>/actuator/health` is a 404.
 - Sign in on a phone and on a laptop; make sure the browser shows a valid certificate.
@@ -314,6 +352,12 @@ numbers, passwords, codes or keys. Keep logs for as long as company policy says.
 hold names, phone numbers and email addresses in readable form (ID numbers stay encrypted), so treat them
 like the live data. Retention: as the company's POPIA policy says.
 
+**A client asks what we hold about them (POPIA access request):** the information officer checks who is asking,
+then an administrator exports the client's data (`POST /api/clients/{id}/data-export`, or its button once the client page has one): one file
+with every stored detail, the full ID number, every sale, case, note and consultant change, and who looked at
+the client. It is audited. Hand the file over as the POPIA procedure says, never by ordinary email, and do not
+keep copies.
+
 **Updates:**
 1. Back up the database.
 2. Stop the service, replace the jar (and `dist`, if the frontend changed), start the service.
@@ -322,6 +366,10 @@ like the live data. Retention: as the company's POPIA policy says.
    changes only go forward.
 
 Everybody is signed out by a restart. Users are also signed out after 30 minutes without activity.
+
+**Library security fixes:** GitHub opens a pull request when a library the application uses has a known
+security problem (README, "Dependency updates"). Once the team has merged it and CI is green, it goes out like any
+other update (above). Ask the team for a new jar at least monthly, and at once after a security fix.
 
 ## 9. When something goes wrong
 

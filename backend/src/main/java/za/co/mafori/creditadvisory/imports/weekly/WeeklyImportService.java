@@ -71,11 +71,13 @@ public class WeeklyImportService {
     private final AuditLogWriter audit;
     private final ReconciliationService reconciliation;
     private final ConsultantCodeGenerator codes;
+    private final ProductDiscovery productDiscovery;
     private final Clock clock = Clock.systemUTC();
 
     public WeeklyImportService(PoiWorkbookReader reader, WeeklyRegisterParser parser,
             ImportDictionaryLoader dictionaryLoader, IdNumberProtector protector, WeeklyImportStore store,
-            AuditLogWriter audit, ReconciliationService reconciliation, ConsultantCodeGenerator codes) {
+            AuditLogWriter audit, ReconciliationService reconciliation, ConsultantCodeGenerator codes,
+            ProductDiscovery productDiscovery) {
         this.reader = reader;
         this.parser = parser;
         this.dictionaryLoader = dictionaryLoader;
@@ -84,6 +86,7 @@ public class WeeklyImportService {
         this.audit = audit;
         this.reconciliation = reconciliation;
         this.codes = codes;
+        this.productDiscovery = productDiscovery;
     }
 
     @Transactional
@@ -113,6 +116,11 @@ public class WeeklyImportService {
         });
 
         ImportDictionary dictionary = dictionaryLoader.load();
+        // The product list comes from the sheet's own columns (V27).
+        List<String> newProducts = productDiscovery.createMissing(workbook, dictionary);
+        if (!newProducts.isEmpty()) {
+            dictionary = dictionaryLoader.load();
+        }
         ParseResult parsed = parser.parse(workbook, week, dictionary);
         Map<String, ConsultantRef> byName = store.consultantsByName();
         List<WeeklyImportStore.SheetConsultant> sheetConsultants = sheetConsultantsOf(parsed.rows());
@@ -121,6 +129,12 @@ public class WeeklyImportService {
 
         List<Staged> staged = new ArrayList<>();
         List<ParseIssue> extraIssues = new ArrayList<>();
+        if (!newProducts.isEmpty()) {
+            extraIssues.add(new ParseIssue(ParseIssue.Severity.INFO, "lookup:new-product", null, null, "PRODUCT",
+                    newProducts.size() + " product(s) were added from the column headers: "
+                            + String.join(", ", newProducts) + ". Check whether each counts toward quotation and"
+                            + " banked on the Products page."));
+        }
         Set<String> seenHashes = new HashSet<>();
         Map<String, ParsedRow> seenSales = new HashMap<>();
         int newCount = 0;
@@ -208,7 +222,8 @@ public class WeeklyImportService {
         ReportReconciler.Reconciliation report = reconciliation.storeForPreview(jobId, week, workbook, parsed,
                 dictionary);
         audit.record("IMPORT_PREVIEWED", "IMPORT_JOB", jobId, meta("weekStarting", week.toString(), "rows",
-                staged.size(), "rejected", invalid, "newClients", newCount, "fileDigest", digest,
+                staged.size(), "rejected", invalid, "newClients", newCount, "newProducts", newProducts.size(),
+                "fileDigest", digest,
                 "reportFigures", report.figures().size(), "reportDifferences", report.differences()));
         return summary(jobId);
     }

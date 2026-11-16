@@ -233,7 +233,13 @@ export default function EmployersPage() {
           </p>
         )}
         {!error && result === null && <p className="lp-empty">Loading...</p>}
-        {result && result.items.length === 0 && <p className="lp-empty">No employers found.</p>}
+        {result && result.items.length === 0 && (
+          <p className="lp-empty">
+            {!query && state === 'all'
+              ? 'No employers yet. The first weekly import adds the ones in the sheet; add any others by hand.'
+              : 'No employers found.'}
+          </p>
+        )}
         {result && result.items.length > 0 && (
           <>
             <div className="lp-table">

@@ -100,6 +100,28 @@ app.idnumber.encryption-key=<second key>
 .\mvnw.cmd clean test
 ```
 
+7. **Demo data (optional).** For a demo or a walkthrough, add this line to your
+   `application-local.properties` and start the backend:
+
+```properties
+app.dev.demo-data=true
+```
+
+   It makes three consultants (`lerato.demo@example.com`, `sipho.demo@example.com`,
+   `anele.demo@example.com`), a manager (`manager.demo@example.com`), 30 clients, about three
+   months of sales, six credit cases, one transfer and a sales target (unless you already set one).
+   Every demo login uses your `app.dev.admin-password` (or `app.dev.demo-password` if you set one),
+   and does not have to choose a new password first. Everything in it is made up, including the
+   ID numbers.
+   - A new database has no products or employers (see "4. Frontend"), so the demo adds the seven
+     products it sells and three `DEMO EMPLOYER` employers when they are missing.
+   - It runs once: if the consultant `DEMO01` exists, it does nothing. To start again, reset your
+     local database.
+   - It only exists in the **local** profile. Production never has it, and the tests check it
+     still works (`DemoDataTest`, `DemoDataEmptyInstallTest`).
+   - Weeks you already imported from a spreadsheet get no typed-in demo sales (the app would
+     refuse them).
+
 ### 4. Frontend
 
 Run from the `frontend` folder:
@@ -111,6 +133,9 @@ npm run dev
 
 Open http://localhost:5173 and sign in with the admin email and password from your
 `application-local.properties`. Use `localhost`, not `127.0.0.1`.
+
+A new database has **no products and no employers**. The first weekly-register import (Import page) adds them from
+the sheet; add any others on the Products and Employers pages (`docs/api-imports.md` section 12).
 
 ## Everyday commands
 
@@ -155,6 +180,9 @@ java -jar credit-advisory-0.0.1-SNAPSHOT.jar
 | `ID_NUMBER_LOOKUP_KEY`     | yes              | 32 random bytes, base64 - made on the server by a key holder                                                         |
 | `ID_NUMBER_ENCRYPTION_KEY` | yes              | another 32 random bytes, base64 - a **different** key                                                                |
 | `MFA_ENCRYPTION_KEY`       | yes              | a third 32 random bytes, base64 - encrypts the authenticator secrets; must differ from both ID-number keys          |
+| `ID_NUMBER_ENCRYPTION_KEY_VERSION`          | only in a rotation | version of `ID_NUMBER_ENCRYPTION_KEY`, default `1`; goes up by one with each rotation (`docs/it-handover.md` section 4.1) |
+| `ID_NUMBER_PREVIOUS_ENCRYPTION_KEY`         | only in a rotation | the key that was current before the rotation, kept only until nothing uses it                                    |
+| `ID_NUMBER_PREVIOUS_ENCRYPTION_KEY_VERSION` | only in a rotation | its version                                                                                                        |
 | `SERVER_ADDRESS`           | no               | the one address the application listens on; default `127.0.0.1` (proxy on the same machine), otherwise the private address the proxy connects to. Never `0.0.0.0` |
 | `MANAGEMENT_PORT`          | no               | port of the health check, default `8081`; must differ from the application port (`8080`)                             |
 | `MANAGEMENT_ADDRESS`       | no               | address of the health check, default `127.0.0.1`; set the private address only if the load balancer is on another machine |
@@ -171,11 +199,11 @@ java -jar credit-advisory-0.0.1-SNAPSHOT.jar
 Rules:
 
 - **The ID-number keys must be backed up safely.** If they are lost, every stored ID number becomes unreadable.
-  Never change them on a server that already has clients.
+  `ID_NUMBER_ENCRYPTION_KEY` can be rotated, only with the steps in `docs/it-handover.md` section 4.1.
+  `ID_NUMBER_LOOKUP_KEY` can never be changed on a server that already has clients.
 - **`ID_NUMBER_ENCRYPTION_KEY` also protects queued login emails.** Temporary passwords of new consultant logins
-  waiting to be emailed (Consultant logins: not sent yet, waiting, or failed) are sealed with it. Before rotating
-  it, send those emails or keep the old key configured for decryption; otherwise they cannot be sent and must be
-  regenerated on the Consultant logins page.
+  waiting to be emailed (Consultant logins: not sent yet, waiting, or failed) are sealed with it. A rotation
+  re-encrypts them too, as long as the previous key stays configured until it has finished.
 - **Every user signs in with an authenticator app** (Google or Microsoft Authenticator) after the password;
   production refuses to start without it. If `MFA_ENCRYPTION_KEY` is lost, nobody can sign in until an
   administrator resets their MFA (`POST /api/users/{id}/mfa-reset`) - and the first administrator then needs
@@ -259,6 +287,25 @@ git push
 - Never copy production data to a development machine, and never connect a development machine to the
   production database (`docs/it-handover.md`, section 10).
 - Never use `git push --force`.
+
+## Dependency updates
+
+GitHub's Dependabot watches the libraries in `backend/pom.xml`, `frontend/package.json` and the CI workflow
+(`.github/dependabot.yml`). Every Monday morning it opens a pull request with the week's small updates, one for the
+backend and one for the frontend. It opens a separate one for each major version, and one **straight away** for any
+library with a known security problem. CI runs the tests on each of them.
+
+- **Green, minor or patch:** merge it on GitHub (Merge pull request), then everybody runs `git pull`.
+- **Red:** do not merge. Open the CI run, see what broke, and fix it in a normal commit, or close the pull request
+  with a comment saying why.
+- **Major version** (for example Spring Boot 4 to 5, React 19 to 20): read its upgrade notes first. It may need
+  code changes. Leave it open until someone has time, but never leave a **security** one waiting.
+- TypeScript 7 is skipped on purpose (see "Known pins").
+
+**One-time set-up, by the repository owner:** on GitHub, open the repository's **Settings > Advanced Security**
+(called **Code security** on some accounts). Turn on **Dependency graph**, **Dependabot alerts** and
+**Dependabot security updates**. The weekly pull requests come from the file alone; the security ones need these
+switches.
 
 ## Known pins
 

@@ -23,8 +23,6 @@ import za.co.mafori.creditadvisory.audit.AuditLogWriter;
 import za.co.mafori.creditadvisory.auth.AppUserPrincipal;
 import za.co.mafori.creditadvisory.client.ClientQueryService;
 import za.co.mafori.creditadvisory.common.web.ApiException;
-import za.co.mafori.creditadvisory.consultant.Consultant;
-import za.co.mafori.creditadvisory.consultant.ConsultantRepository;
 
 /**
  * Reading back, changing and deleting one typed-in sale (docs/api-sales.md).
@@ -34,19 +32,20 @@ import za.co.mafori.creditadvisory.consultant.ConsultantRepository;
  * then on the spreadsheet is the record, and a mistake is fixed there.
  * Deleting removes the row; the audit log keeps what it was.
  *
- * A CONSULTANT can change and delete only their own sales; MANAGER and ADMIN
- * anyone's. Someone else's sale looks missing (404), as clients do.
+ * Who does what (team decision): only the consultant who owns a sale changes
+ * it, and only MANAGER and ADMIN delete. A manager cannot edit, and a
+ * consultant asks a manager to delete. Everyone signed in can read the sales
+ * they can see; a consultant's view of someone else's sale is a 404, as with
+ * clients.
  */
 @Service
 public class SaleEditService {
 
     private final JdbcTemplate jdbc;
-    private final ConsultantRepository consultants;
     private final AuditLogWriter audit;
 
-    public SaleEditService(JdbcTemplate jdbc, ConsultantRepository consultants, AuditLogWriter audit) {
+    public SaleEditService(JdbcTemplate jdbc, AuditLogWriter audit) {
         this.jdbc = jdbc;
-        this.consultants = consultants;
         this.audit = audit;
     }
 
@@ -62,7 +61,13 @@ public class SaleEditService {
 
     @Transactional
     public SaleDetail edit(AppUserPrincipal caller, long id, EditSaleRequest request) {
+        if (caller.consultantId() == null) {
+            throw editNotAllowed();
+        }
         Row first = visible(caller, id, false);
+        if (!caller.consultantId().equals(first.consultantId())) {
+            throw editNotAllowed(); // a manager who is also a consultant, on someone else's sale
+        }
         checkChangeable(first);
 
         LocalDate today = LocalDate.now(SaleService.BUSINESS_ZONE);
@@ -82,7 +87,7 @@ public class SaleEditService {
         }
 
         SaleDetail before = load(id);
-        Long consultantId = chooseConsultant(caller, sale, request.consultantId());
+        Long consultantId = keepConsultant(sale, request.consultantId());
         Map<Long, Flags> flags = productFlags(id, request.lines());
         checkStillOffered(request.employerId(), sale.employerId(), "employers", "Employer", "employer");
         checkStillOffered(request.paymentTermId(), sale.paymentTermId(), "payment_terms", "Payment term",
@@ -133,6 +138,10 @@ public class SaleEditService {
 
     @Transactional
     public void delete(AppUserPrincipal caller, long id, long version) {
+        if (!ClientQueryService.seesAllClients(caller)) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "sale:delete-not-allowed", "Not allowed",
+                    "Only a manager or an administrator can delete a sale. Ask one to delete it for you.");
+        }
         Row first = visible(caller, id, false);
         checkChangeable(first);
 
@@ -182,6 +191,11 @@ public class SaleEditService {
                         "Sale " + id + " does not exist, or you do not have access to it."));
     }
 
+    private static ApiException editNotAllowed() {
+        return new ApiException(HttpStatus.FORBIDDEN, "sale:edit-not-allowed", "Not allowed",
+                "Only the consultant who captured a sale can change it.");
+    }
+
     private static void checkChangeable(Row sale) {
         if (!sale.typedIn()) {
             throw ApiException.conflict("sale:imported", "Imported sale",
@@ -223,26 +237,16 @@ public class SaleEditService {
     }
 
     /**
-     * A CONSULTANT keeps the sale. A MANAGER or ADMIN may move it to another
-     * ACTIVE consultant; null or the same consultant keeps it as it is, even if
-     * that consultant has since left.
+     * The sale stays with its consultant: only they edit it, and they cannot give
+     * it to someone else. A manager moves a client (and future sales) with a
+     * transfer instead.
      */
-    private Long chooseConsultant(AppUserPrincipal caller, Row sale, Long requested) {
-        if (requested == null || requested.equals(sale.consultantId())) {
-            return sale.consultantId();
-        }
-        if (!ClientQueryService.seesAllClients(caller)) {
+    private static Long keepConsultant(Row sale, Long requested) {
+        if (requested != null && !requested.equals(sale.consultantId())) {
             throw new ApiException(HttpStatus.FORBIDDEN, "sale:cannot-capture-for-others", "Not allowed",
-                    "Consultants can only capture their own sales.");
+                    "A sale stays with the consultant who captured it.");
         }
-        long id = requested;
-        Consultant consultant = consultants.findById(id).orElseThrow(() -> ApiException.notFound(
-                "consultant:not-found", "Consultant " + id + " does not exist."));
-        if (!consultant.getStatus().isActive()) {
-            throw ApiException.unprocessable("sale:consultant-not-active", "Consultant not active",
-                    "Sales can only be moved to an ACTIVE consultant.");
-        }
-        return consultant.getId();
+        return sale.consultantId();
     }
 
     /** Whether a line counts toward the quotation and toward banked. */

@@ -18,6 +18,7 @@ const Dash = () => (
 export default function ClientsPage() {
   const session = useSession();
   const isManager = hasAnyRole(session, ['ADMIN', 'MANAGER']);
+  const isAdmin = hasAnyRole(session, ['ADMIN']); // only an admin imports
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(0);
   const [version, setVersion] = useState(0);
@@ -112,7 +113,7 @@ export default function ClientsPage() {
           <Link className="btn primary" to="/clients/new">
             Add client
           </Link>
-        ) : features.import ? (
+        ) : features.import && isAdmin ? (
           <Link className="btn primary" to="/import">
             Import from Excel
           </Link>
