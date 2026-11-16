@@ -218,15 +218,17 @@ Someone else's sale, or one that does not exist: `404 sale:not-found`.
 }
 ```
 
-`editable` is true while the sale can still be changed or deleted (below): show the Edit and Delete buttons only then, and Delete only to managers and admins.
+`editable` is true while the sale can still be changed or deleted (below): show the Edit and Delete buttons only then: Edit only to the consultant who owns the sale, Delete only to managers and admins.
 
 ### PATCH /api/transactions/{id}
 
 Changes a typed-in sale. A typed-in sale only stands in for the spreadsheet until its week is imported, so it can be
 changed until then and never after; from then on a mistake is fixed in the spreadsheet.
 
-**Who:** as for GET above. A CONSULTANT cannot move the sale to someone else
-(`403 sale:cannot-capture-for-others`); MANAGER and ADMIN can move it to another ACTIVE consultant.
+**Who:** only the consultant who owns the sale (team decision). A MANAGER or ADMIN gets `403 sale:edit-not-allowed`
+(they can delete it instead, below); another consultant gets `404 sale:not-found`, as for GET. The sale stays with
+its consultant: sending another `consultantId` gives `403 sale:cannot-capture-for-others`. A manager moves a client
+with a transfer, which never changes past sales.
 
 **Body:** the whole sale as it should be now: the same fields and rules as POST, without `clientId` (the client never
 changes: delete the sale and capture it again), plus the `version` from GET:
@@ -243,7 +245,7 @@ changes: delete the sale and capture it again), plus the `version` from GET:
 | Field | Rules on top of POST |
 |---|---|
 | `version` | required. Someone else saved first: `409 conflict:stale-version` (reload and try again) |
-| `consultantId` | null or left out keeps the sale's consultant, even if they have since left |
+| `consultantId` | leave it out. Anything other than the sale's own consultant: `403 sale:cannot-capture-for-others` |
 | `transactionDate` | not after today; may move to another week, but not into one whose spreadsheet is imported (`409 sale:week-already-imported`) |
 | `lines` | a product **already on the sale** may stay even if it has since been deactivated, and keeps the counts-toward flags it was saved with. A product **added** must be active and takes today's flags |
 | `employerId`, `paymentTermId`, `structureId` | the one the sale already has may stay even if deactivated; a newly chosen one must be active |
@@ -253,6 +255,8 @@ returns it as it is (same `version`, nothing audited).
 
 | Status | Type | When |
 |---|---|---|
+| 403 | `sale:edit-not-allowed` | a MANAGER or ADMIN, or anyone but the sale's own consultant |
+| 403 | `sale:cannot-capture-for-others` | another `consultantId` was sent |
 | 404 | `sale:not-found` | no such sale, or not the caller's |
 | 409 | `sale:imported` | the sale came from a weekly spreadsheet |
 | 409 | `sale:replaced` | its week's spreadsheet has been imported since |

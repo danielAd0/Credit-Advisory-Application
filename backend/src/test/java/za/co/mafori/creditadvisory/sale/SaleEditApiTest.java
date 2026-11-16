@@ -164,7 +164,9 @@ class SaleEditApiTest extends ApiTestBase {
         assertThat(patch(thandi, id, edit(0, TUESDAY, sameLines(), ",\"amountToClient\":10")).status())
                 .isEqualTo(200);
 
-        ApiClient.Response late = patch(manager, id, edit(0, TUESDAY, sameLines(), ",\"amountToClient\":20"));
+        ApiClient thandiOnHerPhone = signIn("thandi@test.local");
+        ApiClient.Response late = patch(thandiOnHerPhone, id,
+                edit(0, TUESDAY, sameLines(), ",\"amountToClient\":20"));
         assertThat(late.status()).isEqualTo(409);
         assertThat(late.text("$.type")).isEqualTo("urn:credit-advisory:conflict:stale-version");
 
@@ -199,11 +201,19 @@ class SaleEditApiTest extends ApiTestBase {
         ApiClient.Response giveAway = patch(thandi, id, edit(0, TUESDAY, sameLines(), ",\"consultantId\":" + siphoId));
         assertThat(giveAway.status()).isEqualTo(403);
         assertThat(giveAway.text("$.type")).isEqualTo("urn:credit-advisory:sale:cannot-capture-for-others");
+        assertThat(thandi.get("/api/transactions/" + id).number("$.consultantId")).isEqualTo(thandiId);
+    }
 
-        ApiClient.Response moved = patch(manager, id, edit(0, TUESDAY, sameLines(), ",\"consultantId\":" + siphoId));
-        assertThat(moved.status()).as(moved.body()).isEqualTo(200);
-        assertThat(moved.number("$.consultantId")).isEqualTo(siphoId);
-        assertThat(thandi.get("/api/transactions/" + id).status()).as("no longer hers").isEqualTo(404);
+    @Test
+    void aManagerCannotEdit() {
+        long id = thandisSale();
+
+        ApiClient.Response refused = patch(manager, id, edit(0, TUESDAY, sameLines(), ",\"amountToClient\":20"));
+
+        assertThat(refused.status()).isEqualTo(403);
+        assertThat(refused.text("$.type")).isEqualTo("urn:credit-advisory:sale:edit-not-allowed");
+        assertThat(manager.get("/api/transactions/" + id).number("$.version")).as("unchanged").isZero();
+        assertThat(count("select count(*) from audit_logs where action = 'SALE_EDITED'")).isZero();
     }
 
     @Test
@@ -301,7 +311,7 @@ class SaleEditApiTest extends ApiTestBase {
                 returning id
                 """, Long.class, thandisClient, thandiId, job, adminId, week);
 
-        ApiClient.Response changed = patch(manager, id, edit(0, TUESDAY, sameLines(), ""));
+        ApiClient.Response changed = patch(thandi, id, edit(0, TUESDAY, sameLines(), ""));
         assertThat(changed.status()).isEqualTo(409);
         assertThat(changed.text("$.type")).isEqualTo("urn:credit-advisory:sale:imported");
         assertThat(delete(manager, id, 0).text("$.type")).isEqualTo("urn:credit-advisory:sale:imported");

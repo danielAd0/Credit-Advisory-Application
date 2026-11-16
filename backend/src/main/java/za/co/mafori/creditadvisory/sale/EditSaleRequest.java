@@ -18,8 +18,8 @@ import za.co.mafori.creditadvisory.sale.CaptureSaleRequest.Line;
  *
  * @param version      from GET /api/transactions/{id}; someone else saving
  *                     first gives 409 conflict:stale-version
- * @param consultantId MANAGER / ADMIN: who the sale belongs to; null keeps it.
- *                     A CONSULTANT leaves it out.
+ * @param consultantId leave it out: a sale stays with its consultant. Anything
+ *                     other than the sale's own consultant gives 403.
  */
 public record EditSaleRequest(
         @NotNull Long version,
