@@ -41,6 +41,10 @@ updates:
       # Pinned to 6.x until typescript-eslint supports TypeScript 7 (README, "Known pins").
       - dependency-name: typescript
         versions: [">=7.0.0"]
+      # The Node types follow the Node version we run (22 in CI), not the newest Node.
+      # Change this together with node-version in .github/workflows/ci.yml.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
   # The actions CI uses (checkout, setup-java, setup-node, upload-artifact).
   - package-ecosystem: github-actions
