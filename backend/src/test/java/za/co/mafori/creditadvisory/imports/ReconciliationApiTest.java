@@ -114,12 +114,7 @@ class ReconciliationApiTest extends ApiTestBase {
         void figuresStayWithTheImportAfterConfirm() {
                 long id = preview();
                 String digest = admin.get("/api/imports/" + id).text("$.fileDigest");
-                assertThat(admin.post("/api/imports/" + id + "/consultant-mappings",
-                                """
-                                                {"nameInSheet":"%s","consultantId":%d}""".formatted(
-                                                FakeWeeklyRegisterWorkbook.UNMAPPED_CONSULTANT,
-                                                consultantOne))
-                                .status()).isEqualTo(200);
+                assertThat(confirmConsultants(admin, id).status()).isEqualTo(200);
                 ApiClient.Response confirmed = admin.post("/api/imports/" + id + "/confirm",
                                 "{\"fileDigest\":\"%s\"}".formatted(digest));
                 assertThat(confirmed.status()).as("differences never block confirm: " + confirmed.body())

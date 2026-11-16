@@ -41,7 +41,7 @@ class ConsultantResolverTest {
             assertThat(r.rows()).isEqualTo(4);
         });
         assertThat(p.conflicts()).isEmpty();
-        assertThat(p.decidedByEmail("NALEDI  MOKOENA")).isTrue();
+        assertThat(p.decided("NALEDI  MOKOENA")).isTrue();
         assertThat(p.registers("naledi mokoena")).isTrue();
     }
 
@@ -138,15 +138,74 @@ class ConsultantResolverTest {
     }
 
     @Test
-    void namesWithoutAnEmailAreLeftToTheNameRules() {
+    void aKnownNameWithoutAnEmailMatchesByNameAndANewOneIsRegisteredWithoutAnEmail() {
         existing(THANDI, null);
 
-        var p = plan(new SheetConsultant("Thandi Xundu", null, 3), new SheetConsultant("Somebody New", null, 1));
+        var p = plan(new SheetConsultant("Thandi Xundu", null, 3), new SheetConsultant("Somebody  New", null, 1));
+
+        assertThat(p.conflicts()).isEmpty();
+        assertThat(p.decided("Thandi Xundu")).as("matched by name: nothing to decide").isFalse();
+        assertThat(p.registrations()).singleElement().satisfies(r -> {
+            assertThat(r.fullName()).isEqualTo("Somebody New");
+            assertThat(r.email()).isNull();
+            assertThat(r.rows()).isEqualTo(1);
+        });
+        assertThat(p.registers("somebody new")).isTrue();
+        assertThat(p.matchedByEmail("Somebody New")).isFalse();
+    }
+
+    private final Map<String, List<ConsultantRef>> ambiguous = new HashMap<>();
+
+    private ConsultantResolver.Plan planWithAmbiguity(SheetConsultant... sheet) {
+        return ConsultantResolver.plan(List.of(sheet), byName, byEmail, emails, ambiguous);
+    }
+
+    /** Two consultants called "Thandi Xundu": byName keeps one, so the name alone proves nothing. */
+    private void twoThandis(String emailOfSecond) {
+        ConsultantRef second = new ConsultantRef(3, "C0003", "Thandi Xundu", "ACTIVE");
+        existing(THANDI, null);
+        if (emailOfSecond != null) {
+            byEmail.put(emailOfSecond, second);
+            emails.put(second.id(), emailOfSecond);
+        }
+        ambiguous.put(WeeklyImportStore.key("Thandi Xundu"), List.of(THANDI, second));
+    }
+
+    @Test
+    void aNameThatMatchesTwoConsultantsIsAConflictNotAGuess() {
+        twoThandis(null);
+
+        var p = planWithAmbiguity(new SheetConsultant("THANDI XUNDU", null, 2));
 
         assertThat(p.registrations()).isEmpty();
+        assertThat(p.conflicts()).singleElement().satisfies(c -> {
+            assertThat(c.reason()).contains("2 consultants").contains("C0001").contains("C0003");
+            assertThat(c.rows()).isEqualTo(2);
+        });
+        assertThat(p.inConflict("Thandi Xundu")).isTrue();
+    }
+
+    @Test
+    void anEmailDecidesWhichOfTwoSameNamedConsultantsItIs() {
+        twoThandis("thandi.two@test.local");
+
+        var p = planWithAmbiguity(new SheetConsultant("Thandi Xundu", "thandi.two@test.local", 2));
+
         assertThat(p.conflicts()).isEmpty();
-        assertThat(p.decidedByEmail("Thandi Xundu")).isFalse();
-        assertThat(p.decidedByEmail("Somebody New")).as("still unmapped: an admin decides").isFalse();
+        assertThat(p.matchedByEmail("Thandi Xundu")).isTrue();
+        assertThat(p.aliases()).as("the name already belongs to someone").isEmpty();
+    }
+
+    @Test
+    void aNewEmailCannotPickBetweenTwoSameNamedConsultants() {
+        twoThandis(null);
+
+        var p = planWithAmbiguity(new SheetConsultant("Thandi Xundu", "new@test.local", 1));
+
+        assertThat(p.conflicts()).singleElement().extracting(ConsultantResolver.Conflict::reason).asString()
+                .contains("cannot tell");
+        assertThat(p.emailUpdates()).isEmpty();
+        assertThat(p.registrations()).isEmpty();
     }
 
     @Test
@@ -156,6 +215,6 @@ class ConsultantResolverTest {
 
         assertThat(p.registrations()).singleElement().extracting(ConsultantResolver.Registration::fullName)
                 .isEqualTo("Naledi Mokoena");
-        assertThat(p.decidedByEmail("Naledi Mokoena")).isTrue();
+        assertThat(p.decided("Naledi Mokoena")).isTrue();
     }
 }

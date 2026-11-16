@@ -11,11 +11,9 @@ import za.co.mafori.creditadvisory.support.ApiTestBase;
 import za.co.mafori.creditadvisory.user.RoleName;
 
 /**
- * /api/imports end to end (stage 3): upload the FAKE weekly register, map the
- * unknown
- * consultant, confirm, replace the week, cancel - through HTTP, security, POI
- * and the
- * database. The real workbook is never used.
+ * /api/imports end to end (stage 3): upload the FAKE weekly register, confirm
+ * the consultants found in it, confirm, replace the week, cancel - through
+ * HTTP, security, POI and the database. The real workbook is never used.
  */
 class WeeklyImportApiTest extends ApiTestBase {
 
@@ -53,10 +51,8 @@ class WeeklyImportApiTest extends ApiTestBase {
                 : "{\"fileDigest\":\"%s\",\"replaceReason\":\"%s\"}".formatted(digest, reason));
     }
 
-    private ApiClient.Response mapUnknownConsultant(long id) {
-        return admin.post("/api/imports/" + id + "/consultant-mappings", """
-                {"nameInSheet":"%s","consultantId":%d}""".formatted(FakeWeeklyRegisterWorkbook.UNMAPPED_CONSULTANT,
-                consultantOne));
+    private ApiClient.Response confirmTheConsultants(long id) {
+        return confirmConsultants(admin, id);
     }
 
     private long count(String sql) {
@@ -64,7 +60,7 @@ class WeeklyImportApiTest extends ApiTestBase {
     }
 
     @Test
-    void previewMapAndConfirmTheFakeWeek() {
+    void previewConfirmTheConsultantsAndConfirmTheFakeWeek() {
         ApiClient.Response preview = preview(admin);
         assertThat(preview.status()).as(preview.body()).isEqualTo(201);
         long id = preview.number("$.id");
@@ -73,15 +69,32 @@ class WeeklyImportApiTest extends ApiTestBase {
         assertThat(preview.number("$.totalRows")).isEqualTo(expected.totalRows());
         assertThat(preview.number("$.rejectedRows")).isZero();
         assertThat(preview.size("$.days")).isEqualTo(7);
-        assertThat(preview.texts("$.unmappedConsultants[*].nameInSheet"))
+        // Every consultant of the sheet is listed: 5 existing (matched by name), 1 new. Nothing to map.
+        assertThat(preview.number("$.consultants.identified")).isEqualTo(6);
+        assertThat(preview.number("$.consultants.existing")).isEqualTo(5);
+        assertThat(preview.number("$.consultants.toRegister")).isEqualTo(1);
+        assertThat(preview.texts("$.consultants.items[?(@.outcome == 'NEW')].namesInSheet[0]"))
                 .containsExactly(FakeWeeklyRegisterWorkbook.UNMAPPED_CONSULTANT);
-        assertThat(preview.texts("$.blockers")).containsExactly("UNMAPPED_CONSULTANTS");
+        assertThat(preview.texts("$.consultants.items[?(@.consultantCode == 'C004')].attention[*]"))
+                .contains("NOT_ACTIVE");
+        assertThat(preview.value("$.consultants.confirmed")).isEqualTo(false);
+        assertThat(preview.texts("$.blockers")).containsExactly("CONSULTANTS_NOT_CONFIRMED");
         assertThat(count("select count(*) from clients")).as("preview writes no clients").isZero();
 
-        assertThat(confirm(admin, id, digest, null).status()).isEqualTo(422);
-        ApiClient.Response mapped = mapUnknownConsultant(id);
-        assertThat(mapped.status()).as(mapped.body()).isEqualTo(200);
-        assertThat(mapped.texts("$.blockers")).isEmpty();
+        ApiClient.Response notYet = confirm(admin, id, digest, null);
+        assertThat(notYet.status()).isEqualTo(422);
+        assertThat(notYet.text("$.type")).isEqualTo("urn:credit-advisory:import:consultants-not-confirmed");
+        assertThat(admin.post("/api/imports/" + id + "/consultants/confirm",
+                "{\"fingerprint\":\"%s\"}".formatted("0".repeat(64))).status())
+                .as("a list the admin did not see").isEqualTo(409);
+        assertThat(count("select count(*) from consultants")).as("nothing registered before confirm").isEqualTo(5);
+
+        ApiClient.Response consultants = confirmTheConsultants(id);
+        assertThat(consultants.status()).as(consultants.body()).isEqualTo(200);
+        assertThat(consultants.value("$.consultants.confirmed")).isEqualTo(true);
+        assertThat(consultants.text("$.consultants.confirmedBy")).isEqualTo(ADMIN_EMAIL);
+        assertThat(consultants.texts("$.blockers")).isEmpty();
+        assertThat(count("select count(*) from consultants")).as("still nothing registered").isEqualTo(5);
 
         ApiClient.Response rows = admin.get("/api/imports/" + id + "/rows?sheet=Monday&size=5");
         assertThat(rows.status()).isEqualTo(200);
@@ -93,6 +106,24 @@ class WeeklyImportApiTest extends ApiTestBase {
         assertThat(confirmed.status()).as(confirmed.body()).isEqualTo(200);
         assertThat(confirmed.number("$.transactions")).isEqualTo(expected.totalRows());
         assertThat(confirmed.number("$.newClients")).isEqualTo(expected.distinctPeople());
+        assertThat(confirmed.number("$.consultantsIdentified")).isEqualTo(6);
+        assertThat(confirmed.number("$.consultantsRegistered")).isEqualTo(1);
+        assertThat(confirmed.number("$.consultantsMatched")).isEqualTo(5);
+        assertThat(confirmed.number("$.clientsLinked")).isEqualTo(expected.distinctPeople());
+        assertThat(confirmed.number("$.transactionsLinked")).isEqualTo(expected.totalRows() - 3);
+        assertThat(confirmed.number("$.transactionsUnattributed")).isEqualTo(3);
+        assertThat(confirmed.number("$.rowsNeedingAttention")).isEqualTo(3);
+
+        long registered = count("select id from consultants where full_name = '"
+                + FakeWeeklyRegisterWorkbook.UNMAPPED_CONSULTANT + "'");
+        assertThat(count("select count(*) from consultants where id = " + registered
+                + " and email is null and status = 'ACTIVE' and consultant_code is not null"))
+                .as("registered from the sheet's name, without an email").isEqualTo(1);
+        assertThat(count("select count(*) from client_transactions where consultant_id = " + registered))
+                .as("its sale is linked to it").isEqualTo(1);
+        assertThat(count("select count(*) from client_transactions t where t.client_id is null"
+                + " or t.transaction_date < date '2026-09-14' or t.transaction_date > date '2026-09-20'"))
+                .as("every sale has its client and the sheet's date").isZero();
 
         assertThat(count("select count(*) from client_transactions")).isEqualTo(expected.totalRows());
         assertThat(count("select count(*) from clients")).isEqualTo(expected.distinctPeople());
@@ -103,7 +134,11 @@ class WeeklyImportApiTest extends ApiTestBase {
                 .isEqualTo(expected.sheetBanked().get("Monday"));
         assertThat(count("select count(*) from import_rows where first_name is not null or id_number_hash is not null"))
                 .as("personal data purged after confirm").isZero();
-        assertThat(admin.get("/api/imports/" + id).text("$.state")).isEqualTo("COMMITTED");
+        ApiClient.Response after = admin.get("/api/imports/" + id);
+        assertThat(after.text("$.state")).isEqualTo("COMMITTED");
+        assertThat(after.number("$.result.transactionsLinked")).as("the summary is kept")
+                .isEqualTo(expected.totalRows() - 3);
+        assertThat(after.text("$.consultants.confirmedBy")).isEqualTo(ADMIN_EMAIL);
         assertThat(preview(admin).status()).as("same file twice").isEqualTo(409);
     }
 
@@ -122,7 +157,7 @@ class WeeklyImportApiTest extends ApiTestBase {
         ApiClient.Response preview = preview(admin);
         long id = preview.number("$.id");
         assertThat(preview.number("$.typedInSales")).as("the preview warns").isEqualTo(1);
-        assertThat(mapUnknownConsultant(id).status()).isEqualTo(200);
+        assertThat(confirmTheConsultants(id).status()).isEqualTo(200);
 
         ApiClient.Response confirmed = confirm(admin, id, preview.text("$.fileDigest"), null);
         assertThat(confirmed.status()).as(confirmed.body()).isEqualTo(200);
@@ -140,7 +175,7 @@ class WeeklyImportApiTest extends ApiTestBase {
     void confirmIsAllOrNothing() {
         ApiClient.Response preview = preview(admin);
         long id = preview.number("$.id");
-        assertThat(mapUnknownConsultant(id).status()).isEqualTo(200);
+        assertThat(confirmTheConsultants(id).status()).isEqualTo(200);
         // Make the database refuse the first row's extra column: the whole confirm must
         // roll back.
         jdbc.execute("""
@@ -163,7 +198,7 @@ class WeeklyImportApiTest extends ApiTestBase {
     void replacingAWeekNeedsAReason() {
         ApiClient.Response first = preview(admin);
         long firstId = first.number("$.id");
-        mapUnknownConsultant(firstId);
+        assertThat(confirmTheConsultants(firstId).status()).isEqualTo(200);
         assertThat(confirm(admin, firstId, first.text("$.fileDigest"), null).status()).isEqualTo(200);
         // Pretend the next upload is a corrected file (the fake generator builds
         // identical bytes).
@@ -177,6 +212,7 @@ class WeeklyImportApiTest extends ApiTestBase {
         assertThat(second.number("$.existingClients")).isEqualTo(expected.distinctPeople());
 
         String digest = second.text("$.fileDigest");
+        assertThat(confirmTheConsultants(secondId).status()).isEqualTo(200);
         assertThat(confirm(admin, secondId, digest, null).status()).isEqualTo(422);
         ApiClient.Response replaced = confirm(admin, secondId, digest, "Corrected Tuesday");
         assertThat(replaced.status()).as(replaced.body()).isEqualTo(200);

@@ -41,7 +41,9 @@ class ImportSafeguardsApiTest extends ApiTestBase {
                 return r;
         }
 
+        /** Confirms the consultant list as shown ("Confirm Consultants and Proceed"), then the import. */
         private ApiClient.Response confirm(ApiClient as, ApiClient.Response preview, String reason, boolean accept) {
+                assertThat(confirmConsultants(as, preview.number("$.id")).status()).isEqualTo(200);
                 String body = "{\"fileDigest\":\"%s\"%s%s}".formatted(preview.text("$.fileDigest"),
                                 reason == null ? "" : ",\"replaceReason\":\"" + reason + "\"",
                                 accept ? ",\"acceptNameDifferences\":true" : "");
@@ -55,13 +57,6 @@ class ImportSafeguardsApiTest extends ApiTestBase {
         private long importOnce() {
                 ApiClient.Response p = preview(admin);
                 long id = p.number("$.id");
-                assertThat(admin
-                                .post("/api/imports/" + id + "/consultant-mappings",
-                                                """
-                                                                {"nameInSheet":"%s","consultantId":%d}"""
-                                                                .formatted(FakeWeeklyRegisterWorkbook.UNMAPPED_CONSULTANT,
-                                                                                one))
-                                .status()).isEqualTo(200);
                 ApiClient.Response c = confirm(admin, p, null, false);
                 assertThat(c.status()).as(c.body()).isEqualTo(200);
                 jdbc.update("update import_jobs set file_digest = repeat('e', 64) where id = ?", id);
@@ -166,11 +161,6 @@ class ImportSafeguardsApiTest extends ApiTestBase {
         void everyClientCreatedByConfirmIsAudited() {
                 ApiClient.Response p = preview(admin);
                 long id = p.number("$.id");
-                admin.post("/api/imports/" + id + "/consultant-mappings",
-                                """
-                                                {"nameInSheet":"%s","consultantId":%d}""".formatted(
-                                                FakeWeeklyRegisterWorkbook.UNMAPPED_CONSULTANT,
-                                                one));
                 ApiClient.Response c = confirm(admin, p, null, false);
                 assertThat(c.status()).isEqualTo(200);
 

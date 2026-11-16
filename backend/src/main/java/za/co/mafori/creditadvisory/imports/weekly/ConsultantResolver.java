@@ -31,13 +31,21 @@ import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportStore.SheetConsult
  * consultant, and the email is added to their record.</li>
  * <li>New email, the name matches nobody: a new consultant is registered (the
  * most-used spelling is the name, the others aliases).</li>
- * <li>No email on any row of a name: matched by name or alias as before, or
- * listed as unmapped for an admin to resolve.</li>
+ * <li>No email on any row of a name: matched by name or alias. A name that
+ * matches nobody is registered as a new consultant without an email (no login
+ * can be made for them until an admin adds one). Nobody matches names by
+ * hand.</li>
+ * <li>A name that matches more than one consultant (two consultants with the
+ * same name, or an alias of one that is another's name) is never guessed: it
+ * is a conflict unless an email decides who it is.</li>
  * </ul>
  */
 public final class ConsultantResolver {
 
-    /** A consultant the import will create, with the sheet's spellings. */
+    /**
+     * A consultant the import will create, with the sheet's spellings. {@code email}
+     * is null when no row of the name had one.
+     */
     public record Registration(String fullName, String email, List<String> otherNames, int rows) {
     }
 
@@ -57,11 +65,17 @@ public final class ConsultantResolver {
             List<Conflict> conflicts, int namesMatchedByEmail, Set<String> namesDecidedByEmail) {
 
         /**
-         * True when this name is handled by the email rules (registered, matched,
-         * or in conflict), so it is never "unmapped".
+         * True when the plan decides this name (registered, matched by email, or in
+         * conflict). Every other name in the sheet matches an existing consultant by
+         * name or alias.
          */
-        public boolean decidedByEmail(String nameInSheet) {
+        public boolean decided(String nameInSheet) {
             return namesDecidedByEmail.contains(WeeklyImportStore.key(nameInSheet));
+        }
+
+        /** True when the name was matched through the sheet's email (not by name alone). */
+        public boolean matchedByEmail(String nameInSheet) {
+            return decided(nameInSheet) && !registers(nameInSheet) && !inConflict(nameInSheet);
         }
 
         /** True when confirm will register a new consultant under this sheet name. */
@@ -89,6 +103,16 @@ public final class ConsultantResolver {
      */
     public static Plan plan(List<SheetConsultant> sheet, Map<String, ConsultantRef> byName,
             Map<String, ConsultantRef> byEmail, Map<Long, String> emailOfConsultant) {
+        return plan(sheet, byName, byEmail, emailOfConsultant, Map.of());
+    }
+
+    /**
+     * @param ambiguous name keys that match more than one consultant, with those
+     *                  consultants (WeeklyImportStore.ambiguousConsultantNames)
+     */
+    public static Plan plan(List<SheetConsultant> sheet, Map<String, ConsultantRef> byName,
+            Map<String, ConsultantRef> byEmail, Map<Long, String> emailOfConsultant,
+            Map<String, List<ConsultantRef>> ambiguous) {
         // name key -> spelling as written, emails seen with it, rows
         Map<String, String> spelling = new LinkedHashMap<>();
         Map<String, Set<String>> emailsOfName = new LinkedHashMap<>();
@@ -138,7 +162,8 @@ public final class ConsultantResolver {
             if (owner != null) {
                 boolean clash = false;
                 for (String key : names) {
-                    ConsultantRef named = byName.get(key);
+                    // An ambiguous name is not evidence against the email: the email decides.
+                    ConsultantRef named = ambiguous.containsKey(key) ? null : byName.get(key);
                     if (named != null && named.id() != owner.id()) {
                         clash = true;
                         conflicts.add(new Conflict(spelling.get(key), email,
@@ -159,6 +184,17 @@ public final class ConsultantResolver {
             }
 
             // A new email: does a name already match someone?
+            List<String> ambiguousNames = names.stream().filter(ambiguous::containsKey).toList();
+            if (!ambiguousNames.isEmpty()) {
+                for (String key : names) {
+                    conflicts.add(new Conflict(spelling.get(key), email, ambiguousNames.contains(key)
+                            ? ambiguousReason(ambiguous.get(key))
+                                    + " The email is new, so it cannot tell which one this is."
+                            : "This email is also written next to a name that matches more than one consultant.",
+                            rowsOfName.get(key)));
+                }
+                continue;
+            }
             Map<Long, ConsultantRef> targets = new LinkedHashMap<>();
             for (String key : names) {
                 ConsultantRef named = byName.get(key);
@@ -207,8 +243,31 @@ public final class ConsultantResolver {
             registrations.add(new Registration(main, email, others, rows));
         }
 
+        // 3. Names without an email on any row: by name or alias, else registered.
+        for (var e : emailsOfName.entrySet()) {
+            String key = e.getKey();
+            if (!e.getValue().isEmpty()) {
+                continue;
+            }
+            if (ambiguous.containsKey(key)) {
+                decided.add(key);
+                conflicts.add(new Conflict(spelling.get(key), null, ambiguousReason(ambiguous.get(key))
+                        + " Add the CONSULTANT EMAIL column (or give one of them another name) and upload again.",
+                        rowsOfName.get(key)));
+            } else if (!byName.containsKey(key)) {
+                decided.add(key);
+                registrations.add(new Registration(spelling.get(key), null, List.of(), rowsOfName.get(key)));
+            }
+            // else: an existing consultant by name or alias; nothing to change.
+        }
+
         return new Plan(List.copyOf(registrations), List.copyOf(emailUpdates), List.copyOf(aliases),
                 List.copyOf(conflicts), matchedByEmail, Set.copyOf(decided));
+    }
+
+    private static String ambiguousReason(List<ConsultantRef> candidates) {
+        return "This name matches " + candidates.size() + " consultants ("
+                + String.join(", ", candidates.stream().map(ConsultantResolver::label).toList()) + ").";
     }
 
     private static String label(ConsultantRef c) {

@@ -25,7 +25,6 @@ import za.co.mafori.creditadvisory.common.web.PageResponse;
 import za.co.mafori.creditadvisory.imports.register.WeekStarting;
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.ConfirmRequest;
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.ConfirmResult;
-import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.ConsultantMappingRequest;
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.ImportListItem;
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.ImportSummary;
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.IssueView;
@@ -99,22 +98,14 @@ public class WeeklyImportController {
                 .body(file.content());
     }
 
-    @PostMapping("/{id}/consultant-mappings")
-    public ImportSummary mapConsultant(@AuthenticationPrincipal AppUserPrincipal caller, @PathVariable long id,
-            @Valid @RequestBody ConsultantMappingRequest request) {
-        return service.mapConsultant(caller.userId(), id, request.nameInSheet(), request.consultantId());
-    }
-
     /**
-     * Creates consultants from names in the sheet that match nobody (each gets a
-     * generated
-     * code, no login). The other way to resolve an unknown name is
-     * consultant-mappings.
+     * "Confirm Consultants and Proceed": the admin checked the consultants found
+     * in the workbook. Required before confirm; nothing is registered until then.
      */
-    @PostMapping("/{id}/new-consultants")
-    public WeeklyImportViews.NewConsultantsResult createConsultants(@AuthenticationPrincipal AppUserPrincipal caller,
-            @PathVariable long id, @Valid @RequestBody WeeklyImportViews.NewConsultantsRequest request) {
-        return service.createConsultantsFromSheet(caller.userId(), id, request.namesInSheet());
+    @PostMapping("/{id}/consultants/confirm")
+    public ImportSummary confirmConsultants(@AuthenticationPrincipal AppUserPrincipal caller, @PathVariable long id,
+            @Valid @RequestBody WeeklyImportViews.ConfirmConsultantsRequest request) {
+        return service.confirmConsultants(caller.userId(), id, request.fingerprint());
     }
 
     @PostMapping("/{id}/confirm")

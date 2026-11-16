@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useState, type ChangeEvent } from 'react';
 import {
-  data,
   detailOf,
   imports,
   isStale,
   type ConfirmResult,
-  type ConsultantSummary,
+  type ConsultantAttention,
+  type ConsultantOutcome,
   type ImportBlocker,
   type ImportHistoryItem,
   type ImportIssue,
+  type ImportResult,
   type ImportRow,
   type ImportSummary,
   type PageResponse,
@@ -29,9 +30,10 @@ const rand = (n: number) =>
 const day = (iso: string) => new Date(iso).toLocaleDateString('en-ZA');
 
 const BLOCKER_TEXT: Record<ImportBlocker, string> = {
-  UNMAPPED_CONSULTANTS: 'Match each consultant name below to a consultant.',
   CONSULTANT_CONFLICTS:
-    'Some consultant names do not match their email. Fix them in the workbook (see below) and upload it again.',
+    'Some consultants cannot be linked safely. Fix them in the workbook (see the consultant list) and upload it again.',
+  CONSULTANTS_NOT_CONFIRMED:
+    'Check the consultants found in the workbook and click Confirm Consultants and Proceed.',
   NAME_DIFFERENCES:
     'Some ID numbers belong to clients stored under another name. Check the issues before confirming.',
   SHEET_ERRORS: 'The workbook has errors that stop the import. Fix it and upload it again.',
@@ -400,218 +402,277 @@ function Details({ id }: { id: number }) {
   );
 }
 
-function ConsultantMapping({
+const OUTCOME_LABEL: Record<ConsultantOutcome, string> = {
+  EXISTING: 'Existing consultant',
+  EMAIL_ADDED: 'Existing consultant, email added',
+  NEW: 'New, registered on import',
+  CONFLICT: 'Cannot be linked',
+};
+
+const ATTENTION_TEXT: Record<Exclude<ConsultantAttention, 'CONFLICT'>, string> = {
+  NO_EMAIL: 'No email address. A login can only be created after an email is added.',
+  NOT_ACTIVE: 'Not active, so their new clients stay unassigned. Their sales still count for them.',
+  SIMILAR_NAME:
+    'The name looks like another consultant. If it is the same person, add the CONSULTANT EMAIL column or correct the spelling, then upload again.',
+};
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+function ConsultantsCard({
   job,
   onUpdated,
 }: {
   job: ImportSummary;
   onUpdated: (s: ImportSummary) => void;
 }) {
-  const [options, setOptions] = useState<ConsultantSummary[]>([]);
-  const [choice, setChoice] = useState<Partial<Record<string, string>>>({});
-  const [busy, setBusy] = useState<string | null>(null);
+  const list = job.consultants;
+  const asg = job.assignment;
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let live = true;
-    data
-      .listConsultants()
-      .then((r) => live && setOptions(r.filter((c) => c.status === 'ACTIVE')))
-      .catch(() => live && setError('Could not load consultants.'));
-    return () => {
-      live = false;
-    };
-  }, []);
-
-  async function map(name: string) {
-    const id = Number(choice[name]);
-    if (!id || busy) return;
-    setBusy(name);
+  async function confirmList() {
+    if (busy || !list.fingerprint) return;
+    setBusy(true);
     setError(null);
     try {
-      onUpdated(await imports.mapConsultant(job.id, name, id));
+      onUpdated(await imports.confirmConsultants(job.id, list.fingerprint));
     } catch (err) {
-      setError(detailOf(err) ?? 'Could not match that name.');
+      setError(
+        isStale(err)
+          ? 'The consultant list changed while you were looking at it. It has been reloaded: check it again.'
+          : (detailOf(err) ?? 'Could not confirm the consultants.'),
+      );
+      try {
+        onUpdated(await imports.get(job.id));
+      } catch {
+        // keep the current view
+      }
     } finally {
-      setBusy(null);
+      setBusy(false);
     }
   }
 
-  if (job.unmappedConsultants.length === 0) return null;
+  const table = (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Consultant in the workbook</th>
+            <th>Email</th>
+            <th>What happens</th>
+            <th>Sales rows</th>
+            <th>New clients</th>
+            <th>Check</th>
+          </tr>
+        </thead>
+        <tbody>
+          {list.items.map((c) => (
+            <tr key={`${c.outcome}|${c.consultantId ?? ''}|${c.namesInSheet.join('|')}`}>
+              <td>
+                <strong>{c.namesInSheet[0]}</strong>
+                {c.namesInSheet.length > 1 && (
+                  <span className="muted">
+                    {' '}
+                    (also written {c.namesInSheet.slice(1).join(', ')})
+                  </span>
+                )}
+                {c.consultantName && (
+                  <div className="muted">
+                    {c.consultantName} ({c.consultantCode})
+                  </div>
+                )}
+              </td>
+              <td>{c.email ?? <span className="muted">None</span>}</td>
+              <td>
+                <span className={`wi-outcome ${c.outcome.toLowerCase()}`}>
+                  {OUTCOME_LABEL[c.outcome]}
+                </span>
+                {c.matchedBy && (
+                  <div className="muted">
+                    Matched by {c.matchedBy === 'EMAIL' ? 'email' : 'name'}
+                  </div>
+                )}
+              </td>
+              <td>{c.rows}</td>
+              <td>{c.newClients}</td>
+              <td>
+                {c.reason && <p className="wi-check bad">{c.reason}</p>}
+                {c.attention
+                  .filter((a): a is Exclude<ConsultantAttention, 'CONFLICT'> => a !== 'CONFLICT')
+                  .map((a) => (
+                    <p className="wi-check" key={a}>
+                      {ATTENTION_TEXT[a]}
+                      {a === 'SIMILAR_NAME' && c.similarConsultants.length > 0 && (
+                        <>
+                          {' '}
+                          Similar:{' '}
+                          {c.similarConsultants
+                            .map((s) => `${s.fullName} (${s.consultantCode})`)
+                            .join(', ')}
+                          .
+                        </>
+                      )}
+                    </p>
+                  ))}
+                {!c.reason && c.attention.length === 0 && <span className="muted">-</span>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  if (list.confirmed) {
+    return (
+      <section className="wi-card" aria-label="Consultants">
+        <h2>Consultants confirmed</h2>
+        <p className="alert ok" role="status">
+          {plural(list.identified, 'consultant was', 'consultants were')} confirmed
+          {list.confirmedBy && ` by ${list.confirmedBy}`}
+          {list.confirmedAt && ` on ${day(list.confirmedAt)}`}. {list.toRegister} will be registered
+          when you confirm the import.
+        </p>
+        <details>
+          <summary>Show the consultants</summary>
+          {table}
+        </details>
+      </section>
+    );
+  }
+
   return (
-    <section className="wi-card" aria-label="Match consultants">
-      <h2>Match consultant names</h2>
+    <section className="wi-card" aria-label="Check the consultants">
+      <h2>Step 1 of 2: check the consultants</h2>
       <p className="muted">
-        These names in the workbook are not recognised yet. The match is remembered for later
-        imports.
+        These are the consultants found in the workbook. Check that they are the right people.
+        Nothing is saved yet: new consultants are registered, and every client and sale is linked to
+        its consultant, only when you confirm the import.
       </p>
-      {error && <p className="alert error">{error}</p>}
-      {job.unmappedConsultants.map((u) => (
-        <div className="wi-map" key={u.nameInSheet}>
-          <strong>{u.nameInSheet}</strong>
-          <span className="muted">
-            {u.rows} row{u.rows === 1 ? '' : 's'}
-          </span>
-          <select
-            aria-label={`Consultant for ${u.nameInSheet}`}
-            value={choice[u.nameInSheet] ?? ''}
-            onChange={(e) => setChoice({ ...choice, [u.nameInSheet]: e.target.value })}
-          >
-            <option value="">Choose a consultant</option>
-            {options.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.fullName} ({c.consultantCode})
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            className="btn"
-            disabled={!choice[u.nameInSheet] || busy !== null}
-            onClick={() => map(u.nameInSheet)}
-          >
-            Match
-          </button>
+      {error && (
+        <p className="alert error" role="alert">
+          {error}
+        </p>
+      )}
+
+      <div className="wi-stats">
+        <div className="wi-stat">
+          <strong>{list.identified}</strong>
+          <span>Consultants found</span>
         </div>
-      ))}
+        <div className="wi-stat">
+          <strong>{list.existing}</strong>
+          <span>Already registered</span>
+        </div>
+        <div className="wi-stat">
+          <strong>{list.toRegister}</strong>
+          <span>New, to register</span>
+        </div>
+        <div className={`wi-stat ${list.conflicts > 0 ? 'bad' : ''}`}>
+          <strong>{list.conflicts}</strong>
+          <span>Cannot be linked</span>
+        </div>
+        <div className="wi-stat">
+          <strong>{list.withoutEmail}</strong>
+          <span>Without an email</span>
+        </div>
+      </div>
+
+      {list.conflicts > 0 && (
+        <p className="alert error" role="status">
+          {plural(list.conflicts, 'consultant', 'consultants')} cannot be linked safely, so their
+          clients could go to the wrong person. Correct the name or email in the workbook and upload
+          it again.
+        </p>
+      )}
+
+      {list.items.length === 0 ? (
+        <p className="muted">
+          No consultant names were found. Every sale will be imported without a consultant.
+        </p>
+      ) : (
+        table
+      )}
+
+      {asg && asg.newClientRows > 0 && (
+        <p className="muted">
+          New clients: {asg.willBeAssigned} will be assigned to their consultant,{' '}
+          {asg.noConsultant + asg.consultantNotActive} left unassigned ({asg.noConsultant} without a
+          consultant in the workbook, {asg.consultantNotActive} whose consultant is not active).
+          {asg.existingClientsWithOtherConsultant > 0 &&
+            ` ${plural(
+              asg.existingClientsWithOtherConsultant,
+              'existing client stays',
+              'existing clients stay',
+            )} with their current consultant; the sale still counts for the consultant in the workbook.`}
+        </p>
+      )}
+
+      <div className="wi-actions">
+        <button
+          type="button"
+          className="btn primary"
+          onClick={confirmList}
+          disabled={busy || list.conflicts > 0 || !list.fingerprint}
+        >
+          {busy ? 'Working...' : 'Confirm Consultants and Proceed'}
+        </button>
+      </div>
     </section>
   );
 }
 
-function ConsultantRegistrationCard({ job }: { job: ImportSummary }) {
-  const reg = job.consultantRegistration;
-  const asg = job.assignment;
-  if (!reg || !asg) return null;
-  const hasEmailWork =
-    reg.toRegister.length > 0 || reg.emailsToAdd.length > 0 || reg.conflicts.length > 0;
-  if (!hasEmailWork && reg.matchedByEmail === 0 && asg.newClientRows === 0) return null;
-  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
-
+function ResultCard({ job, result }: { job: ImportSummary; result: ImportResult }) {
+  const records = result.transactionsLinked + result.transactionsUnattributed;
   return (
-    <section className="wi-card" aria-label="Consultants and assignment">
-      <h2>Consultants and client assignment</h2>
-      <p className="muted">
-        {plural(reg.namesInSheet, 'consultant name', 'consultant names')} in the workbook:{' '}
-        {reg.matchedByName} matched by name, {reg.matchedByEmail} by email
-        {reg.toRegister.length > 0 && `, ${reg.toRegister.length} new`}.
-      </p>
-
+    <section className="wi-card" aria-label="Import summary">
+      <h2>Import summary</h2>
       <div className="wi-stats">
         <div className="wi-stat">
-          <strong>{asg.willBeAssigned}</strong>
-          <span>New clients assigned</span>
-        </div>
-        <div className={`wi-stat ${asg.waitingForConsultant > 0 ? 'bad' : ''}`}>
-          <strong>{asg.waitingForConsultant}</strong>
-          <span>Waiting for a consultant match</span>
+          <strong>{result.consultantsIdentified}</strong>
+          <span>Consultants found</span>
         </div>
         <div className="wi-stat">
-          <strong>{asg.noConsultant + asg.consultantNotActive}</strong>
-          <span>Left unassigned</span>
+          <strong>{result.consultantsRegistered}</strong>
+          <span>New consultants registered</span>
         </div>
         <div className="wi-stat">
-          <strong>{asg.existingClientsWithOtherConsultant}</strong>
-          <span>Existing clients kept with their consultant</span>
+          <strong>{result.consultantsMatched}</strong>
+          <span>Existing consultants matched</span>
+        </div>
+        <div className="wi-stat">
+          <strong>{result.clientsLinked}</strong>
+          <span>Clients imported</span>
         </div>
       </div>
-      {(asg.noConsultant > 0 || asg.consultantNotActive > 0) && (
-        <p className="muted">
-          Unassigned: {asg.noConsultant} without a consultant in the sheet,{' '}
-          {asg.consultantNotActive} whose consultant is inactive or suspended. Assign them later on
-          Reassign clients.
-        </p>
-      )}
-
-      {reg.conflicts.length > 0 && (
-        <>
-          <h3>Names that do not match their email</h3>
-          <p className="alert error" role="status">
-            These rows could give clients to the wrong consultant, so the import cannot be
-            confirmed. Correct the name or email in the workbook and upload it again. To fill in a
-            consultant&apos;s missing email, use Consultant logins.
-          </p>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Name in sheet</th>
-                  <th>Email</th>
-                  <th>Rows</th>
-                  <th>Problem</th>
-                </tr>
-              </thead>
-              <tbody>
-                {reg.conflicts.map((c) => (
-                  <tr key={`${c.nameInSheet}|${c.email}`}>
-                    <td>{c.nameInSheet}</td>
-                    <td>{c.email}</td>
-                    <td>{c.rows}</td>
-                    <td>{c.reason}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
-
-      {reg.toRegister.length > 0 && (
-        <>
-          <h3>New consultants (registered when you confirm)</h3>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Email</th>
-                  <th>Rows</th>
-                  <th>Check</th>
-                </tr>
-              </thead>
-              <tbody>
-                {reg.toRegister.map((r) => (
-                  <tr key={r.email}>
-                    <td>
-                      {r.fullName}
-                      {r.otherSpellings.length > 0 && (
-                        <span className="muted"> (also written {r.otherSpellings.join(', ')})</span>
-                      )}
-                    </td>
-                    <td>{r.email}</td>
-                    <td>{r.rows}</td>
-                    <td>
-                      {r.similarConsultants.length > 0 ? (
-                        <span>
-                          Similar to{' '}
-                          {r.similarConsultants
-                            .map((c) => `${c.fullName} (${c.consultantCode})`)
-                            .join(', ')}
-                          . If it is the same person, give that consultant this email first.
-                        </span>
-                      ) : (
-                        <span className="muted">-</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
-
-      {reg.emailsToAdd.length > 0 && (
-        <>
-          <h3>Emails added to existing consultants</h3>
-          <ul>
-            {reg.emailsToAdd.map((u) => (
-              <li key={u.consultantId}>
-                {u.fullName} ({u.consultantCode}): {u.email}
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
+      <div className="wi-stats">
+        <div className="wi-stat">
+          <strong>{records}</strong>
+          <span>Sales records imported</span>
+        </div>
+        <div className="wi-stat">
+          <strong>{result.transactionsLinked}</strong>
+          <span>Linked to client and consultant</span>
+        </div>
+        <div
+          className={`wi-stat ${job.rejectedRows + result.transactionsUnattributed > 0 ? 'bad' : ''}`}
+        >
+          <strong>{job.rejectedRows + result.transactionsUnattributed}</strong>
+          <span>Rejected or without a consultant</span>
+        </div>
+        <div className={`wi-stat ${result.rowsNeedingAttention > 0 ? 'bad' : ''}`}>
+          <strong>{result.rowsNeedingAttention}</strong>
+          <span>Need attention</span>
+        </div>
+      </div>
+      <p className="muted">
+        Every sale keeps its date from the workbook and the consultant who made it. Reports for any
+        period use those, also after a client moves to another consultant.
+        {result.rowsNeedingAttention > 0 &&
+          ' Rows that need attention are in the issues below (rejected rows, sales without a consultant, possible duplicates).'}
+        {result.consultantsRegistered > 0 &&
+          ' Give the new consultants their logins on Consultant logins.'}
+      </p>
     </section>
   );
 }
@@ -621,6 +682,7 @@ function ImportView({ initial, onBack }: { initial: ImportSummary; onBack: () =>
   const isAdmin = hasAnyRole(session, ['ADMIN']);
   const [job, setJob] = useState(initial);
   const [reason, setReason] = useState('');
+  const [acceptNames, setAcceptNames] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ConfirmResult | null>(null);
@@ -635,15 +697,21 @@ function ImportView({ initial, onBack }: { initial: ImportSummary; onBack: () =>
     setError(null);
     try {
       setResult(
-        await imports.confirm(job.id, job.fileDigest, job.replaceRequired ? reason.trim() : null),
+        await imports.confirm(
+          job.id,
+          job.fileDigest,
+          job.replaceRequired ? reason.trim() : null,
+          acceptNames,
+        ),
       );
       await reload();
     } catch (err) {
       setError(
         isStale(err)
-          ? 'Something changed since the preview. Upload the file again.'
+          ? 'Something changed since the preview. Upload the file again, or check the consultants again.'
           : (detailOf(err) ?? 'Could not confirm the import.'),
       );
+      await reload().catch(() => undefined);
     } finally {
       setBusy(false);
     }
@@ -664,6 +732,10 @@ function ImportView({ initial, onBack }: { initial: ImportSummary; onBack: () =>
 
   const previewed = job.state === 'PREVIEWED';
   const blocked = previewed && job.replaceRequired && !isAdmin;
+  const nameCheckNeeded = previewed && job.blockers.includes('NAME_DIFFERENCES');
+  const remaining = job.blockers.filter((b) => !(b === 'NAME_DIFFERENCES' && acceptNames));
+  const consultantsPending = previewed && !job.consultants.confirmed;
+  const outcome = job.result;
 
   return (
     <>
@@ -673,9 +745,12 @@ function ImportView({ initial, onBack }: { initial: ImportSummary; onBack: () =>
         </button>
       </p>
 
-      <section className="wi-card" aria-label="Import summary">
+      {consultantsPending && <ConsultantsCard job={job} onUpdated={setJob} />}
+
+      <section className="wi-card" aria-label="Import details">
         <h2>
-          Week of {day(job.weekStarting)} to {day(job.weekEnding)}
+          {previewed && !consultantsPending ? 'Step 2 of 2: ' : ''}Week of {day(job.weekStarting)}{' '}
+          to {day(job.weekEnding)}
         </h2>
         <p className="muted">
           {job.fileName} · {STATE_LABEL[job.state] ?? job.state} · uploaded by {job.uploadedBy}
@@ -688,10 +763,6 @@ function ImportView({ initial, onBack }: { initial: ImportSummary; onBack: () =>
             {result.employersCreated > 0 &&
               `, and ${result.employersCreated} new employers were added`}
             .
-            {(result.consultantsRegistered ?? 0) > 0 &&
-              ` ${result.consultantsRegistered} new consultant${
-                result.consultantsRegistered === 1 ? ' was' : 's were'
-              } registered: give them their logins on Consultant logins.`}
             {result.replacedTypedInSales > 0 &&
               ` It replaced ${result.replacedTypedInSales} sale${
                 result.replacedTypedInSales === 1 ? '' : 's'
@@ -725,6 +796,12 @@ function ImportView({ initial, onBack }: { initial: ImportSummary; onBack: () =>
             <strong>{job.rejectedRows}</strong>
             <span>Rejected</span>
           </div>
+          {job.possibleDuplicateRows > 0 && (
+            <div className="wi-stat bad">
+              <strong>{job.possibleDuplicateRows}</strong>
+              <span>Possible duplicates</span>
+            </div>
+          )}
         </div>
         <p>
           Quotation <strong>{rand(job.quotationTotal)}</strong> · Banked{' '}
@@ -762,12 +839,25 @@ function ImportView({ initial, onBack }: { initial: ImportSummary; onBack: () =>
           </table>
         </div>
 
-        {previewed && job.blockers.length > 0 && (
+        {previewed && remaining.length > 0 && (
           <ul className="alert error">
-            {job.blockers.map((b) => (
+            {remaining.map((b) => (
               <li key={b}>{BLOCKER_TEXT[b]}</li>
             ))}
           </ul>
+        )}
+
+        {nameCheckNeeded && (
+          <label className="wi-accept">
+            <input
+              type="checkbox"
+              checked={acceptNames}
+              onChange={(e) => setAcceptNames(e.target.checked)}
+            />{' '}
+            I checked the {plural(job.nameDifferences, 'client', 'clients')} whose ID number is
+            stored under another name (issues with code client:name-differs). The stored names are
+            kept.
+          </label>
         )}
 
         {previewed && job.typedInSales > 0 && (
@@ -804,7 +894,7 @@ function ImportView({ initial, onBack }: { initial: ImportSummary; onBack: () =>
               type="button"
               className="btn primary"
               onClick={confirm}
-              disabled={busy || !job.canConfirm || blocked}
+              disabled={busy || remaining.length > 0 || blocked}
             >
               {busy ? 'Working...' : 'Confirm import'}
             </button>
@@ -815,8 +905,8 @@ function ImportView({ initial, onBack }: { initial: ImportSummary; onBack: () =>
         )}
       </section>
 
-      {previewed && <ConsultantRegistrationCard job={job} />}
-      {previewed && <ConsultantMapping job={job} onUpdated={setJob} />}
+      {outcome && <ResultCard job={job} result={outcome} />}
+      {previewed && !consultantsPending && <ConsultantsCard job={job} onUpdated={setJob} />}
       <Details id={job.id} />
     </>
   );
@@ -841,8 +931,9 @@ export default function ImportPage() {
       title="Import weekly register"
       description={
         <>
-          Upload the weekly Credit Advisory workbook. New clients and the week&rsquo;s sales are
-          added after you confirm. ID numbers are always shown masked.
+          Upload the weekly Credit Advisory workbook. You check the consultants found in it, then
+          confirm: new consultants are registered and every client and sale is linked to its
+          consultant, keeping the dates in the workbook. ID numbers are always shown masked.
         </>
       }
       footer="Import history is kept"

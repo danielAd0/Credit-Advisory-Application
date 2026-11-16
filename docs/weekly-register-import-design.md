@@ -141,8 +141,11 @@ sheet's weekday*. If a DATE cell has a value, it must equal that date, otherwise
 - Matched against `consultants.full_name` (case- and space-insensitive), then against `consultant_aliases`. The
   sheet uses first names and labels such as "AMBITIOUS", "VICTORIA" and "ABIGAIL", so **no guessing by partial name**.
 - **Blank**: the row is imported with `consultant_id = NULL` and a warning (D2).
-- **Unknown name**: confirm is blocked until the admin maps the name in the preview (or creates it as a new consultant), either to an existing
-  consultant (which saves an alias for every future week) or by creating a new consultant. Then it is re-checked.
+- **Unknown name** (since V26): registered as a new consultant at confirm, with the sheet's email when there
+  is one. Nobody maps names by hand: the admin checks the list of consultants found and confirms it
+  ("Confirm Consultants and Proceed") before confirming the import. A name that matches two consultants,
+  or a name and email that point at different people, is a conflict and blocks the import
+  (`docs/api-imports.md` section 11).
 - A consultant who is INACTIVE or SUSPENDED can still be *attributed* to a past transaction, but a **new client is
   not assigned** to them (FR-17). That gives a warning.
 
@@ -284,7 +287,7 @@ Upload (.xlsx, ≤10 MB, ADMIN) ─► Preview job (validate, stage rows, nothin
 | GET | `/api/imports/{id}/issues?severity=` | Errors and warnings (never a full ID) |
 | GET | `/api/imports/{id}/reconciliation?sheet=&onlyDifferences=` | Sheet vs recalculated, cell by cell |
 | GET | `/api/imports/{id}/unmapped-consultants` | Names that need mapping |
-| POST | `/api/imports/{id}/consultant-mappings` `{ sheetName, consultantId }` | Saves an alias and re-validates |
+| POST | `/api/imports/{id}/consultants/confirm` `{ fingerprint }` | The admin confirms the consultants found (replaced manual mapping in V26) |
 | POST | `/api/imports/{id}/confirm` `{ fileDigest, replaceReason? }` | Commit (409 if stale, unmapped names or rejected rows unacknowledged) |
 | POST | `/api/imports/{id}/cancel` | Cancel and purge |
 | GET | `/api/reports/weeks` | Imported weeks |
@@ -346,7 +349,7 @@ errors** · warnings and errors by code.
 `sheet:missing-day` (warning) · `sheet:missing-header` · `sheet:unknown-column` (warning) ·
 `sheet:unexpected-data` (hidden sheet with data) · `row:invalid-id-number` · `row:id-leading-zero-restored` (warning) ·
 `row:missing-name` · `row:invalid-amount` · `row:negative-amount` · `row:formula-error` · `row:date-outside-day` ·
-`row:no-consultant` (warning) · `row:unknown-consultant` (blocks confirm until mapped) · `row:consultant-not-active` (warning) ·
+`row:no-consultant` (warning) · `row:consultant-not-active` (warning) · `row:possible-duplicate-sale` (warning) ·
 `row:quotation-mismatch` / `row:banked-mismatch` (warning, D3) · `client:name-differs` (warning; blocks confirm until approved: `NAME_DIFFERENCES`) · `client:unassigned-by-manager` (warning) · `row:no-client` (warning) ·
 `client:consultant-differs` (warning) · `lookup:created` (info) · `import:duplicate-file` · `import:week-already-imported`.
 
@@ -371,6 +374,7 @@ errors** · warnings and errors by code.
 | 4b ✅ | Safeguards: `NAME_DIFFERENCES` blocker, `CLIENT_CREATED` per client, issues CSV (FR-12), re-import keeps transfers and unassigns | Sifiso |
 | 6 ✅ | Clean-up job (expired previews purged), `row:no-client` warning, consultant alias list, employer merge for `needs_review` | Sifiso |
 | 7 ✅ | Consultants from the sheet (`new-consultants`, look-alike suggestions), generated consultant codes (V19) | Sifiso |
+| 8 ✅ | No manual consultant matching: automatic registration, consultant list confirmation, same-name conflicts, possible-duplicate warning, kept import summary (V26) | Sifiso |
 
 **Decision (9 November 2026):** only an **ADMIN** runs imports and adds staff, including creating consultants from
 the sheet and managing name spellings. The requirements allowed MANAGER as well ("Only users with the Manager or Administrator role must be allowed to import Excel reports"). Managers keep everything else

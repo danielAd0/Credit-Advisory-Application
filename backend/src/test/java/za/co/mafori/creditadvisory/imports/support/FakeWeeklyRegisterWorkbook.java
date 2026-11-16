@@ -40,8 +40,8 @@ public final class FakeWeeklyRegisterWorkbook {
             "TESTLABEL");
 
     /**
-     * Appears once (Thursday, 3rd row) and is in no consultant list: must block
-     * confirm until mapped.
+     * Appears once (Thursday, 3rd row), has no email and matches nobody: confirm
+     * registers it as a new consultant (after the admin confirms the list).
      */
     public static final String UNMAPPED_CONSULTANT = "UNMAPPED PERSON";
 

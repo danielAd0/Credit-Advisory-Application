@@ -31,25 +31,49 @@ public class WeeklyImportStore {
             LocalDate weekStarting, long uploadedByUserId, String uploadedByEmail, int totalRows, int newCount,
             int unchangedCount, int invalidCount, int duplicateCount, int appliedCount, int staleCount,
             int warningCount, Long reportingWeekId, Long replacesImportJobId, Instant expiresAt,
-            Instant committedAt, Instant createdAt) {
+            Instant committedAt, Instant createdAt, Instant consultantsConfirmedAt, String consultantsConfirmedBy,
+            String consultantsFingerprint, Result result) {
 
         public boolean expired(Instant now) {
             return "PREVIEWED".equals(state) && expiresAt.isBefore(now);
         }
     }
 
+    /**
+     * What confirm did, kept on the job so the import summary can be shown again
+     * (V26). Null for imports confirmed before V26.
+     */
+    public record Result(int consultantsIdentified, int consultantsRegistered, int consultantsMatched,
+            int clientsLinked, int transactionsLinked, int transactionsUnattributed, int rowsNeedingAttention) {
+    }
+
     private static final String JOB_COLUMNS = """
             j.id, j.file_name, j.file_digest, j.file_size_bytes, j.state, j.week_starting, j.uploaded_by_user_id,
             u.email, j.total_rows, j.new_count, j.unchanged_count, j.invalid_count, j.duplicate_count,
             j.applied_count, j.stale_count, j.warning_count, j.reporting_week_id, j.replaces_import_job_id,
-            j.expires_at, j.committed_at, j.created_at
+            j.expires_at, j.committed_at, j.created_at, j.consultants_confirmed_at, cu.email,
+            j.consultants_fingerprint, j.consultants_identified, j.consultants_registered, j.consultants_matched,
+            j.clients_linked, j.transactions_linked, j.transactions_unattributed, j.rows_needing_attention
             """;
+
+    private static final String JOB_FROM = " from import_jobs j join users u on u.id = j.uploaded_by_user_id"
+            + " left join users cu on cu.id = j.consultants_confirmed_by_user_id";
 
     private static Job job(ResultSet rs, int n) throws SQLException {
         return new Job(rs.getLong(1), rs.getString(2), rs.getString(3), rs.getLong(4), rs.getString(5),
                 localDate(rs, 6), rs.getLong(7), rs.getString(8), rs.getInt(9), rs.getInt(10), rs.getInt(11),
                 rs.getInt(12), rs.getInt(13), rs.getInt(14), rs.getInt(15), rs.getInt(16), nullableLong(rs, 17),
-                nullableLong(rs, 18), instant(rs, 19), instant(rs, 20), instant(rs, 21));
+                nullableLong(rs, 18), instant(rs, 19), instant(rs, 20), instant(rs, 21), instant(rs, 22),
+                rs.getString(23), rs.getString(24), result(rs));
+    }
+
+    private static Result result(ResultSet rs) throws SQLException {
+        Integer identified = nullableInt(rs, 25);
+        if (identified == null) {
+            return null;
+        }
+        return new Result(identified, rs.getInt(26), rs.getInt(27), rs.getInt(28), rs.getInt(29), rs.getInt(30),
+                rs.getInt(31));
     }
 
     public record NewJob(String fileName, String fileDigest, long fileSizeBytes, long uploadedByUserId,
@@ -70,8 +94,7 @@ public class WeeklyImportStore {
     }
 
     public Optional<Job> findJob(long id) {
-        return jdbc.query("select " + JOB_COLUMNS
-                + " from import_jobs j join users u on u.id = j.uploaded_by_user_id"
+        return jdbc.query("select " + JOB_COLUMNS + JOB_FROM
                 + " where j.id = ? and j.import_type = 'WEEKLY_REGISTER'", WeeklyImportStore::job, id)
                 .stream().findFirst();
     }
@@ -82,8 +105,7 @@ public class WeeklyImportStore {
     }
 
     public List<Job> listJobs(int limit, long offset) {
-        return jdbc.query("select " + JOB_COLUMNS
-                + " from import_jobs j join users u on u.id = j.uploaded_by_user_id"
+        return jdbc.query("select " + JOB_COLUMNS + JOB_FROM
                 + " where j.import_type = 'WEEKLY_REGISTER' order by j.created_at desc, j.id desc limit ? offset ?",
                 WeeklyImportStore::job, limit, offset);
     }
@@ -126,6 +148,25 @@ public class WeeklyImportStore {
                     first_name = null, last_name = null
                 where import_job_id = ?
                 """, jobId);
+    }
+
+    /** The admin confirmed the consultant list with this fingerprint (V26). */
+    public void markConsultantsConfirmed(long jobId, long userId, String fingerprint) {
+        jdbc.update("""
+                update import_jobs set consultants_confirmed_at = now(), consultants_confirmed_by_user_id = ?,
+                    consultants_fingerprint = ?, version = version + 1
+                where id = ? and state = 'PREVIEWED'
+                """, userId, fingerprint, jobId);
+    }
+
+    public void saveResult(long jobId, Result r) {
+        jdbc.update("""
+                update import_jobs set consultants_identified = ?, consultants_registered = ?, consultants_matched = ?,
+                    clients_linked = ?, transactions_linked = ?, transactions_unattributed = ?,
+                    rows_needing_attention = ?
+                where id = ?
+                """, r.consultantsIdentified(), r.consultantsRegistered(), r.consultantsMatched(), r.clientsLinked(),
+                r.transactionsLinked(), r.transactionsUnattributed(), r.rowsNeedingAttention(), jobId);
     }
 
     public record Commit(long jobId, long reportingWeekId, Long replacesJobId, String replaceReason,
@@ -338,6 +379,30 @@ public class WeeklyImportStore {
         return byName;
     }
 
+    /**
+     * Name keys (names and aliases) that match more than one consultant, with
+     * those consultants. consultantsByName keeps only one of them, so the import
+     * must never use such a name on its own.
+     */
+    public Map<String, List<ConsultantRef>> ambiguousConsultantNames() {
+        Map<String, Map<Long, ConsultantRef>> all = new HashMap<>();
+        jdbc.query("""
+                select a.alias, c.id, c.consultant_code, c.full_name, c.status
+                from consultant_aliases a join consultants c on c.id = a.consultant_id
+                union all
+                select full_name, id, consultant_code, full_name, status from consultants
+                """, (rs, n) -> all.computeIfAbsent(key(rs.getString(1)), k -> new java.util.TreeMap<>())
+                .put(rs.getLong(2), new ConsultantRef(rs.getLong(2), rs.getString(3), rs.getString(4),
+                        rs.getString(5))));
+        Map<String, List<ConsultantRef>> ambiguous = new HashMap<>();
+        all.forEach((k, v) -> {
+            if (v.size() > 1) {
+                ambiguous.put(k, List.copyOf(v.values()));
+            }
+        });
+        return ambiguous;
+    }
+
     public Optional<ConsultantRef> consultant(long id) {
         return jdbc.query("select id, consultant_code, full_name, status from consultants where id = ?",
                 (rs, n) -> new ConsultantRef(rs.getLong(1), rs.getString(2), rs.getString(3), rs.getString(4)), id)
@@ -352,18 +417,8 @@ public class WeeklyImportStore {
     }
 
     /**
-     * A consultant created from a sheet name
-     * (WeeklyImportService.createConsultantsFromSheet).
-     */
-    public long createConsultant(String code, String fullName) {
-        return jdbc.queryForObject(
-                "insert into consultants (consultant_code, full_name) values (?, ?) returning id", Long.class,
-                code, fullName);
-    }
-
-    /**
-     * A consultant registered from the sheet with their email
-     * (ConsultantResolver.Registration).
+     * A consultant registered from the sheet (ConsultantResolver.Registration).
+     * {@code email} is null when the sheet had none for them.
      */
     public long createConsultant(String code, String fullName, String email) {
         return jdbc.queryForObject(

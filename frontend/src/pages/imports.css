@@ -86,6 +86,38 @@
   border-radius: 10px;
 }
 
+/* Consultant list of an import: what happens to each consultant */
+.wi-outcome {
+  font-weight: 600;
+}
+
+.wi-outcome.new {
+  color: #a86400;
+}
+
+.wi-outcome.conflict {
+  color: #c0392b;
+}
+
+.wi-check {
+  margin: 0 0 0.35rem;
+  font-size: 0.9rem;
+}
+
+.wi-check.bad {
+  color: #c0392b;
+}
+
+.wi-card details summary {
+  cursor: pointer;
+  margin: 0.5rem 0;
+}
+
+.wi-accept {
+  display: block;
+  margin-top: 1rem;
+}
+
 .wi-tabs {
   display: flex;
   flex-wrap: wrap;

@@ -145,6 +145,16 @@ public abstract class ApiTestBase {
         return consultants.save(new Consultant(code, fullName)).getId();
     }
 
+    /**
+     * "Confirm Consultants and Proceed" on an import preview: confirms the
+     * consultant list exactly as the summary shows it now.
+     */
+    protected ApiClient.Response confirmConsultants(ApiClient as, long importId) {
+        String fingerprint = as.get("/api/imports/" + importId).text("$.consultants.fingerprint");
+        return as.post("/api/imports/" + importId + "/consultants/confirm",
+                "{\"fingerprint\":\"%s\"}".formatted(fingerprint));
+    }
+
     protected void setConsultantStatus(long consultantId, ConsultantStatus status) {
         jdbc.update("update consultants set status = ? where id = ?", status.name(), consultantId);
     }

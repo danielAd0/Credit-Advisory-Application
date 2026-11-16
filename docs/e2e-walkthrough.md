@@ -57,7 +57,7 @@ Two-step sign-in is off locally (`app.mfa.required=false`), so nobody is asked f
 | 1.3 | Team: add consultant **TEST CONSULTANT ONE** with a login `consultant1@local.test` | It appears with a consultant code; status ACTIVE |
 | 1.4 | Team: add **TEST CONSULTANT TWO** with a login `consultant2@local.test` | Same |
 | 1.5 | Window 2: sign in as `consultant1@local.test` | Sent straight to "choose your own password"; nothing else opens until it is done |
-| 1.6 | Window 3: sign in as `manager@local.test`, choose a password | Menu has Team, Targets, Import, Reassign clients; **no** Consultant actions, **no** Managers or Audit log |
+| 1.6 | Window 3: sign in as `manager@local.test`, choose a password | Menu has Team, Targets, Reassign clients; **no** Consultant actions, **no** Import, Managers or Audit log (those are admin only) |
 
 ## 2. A client and a typed-in sale (CONSULTANT ONE, window 2)
 
@@ -69,7 +69,7 @@ Two-step sign-in is off locally (`app.mfa.required=false`), so nobody is asked f
 | 2.4 | Try a sale dated tomorrow | Refused: date in the future |
 | 2.5 | Sales history, 2 Nov - 8 Nov 2026 | The 3 Nov sale, with the client name and your name; totals 1800.50 / 1500.00 |
 | 2.6 | Open the client | The sale is on the client page |
-| 2.7 | If Jack's Edit / Delete buttons are in: change Credit repair to 500, save; then capture a second small sale and delete it | Totals follow (quotation 2000.00); the deleted one disappears everywhere. If the buttons are not in yet, skip and note it |
+| 2.7 | On the client page, Edit the sale (opens Consultant actions): change Credit repair to 500, save. Then capture a second small sale and Delete it | Totals follow (quotation 2000.00); the deleted one disappears everywhere. Delete should show for the consultant on their own typed-in sale; if only a manager sees it, note it (Jack) |
 
 ## 3. The manager's view (MANAGER, window 3)
 
@@ -80,16 +80,16 @@ Two-step sign-in is off locally (`app.mfa.required=false`), so nobody is asked f
 | 3.3 | Window 2 (consultant): Sales history | Only their own sales; no consultant filter, or one that only offers themselves |
 | 3.4 | Targets: set a target starting today | Saved; a start date in the past is refused |
 
-## 4. Import the week (MANAGER, window 3)
+## 4. Import the week (ADMIN, window 1)
 
 | # | Do | Expect |
 |---|---|---|
 | 4.1 | Import: upload the fake workbook from `C:\dev\fake-data` | Week read from the name: 2 Nov 2026. The preview says **1 sale was typed into the app** for this week and confirming replaces it |
-| 4.2 | Look at the issues | Warnings and errors listed per row. One consultant, **UNMAPPED PERSON**, is not known |
-| 4.3 | Try to confirm before dealing with UNMAPPED PERSON | Refused until it is mapped or added |
-| 4.4 | Map UNMAPPED PERSON to TEST CONSULTANT TWO; add any other unknown consultants it offers | Confirm is allowed |
-| 4.5 | Confirm | Import COMMITTED; clients and sales created |
-| 4.6 | Issues: is there a way to download them as CSV? | Known gap (FR-12, Jack): the endpoint exists, the button may not. Note it |
+| 4.2 | Look at the consultants list in the preview | Every consultant in the workbook, each EXISTING (matched by email, name or alias) or NEW. TEST CONSULTANT ONE and TWO are EXISTING; **UNMAPPED PERSON** is NEW (no email, matches nobody). No consultant is matched by hand any more |
+| 4.3 | Try to confirm the import before confirming the consultants | Refused: the consultant list must be confirmed first |
+| 4.4 | Press "Confirm Consultants and Proceed" | The list is confirmed; confirming the import is now allowed. Nothing is registered yet |
+| 4.5 | Confirm | Import COMMITTED. The summary shows consultants identified / registered (UNMAPPED PERSON, now in Team without a login) / matched, clients and sales linked, and rows needing attention |
+| 4.6 | Issues tab: Download issues (CSV), with and without the severity filter | A CSV of the issues; filtered to that severity when one is chosen. No full ID numbers in it |
 
 ## 5. After the import: do the numbers agree?
 
@@ -158,10 +158,8 @@ Steps that cannot pass until these exist. Note them in the table only if they be
 
 | Feature | Backend | Frontend |
 |---|---|---|
-| Edit / Delete a typed-in sale (2.7, 5.5) | done: `GET`/`PATCH`/`DELETE /api/transactions/{id}` | Jack |
-| Show a replaced or imported sale as such (5.1, 5.3) | done: `typedIn`, `replaced` on every sale | Jack |
-| Download an import's issues as CSV (4.6, FR-12) | done | Jack |
-| Move two-step sign-in to a new phone (9.4) | done: `POST /api/auth/mfa/change`, `/change/confirm` | Jack |
+| Delete for consultants on their own typed-in sales (2.7) | done (the API allows it) | Jack: still managers/admins only on screen |
+| Remove a consultant, then reassign their clients (finding 1) | nothing new needed | Jack |
 | First import of the full client list (FR-07 to FR-11) | Sifiso | Sifiso |
 
 When it is done: delete `C:\dev\fake-data`, or keep it outside the repository. Nothing from this run is committed

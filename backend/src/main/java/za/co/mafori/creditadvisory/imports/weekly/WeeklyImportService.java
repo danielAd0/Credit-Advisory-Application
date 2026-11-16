@@ -42,24 +42,25 @@ import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.AssignmentPr
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.ConfirmResult;
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.ConsultantConflict;
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.ConsultantEmailToAdd;
+import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.ConsultantFound;
+import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.ConsultantList;
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.ConsultantRegistration;
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.ConsultantToRegister;
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.DaySummary;
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.ImportListItem;
+import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.ImportResult;
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.ImportSummary;
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.IssueFile;
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.IssueView;
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.StagedRowView;
-import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.NewConsultant;
-import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.NewConsultantsResult;
 import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.SimilarConsultant;
-import za.co.mafori.creditadvisory.imports.weekly.WeeklyImportViews.UnmappedConsultant;
 import za.co.mafori.creditadvisory.consultant.ConsultantCodeGenerator;
 
 @Service
 public class WeeklyImportService {
 
     static final Duration PREVIEW_LIFETIME = Duration.ofHours(24);
+    static final String POSSIBLE_DUPLICATE_SALE = "row:possible-duplicate-sale";
     private static final int MAX_PAGE_SIZE = 200;
 
     private final PoiWorkbookReader reader;
@@ -114,12 +115,14 @@ public class WeeklyImportService {
         ImportDictionary dictionary = dictionaryLoader.load();
         ParseResult parsed = parser.parse(workbook, week, dictionary);
         Map<String, ConsultantRef> byName = store.consultantsByName();
-        Map<String, ConsultantRef> consultants = withPlan(byName,
-                planFor(sheetConsultantsOf(parsed.rows()), byName));
+        List<WeeklyImportStore.SheetConsultant> sheetConsultants = sheetConsultantsOf(parsed.rows());
+        Map<String, ConsultantRef> consultants = rowConsultants(withPlan(byName,
+                planFor(sheetConsultants, byName)), sheetConsultants);
 
         List<Staged> staged = new ArrayList<>();
         List<ParseIssue> extraIssues = new ArrayList<>();
         Set<String> seenHashes = new HashSet<>();
+        Map<String, ParsedRow> seenSales = new HashMap<>();
         int newCount = 0;
         int unchanged = 0;
         int duplicates = 0;
@@ -134,6 +137,13 @@ public class WeeklyImportService {
             String hashKey = HexFormat.of().formatHex(hash);
             ConsultantRef consultant = row.consultantName() == null ? null
                     : consultants.get(WeeklyImportStore.key(row.consultantName()));
+            ParsedRow sameSale = seenSales.putIfAbsent(saleKey(hashKey, row), row);
+            if (sameSale != null) {
+                extraIssues.add(rowIssue(row, "WARNING", POSSIBLE_DUPLICATE_SALE, "ID NUMBER",
+                        "Same client, date, consultant and amounts as " + sameSale.sheetName() + " row "
+                                + sameSale.rowNumber() + ". It is imported as a separate sale: check the workbook "
+                                + "in case it was entered twice."));
+            }
             if (!seenHashes.add(hashKey)) {
                 staged.add(new Staged(row, "DUPLICATE", hash, null, null, false, false));
                 duplicates++;
@@ -201,6 +211,21 @@ public class WeeklyImportService {
                 staged.size(), "rejected", invalid, "newClients", newCount, "fileDigest", digest,
                 "reportFigures", report.figures().size(), "reportDifferences", report.differences()));
         return summary(jobId);
+    }
+
+    /** Two rows with this key look like the same sale typed twice. */
+    private static String saleKey(String hashKey, ParsedRow r) {
+        StringBuilder sb = new StringBuilder(hashKey).append('|').append(r.transactionDate()).append('|')
+                .append(WeeklyImportStore.key(r.consultantName())).append('|').append(plain(r.quotation()))
+                .append('|').append(plain(r.banked())).append('|').append(plain(r.amountToClient())).append('|')
+                .append(plain(r.thirdPartySettlement()));
+        new java.util.TreeMap<>(r.productAmounts()).forEach((code, amount) -> sb.append('|').append(code)
+                .append('=').append(plain(amount)));
+        return sb.toString();
+    }
+
+    private static String plain(BigDecimal amount) {
+        return amount == null ? "" : amount.stripTrailingZeros().toPlainString();
     }
 
     private record Staged(ParsedRow row, String action, byte[] hash, Long existingClientId, Long existingVersion,
@@ -273,7 +298,8 @@ public class WeeklyImportService {
         boolean previewed = "PREVIEWED".equals(state);
         Map<String, ConsultantRef> byName = previewed ? store.consultantsByName() : Map.of();
         ConsultantResolver.Plan plan = previewed ? planFor(store.sheetConsultants(jobId), byName) : null;
-        List<UnmappedConsultant> unmapped = previewed ? unmappedConsultants(jobId, byName, plan) : List.of();
+        ConsultantList consultantList = previewed ? consultantList(job, byName, plan)
+                : ConsultantList.none(job.consultantsConfirmedAt(), job.consultantsConfirmedBy());
         Long weekImportedBy = store.currentJobForWeek(job.weekStarting()).filter(id -> id != jobId).orElse(null);
 
         List<String> blockers = new ArrayList<>();
@@ -283,11 +309,11 @@ public class WeeklyImportService {
         if (store.blockingIssueCount(jobId) > 0) {
             blockers.add("SHEET_ERRORS");
         }
-        if (!unmapped.isEmpty()) {
-            blockers.add("UNMAPPED_CONSULTANTS");
-        }
         if (plan != null && !plan.conflicts().isEmpty()) {
             blockers.add("CONSULTANT_CONFLICTS");
+        }
+        if (previewed && !consultantList.confirmed()) {
+            blockers.add("CONSULTANTS_NOT_CONFIRMED");
         }
         int nameDifferences = (int) store.nameDifferenceCount(jobId);
         if (nameDifferences > 0 && "PREVIEWED".equals(state)) {
@@ -300,39 +326,210 @@ public class WeeklyImportService {
                 job.weekStarting().plusDays(6), job.uploadedByEmail(), job.createdAt(), job.expiresAt(),
                 job.committedAt(), job.totalRows(), job.newCount(), job.unchangedCount(), job.duplicateCount(),
                 job.invalidCount(), job.appliedCount(), issues.getOrDefault("ERROR", 0L),
-                issues.getOrDefault("WARNING", 0L), issues.getOrDefault("INFO", 0L), quotation, banked, days, unmapped,
-                weekImportedBy, weekImportedBy != null && "PREVIEWED".equals(state), blockers.isEmpty(), blockers,
-                report.status(), report.differences(), nameDifferences, typedInSales,
+                issues.getOrDefault("WARNING", 0L), issues.getOrDefault("INFO", 0L), quotation, banked, days,
+                consultantList, weekImportedBy, weekImportedBy != null && "PREVIEWED".equals(state),
+                blockers.isEmpty(), blockers, report.status(), report.differences(), nameDifferences, typedInSales,
+                store.issueCount(jobId, POSSIBLE_DUPLICATE_SALE),
                 plan == null ? ConsultantRegistration.NONE : registrationView(jobId, byName, plan),
-                plan == null ? AssignmentPreview.NONE : assignmentPreview(jobId, byName, plan));
+                plan == null ? AssignmentPreview.NONE : assignmentPreview(jobId, byName, plan),
+                job.result() == null ? null : resultView(job.result()));
     }
 
-    private List<UnmappedConsultant> unmappedConsultants(long jobId) {
-        Map<String, ConsultantRef> known = store.consultantsByName();
-        return unmappedConsultants(jobId, known, planFor(store.sheetConsultants(jobId), known));
+    private static ImportResult resultView(WeeklyImportStore.Result r) {
+        return new ImportResult(r.consultantsIdentified(), r.consultantsRegistered(), r.consultantsMatched(),
+                r.clientsLinked(), r.transactionsLinked(), r.transactionsUnattributed(), r.rowsNeedingAttention());
     }
 
-    /**
-     * Names that match nobody and have no email to register them with. Names the
-     * email rules decide (registered, matched by email, or in conflict) are not
-     * listed here.
-     */
-    private List<UnmappedConsultant> unmappedConsultants(long jobId, Map<String, ConsultantRef> known,
-            ConsultantResolver.Plan plan) {
-        List<UnmappedConsultant> out = new ArrayList<>();
-        store.consultantNames(jobId).forEach((name, rows) -> {
-            if (!known.containsKey(WeeklyImportStore.key(name)) && !plan.decidedByEmail(name)) {
-                out.add(new UnmappedConsultant(name, rows, similarConsultants(name, known)));
-            }
-        });
-        return out;
-    }
-
-    // ---------- consultant emails (docs/consultant-onboarding.md) ----------
+    // ---------- consultants (docs/consultant-onboarding.md, docs/api-imports.md section 11) ----------
 
     private ConsultantResolver.Plan planFor(List<WeeklyImportStore.SheetConsultant> sheet,
             Map<String, ConsultantRef> byName) {
-        return ConsultantResolver.plan(sheet, byName, store.consultantsByEmail(), store.consultantEmails());
+        return ConsultantResolver.plan(sheet, byName, store.consultantsByEmail(), store.consultantEmails(),
+                store.ambiguousConsultantNames());
+    }
+
+    /**
+     * The consultant of each sheet name, for the rows: byName without the names
+     * that match more than one consultant, plus every name whose sheet email
+     * belongs to a consultant (the email wins over the name). A name missing here
+     * has no consultant yet: it is registered at confirm, or it is in conflict
+     * (which blocks confirm).
+     */
+    private Map<String, ConsultantRef> rowConsultants(Map<String, ConsultantRef> byName,
+            List<WeeklyImportStore.SheetConsultant> sheet) {
+        Map<String, ConsultantRef> out = new HashMap<>(byName);
+        store.ambiguousConsultantNames().keySet().forEach(out::remove);
+        Map<String, ConsultantRef> byEmail = store.consultantsByEmail();
+        for (WeeklyImportStore.SheetConsultant s : sheet) {
+            if (s.email() != null && byEmail.containsKey(s.email())) {
+                out.put(WeeklyImportStore.key(s.name()), byEmail.get(s.email()));
+            }
+        }
+        return out;
+    }
+
+    /** One consultant of the list while it is being built. */
+    private static final class FoundGroup {
+        String outcome;
+        String matchedBy;
+        final Set<String> names = new java.util.LinkedHashSet<>();
+        final Set<String> keys = new HashSet<>();
+        final Set<String> sheetEmails = new java.util.TreeSet<>();
+        final Set<String> reasons = new java.util.LinkedHashSet<>();
+        int rows;
+        int newClients;
+        ConsultantRef consultant;
+        ConsultantResolver.Registration registration;
+        String email;
+    }
+
+    private static final List<String> OUTCOME_ORDER = List.of("CONFLICT", "NEW", "EMAIL_ADDED", "EXISTING");
+
+    /**
+     * Every consultant found in the import, one entry per consultant the names
+     * become, with the fingerprint the admin confirms.
+     */
+    private ConsultantList consultantList(Job job, Map<String, ConsultantRef> byName, ConsultantResolver.Plan plan) {
+        List<WeeklyImportStore.SheetConsultant> sheet = store.sheetConsultants(job.id());
+        Map<String, ConsultantRef> rowConsultants = rowConsultants(withPlan(byName, plan), sheet);
+        Map<Long, String> emailOf = store.consultantEmails();
+        Map<String, Integer> newClientsOfKey = new HashMap<>();
+        store.newClientRowsByConsultant(job.id()).forEach((name, n) -> {
+            if (name != null) {
+                newClientsOfKey.merge(WeeklyImportStore.key(name), n, Integer::sum);
+            }
+        });
+
+        Map<String, FoundGroup> groups = new java.util.LinkedHashMap<>();
+        for (WeeklyImportStore.SheetConsultant s : sheet) {
+            String name = s.name().strip().replaceAll("\\s+", " ");
+            String key = WeeklyImportStore.key(name);
+            List<ConsultantResolver.Conflict> conflicts = plan.conflicts().stream()
+                    .filter(c -> WeeklyImportStore.key(c.nameInSheet()).equals(key)).toList();
+            ConsultantResolver.Registration registration = plan.registrations().stream()
+                    .filter(r -> WeeklyImportStore.key(r.fullName()).equals(key)
+                            || r.otherNames().stream().anyMatch(o -> WeeklyImportStore.key(o).equals(key)))
+                    .findFirst().orElse(null);
+            ConsultantRef ref = rowConsultants.get(key);
+
+            FoundGroup g;
+            if (!conflicts.isEmpty() || (registration == null && ref == null)) {
+                g = groups.computeIfAbsent("X:" + key, k -> new FoundGroup());
+                g.outcome = "CONFLICT";
+                conflicts.forEach(c -> g.reasons.add(c.reason()));
+                if (conflicts.isEmpty()) {
+                    g.reasons.add("This name could not be linked to a consultant.");
+                }
+            } else if (registration != null) {
+                g = groups.computeIfAbsent("N:" + WeeklyImportStore.key(registration.fullName()),
+                        k -> new FoundGroup());
+                g.outcome = "NEW";
+                g.registration = registration;
+                g.email = registration.email();
+            } else {
+                g = groups.computeIfAbsent("C:" + ref.id(), k -> new FoundGroup());
+                var update = plan.emailUpdates().stream().filter(u -> u.consultant().id() == ref.id()).findFirst();
+                g.outcome = update.isPresent() ? "EMAIL_ADDED" : "EXISTING";
+                g.consultant = ref;
+                g.email = update.map(ConsultantResolver.EmailUpdate::email).orElse(emailOf.get(ref.id()));
+                g.matchedBy = "EMAIL".equals(g.matchedBy) || plan.matchedByEmail(name) ? "EMAIL" : "NAME";
+            }
+            g.names.add(name);
+            if (s.email() != null) {
+                g.sheetEmails.add(s.email());
+            }
+            g.rows += s.rows();
+            if (g.keys.add(key)) {
+                g.newClients += newClientsOfKey.getOrDefault(key, 0);
+            }
+        }
+
+        List<FoundGroup> ordered = new ArrayList<>(groups.values());
+        ordered.sort(java.util.Comparator.comparingInt((FoundGroup g) -> OUTCOME_ORDER.indexOf(g.outcome))
+                .thenComparing(g -> WeeklyImportStore.key(g.names.iterator().next())));
+        List<ConsultantFound> items = new ArrayList<>();
+        List<String> fingerprintLines = new ArrayList<>();
+        int existing = 0;
+        int toRegister = 0;
+        int conflicts = 0;
+        int withoutEmail = 0;
+        for (FoundGroup g : ordered) {
+            List<String> attention = new ArrayList<>();
+            List<SimilarConsultant> similar = List.of();
+            String email = g.email;
+            switch (g.outcome) {
+                case "CONFLICT" -> {
+                    conflicts++;
+                    attention.add("CONFLICT");
+                    email = g.sheetEmails.isEmpty() ? null : String.join(", ", g.sheetEmails);
+                }
+                case "NEW" -> {
+                    toRegister++;
+                    similar = similarConsultants(g.registration.fullName(), byName);
+                    String mine = WeeklyImportStore.key(g.registration.fullName());
+                    boolean looksLikeAnotherNew = ordered.stream()
+                            .filter(o -> o != g && "NEW".equals(o.outcome))
+                            .anyMatch(o -> similarity(mine, WeeklyImportStore.key(o.registration.fullName())) >= 0);
+                    if (!similar.isEmpty() || looksLikeAnotherNew) {
+                        attention.add("SIMILAR_NAME");
+                    }
+                }
+                default -> {
+                    existing++;
+                    if (!g.consultant.active()) {
+                        attention.add("NOT_ACTIVE");
+                    }
+                }
+            }
+            if (!"CONFLICT".equals(g.outcome) && email == null) {
+                attention.add("NO_EMAIL");
+                withoutEmail++;
+            }
+            ConsultantRef c = g.consultant;
+            items.add(new ConsultantFound(g.outcome, g.matchedBy, List.copyOf(g.names), email, g.rows, g.newClients,
+                    c == null ? null : c.id(), c == null ? null : c.code(), c == null ? null : c.fullName(),
+                    c == null ? null : c.status(), List.copyOf(attention),
+                    g.reasons.isEmpty() ? null : String.join(" ", g.reasons), similar));
+            List<String> keys = new ArrayList<>(g.keys);
+            java.util.Collections.sort(keys);
+            fingerprintLines.add(g.outcome + "|" + (c == null ? "" : c.id()) + "|" + String.join(",", keys) + "|"
+                    + (email == null ? "" : email) + "|" + g.rows + "|" + String.join(",", attention));
+        }
+        java.util.Collections.sort(fingerprintLines);
+        String fingerprint = sha256(String.join("\n", fingerprintLines)
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        boolean confirmed = fingerprint.equals(job.consultantsFingerprint());
+        return new ConsultantList(List.copyOf(items), items.size(), existing, toRegister, conflicts, withoutEmail,
+                fingerprint, confirmed, confirmed ? job.consultantsConfirmedAt() : null,
+                confirmed ? job.consultantsConfirmedBy() : null);
+    }
+
+    /**
+     * The admin checked the consultants found in the workbook ("Confirm
+     * Consultants and Proceed"). Nothing is registered yet: confirm does that, in
+     * the same transaction as the clients and sales. The fingerprint proves the
+     * admin confirmed the list as it is now.
+     */
+    @Transactional
+    public ImportSummary confirmConsultants(long userId, long jobId, String fingerprint) {
+        Job job = requireOpen(store.lockJob(jobId).orElseThrow(() -> notFound(jobId)));
+        Map<String, ConsultantRef> byName = store.consultantsByName();
+        ConsultantResolver.Plan plan = planFor(store.sheetConsultants(job.id()), byName);
+        ConsultantList list = consultantList(job, byName, plan);
+        if (list.conflicts() > 0) {
+            throw ApiException.unprocessable("import:consultant-conflicts", "Consultant conflicts",
+                    list.conflicts() + " consultant(s) cannot be linked safely. Fix them in the workbook (the "
+                            + "consultants with outcome CONFLICT) and upload it again.");
+        }
+        if (!list.fingerprint().equals(fingerprint)) {
+            throw ApiException.conflict("import:consultants-changed", "Consultants changed",
+                    "The consultant list changed since it was shown. Check it again and confirm.");
+        }
+        store.markConsultantsConfirmed(job.id(), userId, fingerprint);
+        audit.record("IMPORT_CONSULTANTS_CONFIRMED", "IMPORT_JOB", job.id(), meta("consultants", list.identified(),
+                "existing", list.existing(), "toRegister", list.toRegister(), "withoutEmail", list.withoutEmail(),
+                "fingerprint", fingerprint));
+        return summary(job.id());
     }
 
     /** byName plus the sheet spellings the plan will add as aliases. */
@@ -365,7 +562,7 @@ public class WeeklyImportService {
         int matchedByName = 0;
         for (String name : store.consultantNames(jobId).keySet()) {
             String key = WeeklyImportStore.key(name);
-            if (names.add(key) && byName.containsKey(key) && !plan.decidedByEmail(name)) {
+            if (names.add(key) && byName.containsKey(key) && !plan.decided(name)) {
                 matchedByName++;
             }
         }
@@ -567,27 +764,6 @@ public class WeeklyImportService {
     }
 
     @Transactional
-    public ImportSummary mapConsultant(long userId, long jobId, String nameInSheet, long consultantId) {
-        Job job = requireOpen(store.lockJob(jobId).orElseThrow(() -> notFound(jobId)));
-        String key = WeeklyImportStore.key(nameInSheet);
-        String asWritten = store.consultantNames(job.id()).keySet().stream()
-                .filter(n -> WeeklyImportStore.key(n).equals(key)).findFirst()
-                .orElseThrow(() -> ApiException.unprocessable("import:name-not-in-import", "Name not in this import",
-                        "No row of this import has that consultant name."));
-        ConsultantRef consultant = store.consultant(consultantId)
-                .orElseThrow(() -> ApiException.notFound("consultant:not-found",
-                        "Consultant " + consultantId + " does not exist."));
-        if (store.consultantsByName().containsKey(key) || store.aliasExists(asWritten)) {
-            throw ApiException.conflict("import:name-already-mapped", "Already mapped",
-                    "That name already matches a consultant.");
-        }
-        store.insertConsultantAlias(consultant.id(), asWritten, userId);
-        audit.record("CONSULTANT_ALIAS_CREATED", "CONSULTANT", consultant.id(),
-                meta("alias", asWritten, "importJobId", job.id()));
-        return summary(job.id());
-    }
-
-    @Transactional
     public ConfirmResult confirm(long userId, boolean admin, long jobId, String fileDigest, String replaceReason,
             boolean acceptNameDifferences) {
         Job job = store.lockJob(jobId).orElseThrow(() -> notFound(jobId));
@@ -601,16 +777,23 @@ public class WeeklyImportService {
                     "Fix the sheet-level errors listed in the preview, then upload the file again.");
         }
         Map<String, ConsultantRef> known = store.consultantsByName();
-        ConsultantResolver.Plan plan = planFor(store.sheetConsultants(job.id()), known);
-        List<UnmappedConsultant> unmapped = unmappedConsultants(job.id(), known, plan);
-        if (!unmapped.isEmpty()) {
-            throw ApiException.unprocessable("import:unmapped-consultants", "Unknown consultants",
-                    unmapped.size() + " consultant name(s) must be matched to a consultant first.");
-        }
+        List<WeeklyImportStore.SheetConsultant> sheetConsultants = store.sheetConsultants(job.id());
+        ConsultantResolver.Plan plan = planFor(sheetConsultants, known);
         if (!plan.conflicts().isEmpty()) {
             throw ApiException.unprocessable("import:consultant-conflicts", "Consultant conflicts",
-                    plan.conflicts().size() + " consultant name(s) do not match their email safely. Fix them in the "
-                            + "sheet (see consultantRegistration.conflicts in the preview) and upload it again.");
+                    plan.conflicts().size() + " consultant name(s) cannot be linked to one consultant safely. Fix "
+                            + "them in the sheet (the consultants with outcome CONFLICT in the preview) and upload "
+                            + "it again.");
+        }
+        ConsultantList consultantList = consultantList(job, known, plan);
+        if (job.consultantsFingerprint() == null) {
+            throw ApiException.unprocessable("import:consultants-not-confirmed", "Consultants not confirmed",
+                    "Check the consultants found in the workbook and confirm them first "
+                            + "(Confirm Consultants and Proceed).");
+        }
+        if (!consultantList.confirmed()) {
+            throw ApiException.conflict("import:consultants-changed", "Consultants changed",
+                    "The consultants changed since they were confirmed. Check the list and confirm it again.");
         }
         store.committedJobWithDigest(job.fileDigest()).ifPresent(id -> {
             throw ApiException.conflict("import:duplicate-file", "Already imported",
@@ -645,9 +828,9 @@ public class WeeklyImportService {
         // The spreadsheet wins over sales typed into the app for this week (V21).
         int typedIn = store.supersedeTypedInSales(week.id(), job.id());
 
-        // Consultants from the sheet's emails, before any client is assigned.
+        // Consultants from the sheet, before any client is assigned.
         int[] consultantChanges = applyConsultantPlan(userId, job.id(), plan);
-        Map<String, ConsultantRef> consultants = store.consultantsByName();
+        Map<String, ConsultantRef> consultants = rowConsultants(store.consultantsByName(), sheetConsultants);
 
         Map<String, Long> employers = store.employersByName();
         Map<String, Long> structures = store.structuresByName();
@@ -714,11 +897,20 @@ public class WeeklyImportService {
                     r.secondaryBudgetList(), r.secondaryLoanAmount(), job.id(), r.sheetName(), r.rowNumber(), userId,
                     week.id(), r.dayOfWeek(), r.quotation(), r.banked(), r.consultantName(), r.employerName()));
             n.transactions++;
+            if (consultant == null) {
+                n.unattributed++;
+            }
             n.lines += store.insertLines(transactionId, r.id());
             n.extras += store.insertExtras(transactionId, r.id());
             store.setRowOutcome(r.id(), "APPLIED");
         }
 
+        long possibleDuplicates = store.issueCount(job.id(), POSSIBLE_DUPLICATE_SALE);
+        int needingAttention = job.invalidCount() + n.unattributed + (int) possibleDuplicates;
+        WeeklyImportStore.Result result = new WeeklyImportStore.Result(consultantList.identified(),
+                consultantChanges[0], consultantList.existing(), clientByHash.size(), n.transactions - n.unattributed,
+                n.unattributed, needingAttention);
+        store.saveResult(job.id(), result);
         store.setCurrentImport(week.id(), job.id());
         store.markCommitted(new WeeklyImportStore.Commit(job.id(), week.id(), replaced, reason, n.transactions, n.stale,
                 n.newClients));
@@ -726,14 +918,21 @@ public class WeeklyImportService {
                 "transactions", n.transactions, "newClients", n.newClients, "assigned", n.assigned,
                 "replacesImportJobId", replaced, "nameDifferencesAccepted", nameDifferences,
                 "replacedTypedInSales", typedIn, "consultantsRegistered", consultantChanges[0],
-                "consultantEmailsAdded", consultantChanges[1], "consultantAliasesAdded", consultantChanges[2]));
+                "consultantEmailsAdded", consultantChanges[1], "consultantAliasesAdded", consultantChanges[2],
+                "consultantsIdentified", result.consultantsIdentified(), "consultantsMatched",
+                result.consultantsMatched(), "clientsLinked", result.clientsLinked(), "transactionsLinked",
+                result.transactionsLinked(), "transactionsUnattributed", result.transactionsUnattributed(),
+                "rowsNeedingAttention", needingAttention));
         if (replaced != null) {
             audit.record("WEEK_REPLACED", "IMPORT_JOB", replaced, meta("replacedBy", job.id(), "reason", reason,
                     "supersededTransactions", superseded));
         }
         return new ConfirmResult(job.id(), week.id(), job.weekStarting(), n.transactions, n.lines, n.extras,
                 n.newClients, n.assigned, n.employers, n.structures, n.terms, n.stale, replaced, superseded, typedIn,
-                consultantChanges[0], consultantChanges[1], consultantChanges[2], n.unassignedNew);
+                consultantChanges[0], consultantChanges[1], consultantChanges[2], n.unassignedNew,
+                result.consultantsIdentified(), result.consultantsMatched(), result.clientsLinked(),
+                result.transactionsLinked(), result.transactionsUnattributed(), job.invalidCount(),
+                possibleDuplicates, needingAttention);
     }
 
     private static final class Counters {
@@ -747,11 +946,13 @@ public class WeeklyImportService {
         int terms;
         int stale;
         int unassignedNew;
+        int unattributed;
     }
 
     /**
-     * Registers the sheet's new consultants, fills in missing emails and adds the
-     * sheet's spellings as aliases (ConsultantResolver). Runs inside confirm's
+     * Registers the sheet's new consultants (with their email when the sheet has
+     * one), fills in missing emails and adds the sheet's spellings as aliases
+     * (ConsultantResolver). Runs inside confirm's
      * transaction, so a failed import leaves no consultant behind.
      *
      * @return {registered, emails added, aliases added}
@@ -770,7 +971,7 @@ public class WeeklyImportService {
             }
             audit.record("CONSULTANT_CREATED", "CONSULTANT", id, meta("consultantCode", code, "fullName",
                     r.fullName(), "email", r.email(), "codeGenerated", true, "importJobId", jobId,
-                    "source", "WEEKLY_REGISTER_EMAIL"));
+                    "source", r.email() == null ? "WEEKLY_REGISTER_NAME" : "WEEKLY_REGISTER_EMAIL"));
             registered++;
         }
         for (ConsultantResolver.EmailUpdate u : plan.emailUpdates()) {
@@ -831,57 +1032,6 @@ public class WeeklyImportService {
             expired++;
         }
         return expired;
-    }
-
-    /**
-     * Creates new consultants from names in the sheet that match nobody (the
-     * "import the
-     * consultants" option, next to mapping a name). Each gets a generated code
-     * (C0001, ...), the
-     * sheet's spelling as its name and as an alias, so a later rename still matches
-     * next week's
-     * sheet. No login is created: an admin adds one with POST
-     * /api/consultant-accounts or the
-     * users screen. All or nothing.
-     */
-    @Transactional
-    public NewConsultantsResult createConsultantsFromSheet(long userId, long jobId, List<String> namesInSheet) {
-        Job job = requireOpen(store.lockJob(jobId).orElseThrow(() -> notFound(jobId)));
-        if (namesInSheet == null || namesInSheet.isEmpty()) {
-            throw ApiException.unprocessable("import:no-names", "No names", "Choose at least one name to create.");
-        }
-        Map<String, String> unmapped = new java.util.LinkedHashMap<>(); // key -> spelling as written
-        for (UnmappedConsultant u : unmappedConsultants(job.id())) {
-            unmapped.putIfAbsent(WeeklyImportStore.key(u.nameInSheet()), u.nameInSheet());
-        }
-        Map<String, String> chosen = new java.util.LinkedHashMap<>();
-        for (String name : namesInSheet) {
-            String key = name == null ? "" : WeeklyImportStore.key(name);
-            if (key.isEmpty()) {
-                throw ApiException.unprocessable("import:no-names", "Empty name", "A name to create is empty.");
-            }
-            if (!unmapped.containsKey(key)) {
-                boolean inImport = store.consultantNames(job.id()).keySet().stream()
-                        .anyMatch(n -> WeeklyImportStore.key(n).equals(key));
-                throw inImport
-                        ? ApiException.conflict("import:name-already-mapped", "Already mapped",
-                                "\"" + name.strip() + "\" already matches a consultant.")
-                        : ApiException.unprocessable("import:name-not-in-import", "Name not in this import",
-                                "No row of this import has the consultant name \"" + name.strip() + "\".");
-            }
-            chosen.putIfAbsent(key, unmapped.get(key));
-        }
-        List<NewConsultant> created = new ArrayList<>();
-        for (String asWritten : chosen.values()) {
-            String fullName = asWritten.strip().replaceAll("\\s+", " ");
-            String code = codes.next();
-            long id = store.createConsultant(code, fullName);
-            store.insertConsultantAlias(id, fullName, userId);
-            audit.record("CONSULTANT_CREATED", "CONSULTANT", id, meta("consultantCode", code, "fullName", fullName,
-                    "codeGenerated", true, "importJobId", job.id()));
-            created.add(new NewConsultant(id, code, fullName));
-        }
-        return new NewConsultantsResult(created, summary(job.id()));
     }
 
     @Transactional

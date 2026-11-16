@@ -3,6 +3,7 @@ import { ApiError } from './http';
 import { consultants, delay } from './mock';
 import type {
   ConfirmResult,
+  ConsultantFound,
   ImportHistoryItem,
   ImportIssue,
   ImportRow,
@@ -53,7 +54,7 @@ interface Job {
   summary: ImportSummary;
   rows: ImportRow[];
   issues: ImportIssue[];
-  mapped: Map<string, number>;
+  consultantsConfirmed: boolean;
 }
 
 const jobs = new Map<number, Job>();
@@ -125,15 +126,67 @@ const ISSUES: ImportIssue[] = [
   },
 ];
 
+/** 'Thandi X' is an alias of Thandi Xundu; 'Boitumelo K' is new and has no email. */
+function consultantItems(): ConsultantFound[] {
+  const thandi = consultants.find((c) => c.fullName === 'Thandi Xundu');
+  return [
+    {
+      outcome: 'NEW',
+      matchedBy: null,
+      namesInSheet: [NAMES_IN_SHEET[1]],
+      email: null,
+      rows: 4,
+      newClients: 2,
+      consultantId: null,
+      consultantCode: null,
+      consultantName: null,
+      consultantStatus: null,
+      attention: ['NO_EMAIL', 'SIMILAR_NAME'],
+      reason: null,
+      similarConsultants: consultants
+        .filter((c) => c.fullName === 'Boitumelo Khumalo')
+        .map((c) => ({
+          consultantId: c.id,
+          consultantCode: c.consultantCode,
+          fullName: c.fullName,
+        })),
+    },
+    {
+      outcome: 'EXISTING',
+      matchedBy: 'NAME',
+      namesInSheet: [NAMES_IN_SHEET[0]],
+      email: 'thandi.xundu@example.com',
+      rows: 4,
+      newClients: 2,
+      consultantId: thandi?.id ?? 2,
+      consultantCode: thandi?.consultantCode ?? 'C002',
+      consultantName: thandi?.fullName ?? 'Thandi Xundu',
+      consultantStatus: 'ACTIVE',
+      attention: [],
+      reason: null,
+      similarConsultants: [],
+    },
+  ];
+}
+
 function refresh(job: Job) {
   const s = job.summary;
-  s.unmappedConsultants = NAMES_IN_SHEET.filter((n) => !job.mapped.has(n)).map((n) => ({
-    nameInSheet: n,
-    rows: 4,
-  }));
+  const previewed = s.state === 'PREVIEWED';
+  const items = previewed ? consultantItems() : [];
+  s.consultants = {
+    items,
+    identified: items.length,
+    existing: items.filter((i) => i.outcome === 'EXISTING' || i.outcome === 'EMAIL_ADDED').length,
+    toRegister: items.filter((i) => i.outcome === 'NEW').length,
+    conflicts: items.filter((i) => i.outcome === 'CONFLICT').length,
+    withoutEmail: items.filter((i) => i.attention.includes('NO_EMAIL')).length,
+    fingerprint: previewed ? 'b'.repeat(64) : null,
+    confirmed: job.consultantsConfirmed,
+    confirmedAt: job.consultantsConfirmed ? (s.consultants?.confirmedAt ?? null) : null,
+    confirmedBy: job.consultantsConfirmed ? (s.consultants?.confirmedBy ?? null) : null,
+  };
   const blockers: ImportSummary['blockers'] = [];
-  if (s.state === 'PREVIEWED' && s.unmappedConsultants.length > 0)
-    blockers.push('UNMAPPED_CONSULTANTS');
+  if (previewed && !job.consultantsConfirmed) blockers.push('CONSULTANTS_NOT_CONFIRMED');
   if (s.state === 'EXPIRED') blockers.push('EXPIRED');
   if (s.state === 'COMMITTED' || s.state === 'CANCELLED') blockers.push('NOT_PREVIEWED');
   s.blockers = blockers;
@@ -201,14 +254,28 @@ export async function preview(file: File, weekStarting?: string): Promise<Import
           : 0,
       };
     }),
-    unmappedConsultants: [],
+    consultants: {
+      items: [],
+      identified: 0,
+      existing: 0,
+      toRegister: 0,
+      conflicts: 0,
+      withoutEmail: 0,
+      fingerprint: null,
+      confirmed: false,
+      confirmedAt: null,
+      confirmedBy: null,
+    },
     weekImportedByJobId: heldBy,
     replaceRequired: heldBy !== null,
     canConfirm: false,
     blockers: [],
     typedInSales: heldBy === null ? 3 : 0,
+    nameDifferences: 0,
+    possibleDuplicateRows: 0,
+    result: null,
   };
-  const job: Job = { summary, rows, issues: ISSUES, mapped: new Map() };
+  const job: Job = { summary, rows, issues: ISSUES, consultantsConfirmed: false };
   refresh(job);
   jobs.set(id, job);
   return { ...summary };
@@ -285,20 +352,20 @@ export async function exportIssues(id: number, severity?: Severity): Promise<voi
   );
 }
 
-export async function mapConsultant(
-  id: number,
-  nameInSheet: string,
-  consultantId: number,
-): Promise<ImportSummary> {
+export async function confirmConsultants(id: number, fingerprint: string): Promise<ImportSummary> {
   await delay(400);
   const job = find(id);
-  if (!consultants.some((c) => c.id === consultantId))
-    throw problem(404, 'consultant:not-found', 'Consultant not found.');
-  if (!NAMES_IN_SHEET.includes(nameInSheet))
-    throw problem(422, 'import:name-not-in-import', 'No row in this file has that name.');
-  if (job.mapped.has(nameInSheet))
-    throw problem(409, 'import:name-already-mapped', 'That name is already matched.');
-  job.mapped.set(nameInSheet, consultantId);
+  if (job.summary.state !== 'PREVIEWED')
+    throw problem(409, 'import:not-previewed', 'This import was already confirmed or cancelled.');
+  if (fingerprint !== job.summary.consultants.fingerprint)
+    throw problem(
+      409,
+      'import:consultants-changed',
+      'The consultant list changed. Check it again.',
+    );
+  job.consultantsConfirmed = true;
+  job.summary.consultants.confirmedAt = new Date().toISOString();
+  job.summary.consultants.confirmedBy = job.summary.uploadedBy;
   refresh(job);
   return { ...job.summary };
 }
@@ -315,13 +382,28 @@ export async function confirm(
     throw problem(409, 'import:not-previewed', 'This import was already confirmed or cancelled.');
   if (fileDigest !== s.fileDigest)
     throw problem(409, 'import:digest-mismatch', 'That is not the file you previewed.');
-  if (s.unmappedConsultants.length > 0)
-    throw problem(422, 'import:unmapped-consultants', 'Match every consultant name first.');
+  if (!job.consultantsConfirmed)
+    throw problem(
+      422,
+      'import:consultants-not-confirmed',
+      'Check the consultants found in the workbook and confirm them first.',
+    );
   if (s.replaceRequired && !replaceReason?.trim())
     throw problem(422, 'import:replace-reason-required', 'Give a reason for replacing this week.');
+  const identified = s.consultants.identified;
+  const registered = s.consultants.toRegister;
   s.state = 'COMMITTED';
   s.committedAt = new Date().toISOString();
   s.appliedRows = s.totalRows - s.rejectedRows;
+  s.result = {
+    consultantsIdentified: identified,
+    consultantsRegistered: registered,
+    consultantsMatched: identified - registered,
+    clientsLinked: s.newClients + s.existingClients,
+    transactionsLinked: s.appliedRows,
+    transactionsUnattributed: 0,
+    rowsNeedingAttention: s.rejectedRows,
+  };
   committedWeeks.set(s.weekStarting, s.id);
   refresh(job);
   return {
@@ -340,6 +422,15 @@ export async function confirm(
     replacedImportJobId: s.weekImportedByJobId,
     supersededTransactions: 0,
     replacedTypedInSales: s.typedInSales,
+    consultantsRegistered: s.result.consultantsRegistered,
+    consultantsIdentified: s.result.consultantsIdentified,
+    consultantsMatched: s.result.consultantsMatched,
+    clientsLinked: s.result.clientsLinked,
+    transactionsLinked: s.result.transactionsLinked,
+    transactionsUnattributed: s.result.transactionsUnattributed,
+    rejectedRows: s.rejectedRows,
+    possibleDuplicateRows: 0,
+    rowsNeedingAttention: s.result.rowsNeedingAttention,
   };
 }
 

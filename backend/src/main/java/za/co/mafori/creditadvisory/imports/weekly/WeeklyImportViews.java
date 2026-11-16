@@ -18,11 +18,76 @@ public final class WeeklyImportViews {
                         int totalRows, int newClients, int existingClients, int repeatRows, int rejectedRows,
                         int appliedRows,
                         long errors, long warnings, long infos, BigDecimal quotationTotal, BigDecimal bankedTotal,
-                        List<DaySummary> days, List<UnmappedConsultant> unmappedConsultants, Long weekImportedByJobId,
+                        List<DaySummary> days, ConsultantList consultants, Long weekImportedByJobId,
                         boolean replaceRequired, boolean canConfirm, List<String> blockers,
                         String reconciliationStatus, int reportDifferences,
-                        int nameDifferences, int typedInSales, ConsultantRegistration consultantRegistration,
-                        AssignmentPreview assignment) {
+                        int nameDifferences, int typedInSales, long possibleDuplicateRows,
+                        ConsultantRegistration consultantRegistration, AssignmentPreview assignment,
+                        ImportResult result) {
+        }
+
+        /**
+         * Every consultant found in the workbook, for the admin to verify before the
+         * import can be confirmed (POST /api/imports/{id}/consultants/confirm). No
+         * name is matched by hand: each entry says what confirm will do.
+         *
+         * @param fingerprint SHA-256 of this list; send it back to confirm the list.
+         *                    Null when the import is no longer PREVIEWED.
+         * @param confirmed   the admin confirmed exactly this list
+         */
+        public record ConsultantList(List<ConsultantFound> items, int identified, int existing, int toRegister,
+                        int conflicts, int withoutEmail, String fingerprint, boolean confirmed,
+                        Instant confirmedAt, String confirmedBy) {
+
+                public static ConsultantList none(Instant confirmedAt, String confirmedBy) {
+                        return new ConsultantList(List.of(), 0, 0, 0, 0, 0, null, confirmedAt != null, confirmedAt,
+                                        confirmedBy);
+                }
+        }
+
+        /**
+         * One consultant of the workbook.
+         *
+         * @param outcome       EXISTING (matched), EMAIL_ADDED (matched, and the sheet's
+         *                      email is added to them), NEW (registered at confirm) or
+         *                      CONFLICT (cannot be linked safely: blocks the import)
+         * @param matchedBy     EMAIL or NAME for EXISTING / EMAIL_ADDED, else null
+         * @param namesInSheet  every spelling of this consultant in the sheet
+         * @param email         the email they will have after the import (null: none)
+         * @param rows          sales rows of this consultant in the sheet
+         * @param newClients    rows that create a client for this consultant
+         * @param consultantId  the existing consultant (null for NEW and CONFLICT)
+         * @param attention     NO_EMAIL (no login can be made until an email is
+         *                      added), NOT_ACTIVE (new clients stay unassigned),
+         *                      SIMILAR_NAME (a new consultant whose name looks like
+         *                      another one), CONFLICT
+         * @param reason        why it is a conflict
+         */
+        public record ConsultantFound(String outcome, String matchedBy, List<String> namesInSheet, String email,
+                        int rows, int newClients, Long consultantId, String consultantCode, String consultantName,
+                        String consultantStatus, List<String> attention, String reason,
+                        List<SimilarConsultant> similarConsultants) {
+        }
+
+        /** POST /api/imports/{id}/consultants/confirm. */
+        public record ConfirmConsultantsRequest(
+                        @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Pattern(regexp = "^[0-9a-f]{64}$") String fingerprint) {
+        }
+
+        /**
+         * The import summary of a confirmed import (V26), also returned by confirm.
+         *
+         * @param consultantsMatched   existing consultants the sheet's names matched
+         * @param clientsLinked        distinct clients that got a sale
+         * @param transactionsLinked   sales linked to a client and a consultant
+         * @param transactionsUnattributed sales linked to a client only (no
+         *                             consultant in the sheet)
+         * @param rowsNeedingAttention rejected rows + sales without a consultant +
+         *                             possible duplicate rows
+         */
+        public record ImportResult(int consultantsIdentified, int consultantsRegistered, int consultantsMatched,
+                        int clientsLinked, int transactionsLinked, int transactionsUnattributed,
+                        int rowsNeedingAttention) {
         }
 
         /**
@@ -63,7 +128,7 @@ public final class WeeklyImportViews {
          * @param willBeAssigned             to an active consultant (existing or registered by this import)
          * @param noConsultant               the row has no consultant: the client stays unassigned
          * @param consultantNotActive        the consultant is inactive or suspended: unassigned
-         * @param waitingForConsultant       the name is unmapped or in conflict: resolve it first
+         * @param waitingForConsultant       the name is in conflict: fix the workbook first
          * @param existingClientsWithOtherConsultant existing clients assigned to someone else (not changed)
          */
         public record AssignmentPreview(int newClientRows, int willBeAssigned, int noConsultant,
@@ -76,29 +141,7 @@ public final class WeeklyImportViews {
                         BigDecimal quotation, BigDecimal banked) {
         }
 
-        /**
-         * A consultant name in the sheet that matches nobody.
-         * {@code similarConsultants}: up to 3
-         * existing consultants that look like it (a typo?), to map it to instead of
-         * creating one.
-         */
-        public record UnmappedConsultant(String nameInSheet, int rows, List<SimilarConsultant> similarConsultants) {
-        }
-
         public record SimilarConsultant(long consultantId, String consultantCode, String fullName, String status) {
-        }
-
-        /** POST /api/imports/{id}/new-consultants. */
-        public record NewConsultantsRequest(
-                        // 1-100 names; each is checked by the service (blank, not in the import,
-                        // already mapped)
-                        @jakarta.validation.constraints.NotEmpty @jakarta.validation.constraints.Size(max = 100) List<String> namesInSheet) {
-        }
-
-        public record NewConsultant(long consultantId, String consultantCode, String fullName) {
-        }
-
-        public record NewConsultantsResult(List<NewConsultant> created, ImportSummary summary) {
         }
 
         public record StagedRowView(long id, String sheetName, int rowNumber, LocalDate date, String action,
@@ -123,18 +166,16 @@ public final class WeeklyImportViews {
                         int productLines, int extraValues, int newClients, int clientsAssigned, int employersCreated,
                         int structuresCreated, int paymentTermsCreated, int staleRows, Long replacedImportJobId,
                         int supersededTransactions, int replacedTypedInSales, int consultantsRegistered,
-                        int consultantEmailsAdded, int consultantAliasesAdded, int newClientsUnassigned) {
+                        int consultantEmailsAdded, int consultantAliasesAdded, int newClientsUnassigned,
+                        int consultantsIdentified, int consultantsMatched, int clientsLinked,
+                        int transactionsLinked, int transactionsUnattributed, int rejectedRows,
+                        long possibleDuplicateRows, int rowsNeedingAttention) {
         }
 
         public record ConfirmRequest(
                         @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Pattern(regexp = "^[0-9a-f]{64}$") String fileDigest,
                         @jakarta.validation.constraints.Size(max = 500) String replaceReason,
                         Boolean acceptNameDifferences) {
-        }
-
-        public record ConsultantMappingRequest(
-                        @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 200) String nameInSheet,
-                        @jakarta.validation.constraints.NotNull Long consultantId) {
         }
 
         public record WeekGuess(LocalDate weekStarting) {
