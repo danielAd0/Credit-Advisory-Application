@@ -821,6 +821,76 @@ An employer or product quotation that was deactivated after it was chosen may be
 | 409 | another client already has this number (`urn:credit-advisory:client:duplicate-id-number` - says nothing about that client); stale `version` |
 | 422 | the number is the one the client already has (`urn:credit-advisory:client:id-number-unchanged`) |
 
+### POST /api/clients/{id}/data-export
+
+**POPIA access request** (POPIA section 23): everything the system holds about one client, as a JSON file to
+give the client or the information officer. Read-only; nothing about the client changes.
+
+**Who:** ADMIN only. Everyone else: `403`.
+
+Because the file holds the **full ID number**, the same guards as showing one apply, all **before** the client is
+looked up (so the answer is the same whether the client exists or not):
+
+- the password re-entered in the last few minutes (`POST /api/auth/reauthenticate`), otherwise
+  `403 auth:reauthentication-required`;
+- it counts as one full ID number toward the hourly limit (`429 client:id-reveal-limit`, `Retry-After`).
+
+It is a POST so that nothing caches or prefetches it. No body.
+
+**200** - `Content-Disposition: attachment; filename="client-{id}-data.json"`, `Cache-Control: no-store`:
+
+```json
+{
+  "exportedAt": "2026-11-16T12:00:00+02:00",
+  "exportedBy": "admin@mafori.co.za",
+  "client": {
+    "id": 101, "firstName": "Thandeka", "lastName": "Mokoena", "idNumber": "9001014800089",
+    "email": null, "phone": "0821234567", "workPhone": null, "homePhone": null,
+    "employer": "Sample Municipality", "branch": "Sample Branch North", "fileNumber": null, "fileId": null,
+    "paymentMethod": null, "currentConsultant": { "code": "C002", "name": "Sipho Dlamini" },
+    "createdAt": "...", "updatedAt": "...",
+    "createdByImport": { "importId": 7, "fileName": "Credit Advisory Online Dashboard (...).xlsx", "weekStarting": "2026-09-14" }
+  },
+  "assignmentHistory": [ { "changedAt": "...", "changeType": "TRANSFER", "from": { "code": "C001", "name": "..." },
+                           "to": { "code": "C002", "name": "..." }, "reason": "Handover", "changedBy": "manager@..." } ],
+  "sales": [ { "id": 9001, "transactionDate": "2026-09-15", "consultant": { "code": "C001", "name": "..." },
+               "typedIn": false, "replaced": false, "importedFrom": { "importId": 7, "fileName": "...", "weekStarting": "2026-09-14" },
+               "lines": [], "quotationAmount": 1500.00, "bankedAmount": 1500.00, "employer": "...", "structure": "...",
+               "paymentTerm": "...", "amountToClient": 5000.00, "thirdPartySettlement": null,
+               "primaryStructureBudgetList": null, "primaryStructureLoanAmount": null,
+               "secondaryStructureBudgetList": null, "secondaryStructureLoanAmount": null,
+               "otherColumns": [ { "column": "REFERRED BY", "text": "...", "number": null } ], "createdAt": "..." } ],
+  "creditCases": [ { "id": 3, "title": "Debt review", "status": "OPEN", "openedAt": "...", "closedAt": null,
+                     "createdBy": "consultant@...", "notes": [ { "createdAt": "...", "author": "consultant@...", "note": "..." } ] } ],
+  "importRows": [ { "importedFrom": { "importId": 9, "fileName": "...", "weekStarting": "2026-09-21" },
+                    "sheet": "Monday", "rowNumber": 14, "action": "UPDATE", "outcome": "APPLIED" } ],
+  "accessLog": [ { "at": "...", "action": "CLIENT_VIEWED", "by": "consultant@..." } ]
+}
+```
+
+| Part | What it holds |
+|---|---|
+| `client` | every stored field, with the full ID number, the employer and branch by name, the current consultant, and the weekly spreadsheet that created the client (if any) |
+| `assignmentHistory` | every consultant change: when, from, to, why and by whom |
+| `sales` | every sale, typed in or imported, including ones a spreadsheet later replaced (`replaced: true`), with the consultant who made it at the time, product lines (typed in) or sheet amounts (imported), and spreadsheet columns the app has no field for |
+| `creditCases` | every case and every note, with authors |
+| `importRows` | every weekly-spreadsheet row that was matched to this client |
+| `accessLog` | every audit entry about this client (viewed, ID number shown, changed, transferred, exported): when, what and which staff member - the "who had access" part of an access request |
+
+Staff are named by their work email. Audit details stay out; ask an admin for the audit log itself if needed.
+
+**Rules**
+
+- Audited as `CLIENT_DATA_EXPORTED` (target the client) with counts only, never the contents. It is written after
+  the file is put together, so a file's own `accessLog` shows earlier exports, not itself.
+- The file holds the full ID number and everything else: hand it over as the company's POPIA procedure says,
+  never by ordinary email, and do not keep copies.
+- Correction of wrong details uses the normal edit (`PATCH /api/clients/{id}`) and ID number correction above.
+  Deleting a client's personal details is not built yet: it waits for the business to set a retention period.
+
+**Errors:** `403` not an admin, or the password was not re-entered; `404 client:not-found`;
+`429 client:id-reveal-limit`.
+
 ---
 
 ## 5. Transfers

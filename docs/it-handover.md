@@ -352,6 +352,12 @@ numbers, passwords, codes or keys. Keep logs for as long as company policy says.
 hold names, phone numbers and email addresses in readable form (ID numbers stay encrypted), so treat them
 like the live data. Retention: as the company's POPIA policy says.
 
+**A client asks what we hold about them (POPIA access request):** the information officer checks who is asking,
+then an administrator exports the client's data (`POST /api/clients/{id}/data-export`, or its button once the client page has one): one file
+with every stored detail, the full ID number, every sale, case, note and consultant change, and who looked at
+the client. It is audited. Hand the file over as the POPIA procedure says, never by ordinary email, and do not
+keep copies.
+
 **Updates:**
 1. Back up the database.
 2. Stop the service, replace the jar (and `dist`, if the frontend changed), start the service.
