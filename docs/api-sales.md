@@ -218,7 +218,7 @@ Someone else's sale, or one that does not exist: `404 sale:not-found`.
 }
 ```
 
-`editable` is true while the sale can still be changed or deleted (below): show the Edit and Delete buttons only then.
+`editable` is true while the sale can still be changed or deleted (below): show the Edit and Delete buttons only then, and Delete only to managers and admins.
 
 ### PATCH /api/transactions/{id}
 
@@ -265,8 +265,11 @@ after.
 
 ### DELETE /api/transactions/{id}?version=
 
-Deletes a typed-in sale, with the same who and the same "until its week is imported" rule as PATCH. `version` is
-required (missing: `400`; someone else saved first: `409 conflict:stale-version`).
+Deletes a typed-in sale, with the same "until its week is imported" rule as PATCH. `version` is required (missing:
+`400`; someone else saved first: `409 conflict:stale-version`).
+
+**Who:** MANAGER and ADMIN only (team decision): a consultant who captured a sale by mistake asks a manager to
+delete it. A CONSULTANT gets `403 sale:delete-not-allowed`, even for their own sale; nothing is deleted.
 
 **204** - gone. The row and its lines are removed, so the reports and Sales history drop it straight away; the audit
 log keeps what it was (`SALE_DELETED`: client, consultant, date, number of products and both totals). Errors as for

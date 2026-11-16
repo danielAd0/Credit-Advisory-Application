@@ -34,8 +34,9 @@ import za.co.mafori.creditadvisory.consultant.ConsultantRepository;
  * then on the spreadsheet is the record, and a mistake is fixed there.
  * Deleting removes the row; the audit log keeps what it was.
  *
- * A CONSULTANT can change and delete only their own sales; MANAGER and ADMIN
- * anyone's. Someone else's sale looks missing (404), as clients do.
+ * A CONSULTANT can change only their own sales; MANAGER and ADMIN anyone's.
+ * Only MANAGER and ADMIN delete (team decision): a consultant asks a manager.
+ * Someone else's sale looks missing (404), as clients do.
  */
 @Service
 public class SaleEditService {
@@ -133,6 +134,10 @@ public class SaleEditService {
 
     @Transactional
     public void delete(AppUserPrincipal caller, long id, long version) {
+        if (!ClientQueryService.seesAllClients(caller)) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "sale:delete-not-allowed", "Not allowed",
+                    "Only a manager or an administrator can delete a sale. Ask one to delete it for you.");
+        }
         Row first = visible(caller, id, false);
         checkChangeable(first);
 

@@ -194,7 +194,7 @@ class SaleEditApiTest extends ApiTestBase {
 
         assertThat(thandi.get("/api/transactions/" + siphos).status()).as("looks missing").isEqualTo(404);
         assertThat(patch(thandi, siphos, edit(0, TUESDAY, sameLines(), "")).status()).isEqualTo(404);
-        assertThat(delete(thandi, siphos, 0).status()).isEqualTo(404);
+        assertThat(delete(thandi, siphos, 0).status()).isEqualTo(403);
 
         ApiClient.Response giveAway = patch(thandi, id, edit(0, TUESDAY, sameLines(), ",\"consultantId\":" + siphoId));
         assertThat(giveAway.status()).isEqualTo(403);
@@ -219,7 +219,7 @@ class SaleEditApiTest extends ApiTestBase {
         assertThat(thandi.patch("/api/transactions/" + id, """
                 {"transactionDate":"%s","lines":[%s]}""".formatted(TUESDAY, sameLines())).status())
                 .as("no version").isEqualTo(400);
-        assertThat(delete(thandi, id, 0).status()).isEqualTo(204);
+        assertThat(delete(manager, id, 0).status()).isEqualTo(204);
         assertThat(patch(thandi, id, edit(0, TUESDAY, sameLines(), "")).status()).as("deleted").isEqualTo(404);
     }
 
@@ -247,7 +247,7 @@ class SaleEditApiTest extends ApiTestBase {
         long id = thandisSale();
         assertThat(manager.get("/api/reports/weeks").texts("$.weeks[*].weekStarting")).containsExactly("2026-09-14");
 
-        ApiClient.Response gone = delete(thandi, id, 0);
+        ApiClient.Response gone = delete(manager, id, 0);
 
         assertThat(gone.status()).as(gone.body()).isEqualTo(204);
         assertThat(count("select count(*) from client_transactions")).isZero();
@@ -257,7 +257,20 @@ class SaleEditApiTest extends ApiTestBase {
                 "select metadata::text from audit_logs where action = 'SALE_DELETED' and target_id = ?",
                 String.class, String.valueOf(id));
         assertThat(audit).contains("1800.50", TUESDAY);
-        assertThat(delete(thandi, id, 0).status()).as("already gone").isEqualTo(404);
+        assertThat(delete(manager, id, 0).status()).as("already gone").isEqualTo(404);
+    }
+
+    @Test
+    void onlyAManagerOrAdminDeletes() {
+        long id = thandisSale();
+
+        ApiClient.Response refused = delete(thandi, id, 0);
+
+        assertThat(refused.status()).as("not even their own sale").isEqualTo(403);
+        assertThat(refused.text("$.type")).isEqualTo("urn:credit-advisory:sale:delete-not-allowed");
+        assertThat(count("select count(*) from client_transactions")).isEqualTo(1);
+        assertThat(count("select count(*) from audit_logs where action = 'SALE_DELETED'")).isZero();
+        assertThat(delete(manager, id, 0).status()).isEqualTo(204);
     }
 
     // ---------- once the spreadsheet is in ----------
