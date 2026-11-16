@@ -1,7 +1,5 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import { detailOf, features } from '../api';
-
-/** Bits shared by the weekly reports and the month / date-range reports. */
+import { useEffect, useState } from 'react';
+import { detailOf } from '../api';
 
 export const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -15,7 +13,6 @@ export const rand = (n: number, decimals = 0) =>
 
 export const day = (iso: string) => new Date(iso).toLocaleDateString('en-ZA');
 
-/** "1–30 Sep 2026", "28 Sep–4 Oct 2026" or "29 Dec 2026–4 Jan 2027". */
 export function periodLabel(from: string, to: string) {
   const a = new Date(from + 'T00:00:00');
   const b = new Date(to + 'T00:00:00');
@@ -62,45 +59,9 @@ export function useReport<T>(load: () => Promise<T>, deps: unknown[]) {
     return () => {
       live = false;
     };
+    // `load` is a new function on every render; `key` says when the inputs really changed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
   const current = state.key === key;
   return { value: current ? state.value : null, error: current ? state.error : null };
-}
-
-export const Failed = ({ message }: { message: string }) => (
-  <p className="alert error" role="alert">
-    {message}
-  </p>
-);
-
-export function Download({ href }: { href: string }) {
-  if (!features.reportExport) return null;
-  return (
-    <a className="btn primary rp-download" href={href}>
-      Download as CSV
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-        <path d="M12 4v14M6 12l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    </a>
-  );
-}
-
-export interface KpiItem {
-  label: string;
-  value: ReactNode;
-  note: ReactNode;
-}
-
-export function KpiRow({ items }: { items: KpiItem[] }) {
-  return (
-    <div className="rp-kpis">
-      {items.map((k) => (
-        <div key={k.label} className="rp-kpi">
-          <span className="rp-kpi-label">{k.label}</span>
-          <strong>{k.value}</strong>
-          <span className="rp-kpi-note">{k.note}</span>
-        </div>
-      ))}
-    </div>
-  );
 }

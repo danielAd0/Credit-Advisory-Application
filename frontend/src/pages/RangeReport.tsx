@@ -8,22 +8,8 @@ import {
   type RangeProductsResponse,
   type RangeSummaryResponse,
 } from '../api';
-import {
-  compact,
-  DAY_NAMES,
-  day,
-  Failed,
-  KpiRow,
-  periodLabel,
-  rand,
-  useReport,
-} from './reportShared';
-
-/**
- * Reports for a month or any date range (GET /api/reports/range/...).
- * Every sale counts on its own date, so a week that runs from September into
- * October is split between the two months.
- */
+import { Failed, KpiRow } from './reportParts';
+import { compact, DAY_NAMES, day, periodLabel, rand, useReport } from './reportShared';
 
 export type RangeTab = 'summary' | 'consultants' | 'products' | 'budget';
 
@@ -68,7 +54,6 @@ export function RangeKpis({ r, label }: { r: RangeSummaryResponse; label: string
   );
 }
 
-/** One bar pair per day for up to a month, otherwise one per week. */
 export function RangeChart({ r }: { r: RangeSummaryResponse }) {
   const byDay = r.days.length <= 31;
   const items = byDay

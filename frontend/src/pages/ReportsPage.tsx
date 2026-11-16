@@ -22,18 +22,8 @@ import {
   RangeProducts,
   RangeSummary,
 } from './RangeReport';
-import {
-  compact,
-  DAY_NAMES,
-  day,
-  Download,
-  Failed,
-  KpiRow,
-  monthLabel,
-  periodLabel,
-  rand,
-  useReport,
-} from './reportShared';
+import { Download, Failed, KpiRow } from './reportParts';
+import { compact, DAY_NAMES, day, monthLabel, periodLabel, rand, useReport } from './reportShared';
 import './reports.css';
 
 type Tab = 'summary' | 'consultants' | 'products' | 'budget';
@@ -397,7 +387,7 @@ function Products({
     data
       .listConsultants()
       .then((r) => live && setPeople(r))
-      .catch(() => undefined); // the filter is optional
+      .catch(() => undefined);
     return () => {
       live = false;
     };
@@ -485,7 +475,6 @@ const MAX_DAYS = 366;
 const daysBetween = (from: string, to: string) =>
   Math.round((Date.parse(to + 'T00:00:00Z') - Date.parse(from + 'T00:00:00Z')) / 86_400_000) + 1;
 
-/** Why a custom range can't be shown, or null when it's fine. */
 function rangeProblem(from: string, to: string) {
   if (!DATE.test(from) || !DATE.test(to)) return 'Choose a start and an end date.';
   if (to < from) return 'The end date is before the start date.';
@@ -497,8 +486,7 @@ export default function ReportsPage() {
   const session = useSession();
   const manager = hasAnyRole(session, ['ADMIN', 'MANAGER']);
   const [params] = useSearchParams();
-  // Links can open a period: ?week=2026-10-05, ?day=2026-10-07, ?month=2026-10,
-  // ?from=...&to=..., or just ?period=day / month / custom.
+
   const [mode, setMode] = useState<Mode>(() =>
     (params.get('from') && params.get('to')) || params.get('period') === 'custom'
       ? 'custom'
@@ -570,7 +558,6 @@ export default function ReportsPage() {
     };
   }, [mode, months]);
 
-  // The period the month and custom modes report on.
   const chosenMonth = months?.find((m) => m.month === month);
   const range =
     mode === 'month' && chosenMonth

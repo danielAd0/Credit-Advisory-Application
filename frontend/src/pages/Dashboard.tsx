@@ -78,6 +78,12 @@ export default function Dashboard() {
   const [week, setWeek] = useState<WeekState>({ kind: 'loading' });
   const [current, setCurrent] = useState<CurrentTarget>({ kind: 'hidden' });
 
+  const selectWeek = (weekStarting: string) => {
+    if (weekStarting === selected) return;
+    setSelected(weekStarting);
+    setWeek({ kind: 'loading' });
+  };
+
   useEffect(() => {
     let live = true;
     data
@@ -99,15 +105,13 @@ export default function Dashboard() {
     };
   }, []);
 
-  // Today's target sits next to the week's own one, so an old week's target
-  // isn't mistaken for the one in force now. Targets are for managers only.
   useEffect(() => {
     if (!manager) return;
     let live = true;
     targets
       .list()
       .then((r) => live && setCurrent({ kind: 'ready', target: r.current, today: r.today }))
-      .catch(() => undefined); // optional extra
+      .catch(() => undefined);
     return () => {
       live = false;
     };
@@ -116,7 +120,6 @@ export default function Dashboard() {
   useEffect(() => {
     if (!selected) return;
     let live = true;
-    setWeek({ kind: 'loading' });
     reports
       .summary(selected)
       .then((s) => live && setWeek({ kind: 'ready', summary: s }))
@@ -226,7 +229,7 @@ export default function Dashboard() {
           <div className="dash-top">
             <WeekSnapshot
               state={week}
-              choice={{ weeks, selected, onSelect: setSelected }}
+              choice={{ weeks, selected, onSelect: selectWeek }}
               current={current}
             />
             <StatusTable rows={rows} own={own} />
