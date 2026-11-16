@@ -100,6 +100,28 @@ app.idnumber.encryption-key=<second key>
 .\mvnw.cmd clean test
 ```
 
+7. **Demo data (optional).** For a demo or a walkthrough, add this line to your
+   `application-local.properties` and start the backend:
+
+```properties
+app.dev.demo-data=true
+```
+
+   It makes three consultants (`lerato.demo@example.com`, `sipho.demo@example.com`,
+   `anele.demo@example.com`), a manager (`manager.demo@example.com`), 30 clients, about three
+   months of sales, six credit cases, one transfer and a sales target (unless you already set one).
+   Every demo login uses your `app.dev.admin-password` (or `app.dev.demo-password` if you set one),
+   and does not have to choose a new password first. Everything in it is made up, including the
+   ID numbers.
+   - A new database has no products or employers (see "4. Frontend"), so the demo adds the seven
+     products it sells and three `DEMO EMPLOYER` employers when they are missing.
+   - It runs once: if the consultant `DEMO01` exists, it does nothing. To start again, reset your
+     local database.
+   - It only exists in the **local** profile. Production never has it, and the tests check it
+     still works (`DemoDataTest`, `DemoDataEmptyInstallTest`).
+   - Weeks you already imported from a spreadsheet get no typed-in demo sales (the app would
+     refuse them).
+
 ### 4. Frontend
 
 Run from the `frontend` folder:
