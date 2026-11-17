@@ -83,6 +83,7 @@ Two-step sign-in is off locally (`app.mfa.required=false`), so nobody is asked f
 | # | Do | Expect |
 |---|---|---|
 | 3.1 | Open Test Walkthrough, find the small sale from 2.8 and Delete it | Gone everywhere. There is **no** Edit for the manager on the consultant's sale (only the owner edits; the API answers 403 `sale:edit-not-allowed`) |
+| 3.1b | On the 4 Aug sale, press **Flag for correction** with the note "Check the Credit repair amount". Window 2 (consultant): open the client | The sale shows "Needs correction" with the note, also in Sales history with "Needs correction only" ticked. The consultant opens Edit, sees the note, saves without changes: the flag is gone (they checked it). The totals do not change |
 | 3.2 | Reports, week of 3 Aug 2026 | The week shows, with the same quotation and banked totals as Sales history in 2.5 / 2.7 (2000.00 / 1500.00) |
 | 3.3 | Sales history, same range, filter by TEST CONSULTANT ONE then TWO | ONE shows the sale; TWO shows nothing |
 | 3.4 | Window 2 (consultant): Sales history | Only their own sales; no consultant filter, or one that only offers themselves |
@@ -131,7 +132,7 @@ Two-step sign-in is off locally (`app.mfa.required=false`), so nobody is asked f
 | # | Do | Expect |
 |---|---|---|
 | 8.1 | Open Test Walkthrough, press Show ID number | Asks for the password first, then shows the full number |
-| 8.2 | Audit log | Entries for: the accounts, the client, SALE_CAPTURED SALE_EDITED (2.7), SALE_DELETED (3.1), the import, the reassignment, the suspension, the ID number shown, the target |
+| 8.2 | Audit log | Entries for: the accounts, the client, SALE_CAPTURED, SALE_EDITED (2.7), SALE_FLAGGED (3.1b), SALE_DELETED (3.1), the import, the reassignment, the suspension, the ID number shown, the target |
 | 8.3 | Search the audit log entries' details for `9001019001089` | **Never** there: no full ID number in any entry |
 | 8.4 | Browser developer tools (F12) > Console, on a few pages | No red errors. Network tab: no full ID number in any URL |
 | 8.5 | Open Test Walkthrough, press **Export client data** (if Jack's button is in) | Asks for the password first (or uses the one from 8.1 if within 5 minutes), then downloads `client-<id>-data.json`: details with the full ID number, sales, assignment history (the 6.1 move), and an access log that includes 8.1. Managers and consultants do not get the button |

@@ -3,8 +3,11 @@ package za.co.mafori.creditadvisory.sale;
 import static za.co.mafori.creditadvisory.audit.AuditLogWriter.meta;
 
 import java.math.BigDecimal;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
@@ -322,8 +325,27 @@ public class SaleService {
 
     // ---------- reading sales back ----------
 
-    private SavedSale load(long saleId) {
+    /**
+     * One sale as POST and the client's list return it (also used by the flag
+     * calls).
+     */
+    SavedSale load(long saleId) {
         return loadAll(List.of(saleId)).get(0);
+    }
+
+    /**
+     * The flag in columns i (note), i + 1 (the flagger's email) and i + 2 (when),
+     * or null. A flag only shows while the sale can still change: once its week
+     * is imported the spreadsheet is the record, so a leftover flag means
+     * nothing.
+     */
+    static SavedSale.Flag flagOf(ResultSet rs, int i, boolean changeable) throws SQLException {
+        String note = rs.getString(i);
+        if (note == null || !changeable) {
+            return null;
+        }
+        OffsetDateTime at = rs.getObject(i + 2, OffsetDateTime.class);
+        return new SavedSale.Flag(note, rs.getString(i + 1), at == null ? null : at.toInstant());
     }
 
     /** The sales with these ids, in the same order, with two queries in all. */
@@ -346,8 +368,11 @@ public class SaleService {
         Map<Long, SavedSale> byId = new HashMap<>();
         named.query("""
                 select t.id, t.client_id, t.consultant_id, t.transaction_date, w.week_starting, t.day_of_week,
-                       t.superseded_by_import_job_id is not null, t.import_job_id is null
-                from client_transactions t left join reporting_weeks w on w.id = t.reporting_week_id
+                       t.superseded_by_import_job_id is not null, t.import_job_id is null,
+                       t.flag_note, f.email, t.flagged_at
+                from client_transactions t
+                         left join reporting_weeks w on w.id = t.reporting_week_id
+                         left join users f on f.id = t.flagged_by_user_id
                 where t.id in (:ids)
                 """, params, rs -> {
             long id = rs.getLong(1);
@@ -362,9 +387,12 @@ public class SaleService {
                     banked = banked.add(line.amount());
                 }
             }
+            boolean replaced = rs.getBoolean(7);
+            boolean typedIn = rs.getBoolean(8);
             byId.put(id, new SavedSale(id, rs.getLong(2), rs.getObject(3, Long.class),
                     rs.getObject(4, LocalDate.class), rs.getObject(5, LocalDate.class),
-                    rs.getObject(6, Integer.class), lines, quotation, banked, rs.getBoolean(7), rs.getBoolean(8)));
+                    rs.getObject(6, Integer.class), lines, quotation, banked, replaced, typedIn,
+                    flagOf(rs, 9, typedIn && !replaced)));
         });
         return ids.stream().map(byId::get).toList();
     }

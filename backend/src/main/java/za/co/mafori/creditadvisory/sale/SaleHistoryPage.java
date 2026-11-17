@@ -12,20 +12,24 @@ import java.util.List;
  * and bankedTotal are for the whole date range, not only this page.
  */
 public record SaleHistoryPage(List<Row> items, int page, int size, long totalItems, int totalPages,
-        BigDecimal quotationTotal, BigDecimal bankedTotal) {
+                BigDecimal quotationTotal, BigDecimal bankedTotal) {
 
-    /**
-     * One sale. Never an ID number: the client is shown by name and linked by id.
-     *
-     * @param consultantName null for a sale without a consultant (an imported row
-     *                       whose name
-     *                       matched nobody)
-     * @param typedIn        true for a sale typed into the app, false for one from
-     *                       a weekly
-     *                       register import
-     */
-    public record Row(long id, long clientId, Long consultantId, LocalDate transactionDate,
-            LocalDate weekStarting, Integer dayOfWeek, List<SavedSale.Line> lines, BigDecimal quotationTotal,
-            BigDecimal bankedTotal, boolean typedIn, String clientName, String consultantName) {
-    }
+        /**
+         * One sale. Never an ID number: the client is shown by name and linked by id.
+         *
+         * @param consultantName null for a sale without a consultant (an imported row
+         *                       whose name
+         *                       matched nobody)
+         * @param typedIn        true for a sale typed into the app, false for one from
+         *                       a weekly
+         *                       register import
+         * @param flag           a manager's request to correct it, or null (see
+         *                       SavedSale)
+         */
+        public record Row(long id, long clientId, Long consultantId, LocalDate transactionDate,
+                        LocalDate weekStarting, Integer dayOfWeek, List<SavedSale.Line> lines,
+                        BigDecimal quotationTotal,
+                        BigDecimal bankedTotal, boolean typedIn, String clientName, String consultantName,
+                        SavedSale.Flag flag) {
+        }
 }
