@@ -37,16 +37,29 @@ import za.co.mafori.creditadvisory.common.web.ApiException;
  * consultant asks a manager to delete. Everyone signed in can read the sales
  * they can see; a consultant's view of someone else's sale is a 404, as with
  * clients.
+ *
+ * A manager who spots a mistake flags the sale for correction with a note
+ * (V28). The consultant sees it, and saving their change clears it; a manager
+ * can also withdraw it.
  */
 @Service
 public class SaleEditService {
 
+    /**
+     * The longest note a flag may carry, as agreed with the front end (its
+     * counter shows 300). The column (V28) allows 1000, so this can grow
+     * without a migration.
+     */
+    static final int MAX_FLAG_NOTE = 300;
+
     private final JdbcTemplate jdbc;
     private final AuditLogWriter audit;
+    private final SaleService sales;
 
-    public SaleEditService(JdbcTemplate jdbc, AuditLogWriter audit) {
+    public SaleEditService(JdbcTemplate jdbc, AuditLogWriter audit, SaleService sales) {
         this.jdbc = jdbc;
         this.audit = audit;
+        this.sales = sales;
     }
 
     // ---------- GET /api/transactions/{id} ----------
@@ -96,7 +109,21 @@ public class SaleEditService {
 
         List<String> changed = changes(before, request, consultantId);
         if (changed.isEmpty()) {
-            return before;
+            if (before.flag() == null) {
+                return before;
+            }
+            // Saved as it was: the consultant checked the sale and it is right. That
+            // answers the manager's request, so the flag clears; the sale itself and
+            // its version stay as they were.
+            jdbc.update("""
+                    update client_transactions
+                    set flag_note = null, flagged_by_user_id = null, flagged_at = null
+                    where id = ?
+                    """, id);
+            audit.record("SALE_EDITED", "TRANSACTION", id, meta("clientId", before.clientId(), "consultantId",
+                    before.consultantId(), "transactionDate", before.transactionDate().toString(), "changed",
+                    List.of(), "flagCleared", true));
+            return load(id);
         }
 
         int updated = jdbc.update("""
@@ -104,7 +131,8 @@ public class SaleEditService {
                 set consultant_id = ?, transaction_date = ?, reporting_week_id = ?, day_of_week = ?,
                     employer_id = ?, structure_id = ?, payment_term_id = ?, amount_to_client = ?,
                     third_party_settlement = ?, primary_structure_budget_list = ?, primary_structure_loan_amount = ?,
-                    secondary_structure_budget_list = ?, secondary_structure_loan_amount = ?, version = version + 1
+                    secondary_structure_budget_list = ?, secondary_structure_loan_amount = ?, version = version + 1,
+                    flag_note = null, flagged_by_user_id = null, flagged_at = null
                 where id = ? and version = ?
                 """, consultantId, request.transactionDate(), weeks.get(mondayOf(request.transactionDate())),
                 request.transactionDate().getDayOfWeek().getValue(), request.employerId(), request.structureId(),
@@ -130,8 +158,67 @@ public class SaleEditService {
         audit.record("SALE_EDITED", "TRANSACTION", id, meta("clientId", after.clientId(), "consultantId",
                 after.consultantId(), "transactionDate", after.transactionDate().toString(), "changed", changed,
                 "quotationTotalBefore", before.quotationTotal(), "quotationTotalAfter", after.quotationTotal(),
-                "bankedTotalBefore", before.bankedTotal(), "bankedTotalAfter", after.bankedTotal()));
+                "bankedTotalBefore", before.bankedTotal(), "bankedTotalAfter", after.bankedTotal(),
+                "flagCleared", before.flag() != null));
         return after;
+    }
+
+    // ---------- POST /api/transactions/{id}/flag ----------
+
+    /**
+     * Asks the sale's consultant to correct it. A sale has one note at a time:
+     * flagging it again replaces the note. The note itself never goes into the
+     * audit log (it may name the client), only its length.
+     */
+    @Transactional
+    public SavedSale flag(AppUserPrincipal caller, long id, String note) {
+        requireManager(caller);
+        String text = note == null ? "" : note.strip();
+        if (text.isEmpty() || text.length() > MAX_FLAG_NOTE) {
+            throw ApiException.unprocessable("sale:flag-note-invalid", "Note required",
+                    "Tell the consultant what to correct, in up to " + MAX_FLAG_NOTE + " characters.");
+        }
+        Row sale = visible(caller, id, true);
+        checkChangeable(sale);
+        Boolean wasFlagged = jdbc.queryForObject("select flag_note is not null from client_transactions where id = ?",
+                Boolean.class, id);
+        jdbc.update("""
+                update client_transactions
+                set flag_note = ?, flagged_by_user_id = ?, flagged_at = now()
+                where id = ?
+                """, text, caller.userId(), id);
+        audit.record("SALE_FLAGGED", "TRANSACTION", id, meta("clientId", sale.clientId(), "consultantId",
+                sale.consultantId(), "noteLength", text.length(), "replacedEarlierFlag",
+                Boolean.TRUE.equals(wasFlagged)));
+        return sales.load(id);
+    }
+
+    // ---------- DELETE /api/transactions/{id}/flag ----------
+
+    /**
+     * Withdraws the flag. Nothing to withdraw is fine: nothing changes and nothing
+     * is audited.
+     */
+    @Transactional
+    public void unflag(AppUserPrincipal caller, long id) {
+        requireManager(caller);
+        Row sale = visible(caller, id, true);
+        int cleared = jdbc.update("""
+                update client_transactions
+                set flag_note = null, flagged_by_user_id = null, flagged_at = null
+                where id = ? and flag_note is not null
+                """, id);
+        if (cleared > 0) {
+            audit.record("SALE_FLAG_WITHDRAWN", "TRANSACTION", id,
+                    meta("clientId", sale.clientId(), "consultantId", sale.consultantId()));
+        }
+    }
+
+    private static void requireManager(AppUserPrincipal caller) {
+        if (!ClientQueryService.seesAllClients(caller)) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "sale:flag-not-allowed", "Not allowed",
+                    "Only a manager or an administrator can flag a sale for correction.");
+        }
     }
 
     // ---------- DELETE /api/transactions/{id}?version= ----------
@@ -164,19 +251,20 @@ public class SaleEditService {
 
     /** What the rules need from the row. */
     private record Row(long id, Long consultantId, LocalDate transactionDate, boolean typedIn, boolean replaced,
-            long version, Long employerId, Long paymentTermId, Long structureId) {
+            long version, Long employerId, Long paymentTermId, Long structureId, long clientId) {
     }
 
     private Optional<Row> row(long id, boolean lock) {
         return jdbc.query("""
                 select id, consultant_id, transaction_date, import_job_id is null,
-                       superseded_by_import_job_id is not null, version, employer_id, payment_term_id, structure_id
+                       superseded_by_import_job_id is not null, version, employer_id, payment_term_id, structure_id,
+                       client_id
                 from client_transactions
                 where id = ?
                 """ + (lock ? "for update" : ""),
                 (rs, n) -> new Row(rs.getLong(1), rs.getObject(2, Long.class), rs.getObject(3, LocalDate.class),
                         rs.getBoolean(4), rs.getBoolean(5), rs.getLong(6), rs.getObject(7, Long.class),
-                        rs.getObject(8, Long.class), rs.getObject(9, Long.class)),
+                        rs.getObject(8, Long.class), rs.getObject(9, Long.class), rs.getLong(10)),
                 id).stream().findFirst();
     }
 
@@ -414,8 +502,11 @@ public class SaleEditService {
                        t.amount_to_client, t.third_party_settlement, t.payment_term_id, t.employer_id, t.structure_id,
                        t.primary_structure_budget_list, t.primary_structure_loan_amount,
                        t.secondary_structure_budget_list, t.secondary_structure_loan_amount,
-                       t.import_job_id is null, t.superseded_by_import_job_id is not null, t.version
-                from client_transactions t left join reporting_weeks w on w.id = t.reporting_week_id
+                       t.import_job_id is null, t.superseded_by_import_job_id is not null, t.version,
+                       t.flag_note, f.email, t.flagged_at
+                from client_transactions t
+                         left join reporting_weeks w on w.id = t.reporting_week_id
+                         left join users f on f.id = t.flagged_by_user_id
                 where t.id = ?
                 """, (rs, n) -> {
             boolean typedIn = rs.getBoolean(16);
@@ -425,7 +516,7 @@ public class SaleEditService {
                     lines, quotationTotal, bankedTotal, rs.getBigDecimal(7), rs.getBigDecimal(8),
                     rs.getObject(9, Long.class), rs.getObject(10, Long.class), rs.getObject(11, Long.class),
                     rs.getString(12), rs.getBigDecimal(13), rs.getString(14), rs.getBigDecimal(15), typedIn, replaced,
-                    typedIn && !replaced, rs.getLong(18));
+                    typedIn && !replaced, rs.getLong(18), SaleService.flagOf(rs, 19, typedIn && !replaced));
         }, id);
     }
 }

@@ -11,28 +11,30 @@ import java.util.List;
  * @param editable true while the sale can still be changed or deleted: typed
  *                 in, and its week's spreadsheet not imported yet
  * @param version  send it back with PATCH and DELETE
+ * @param flag     a manager's request to correct it, or null (see SavedSale)
  */
 public record SaleDetail(
-        long id,
-        long clientId,
-        Long consultantId,
-        LocalDate transactionDate,
-        LocalDate weekStarting,
-        Integer dayOfWeek,
-        List<SavedSale.Line> lines,
-        BigDecimal quotationTotal,
-        BigDecimal bankedTotal,
-        BigDecimal amountToClient,
-        BigDecimal thirdPartySettlement,
-        Long paymentTermId,
-        Long employerId,
-        Long structureId,
-        String primaryStructureBudgetList,
-        BigDecimal primaryStructureLoanAmount,
-        String secondaryStructureBudgetList,
-        BigDecimal secondaryStructureLoanAmount,
-        boolean typedIn,
-        boolean replaced,
-        boolean editable,
-        long version) {
+                long id,
+                long clientId,
+                Long consultantId,
+                LocalDate transactionDate,
+                LocalDate weekStarting,
+                Integer dayOfWeek,
+                List<SavedSale.Line> lines,
+                BigDecimal quotationTotal,
+                BigDecimal bankedTotal,
+                BigDecimal amountToClient,
+                BigDecimal thirdPartySettlement,
+                Long paymentTermId,
+                Long employerId,
+                Long structureId,
+                String primaryStructureBudgetList,
+                BigDecimal primaryStructureLoanAmount,
+                String secondaryStructureBudgetList,
+                BigDecimal secondaryStructureLoanAmount,
+                boolean typedIn,
+                boolean replaced,
+                boolean editable,
+                long version,
+                SavedSale.Flag flag) {
 }

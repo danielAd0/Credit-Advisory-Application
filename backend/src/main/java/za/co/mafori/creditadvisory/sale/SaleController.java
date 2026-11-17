@@ -81,9 +81,10 @@ public class SaleController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(required = false) Long consultantId,
+            @RequestParam(defaultValue = "false") boolean flagged,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "25") int size) {
-        return history.history(caller, from, to, consultantId, page, size);
+        return history.history(caller, from, to, consultantId, flagged, page, size);
     }
 
     /** One sale with every field, for the edit form. */
@@ -107,6 +108,23 @@ public class SaleController {
     public ResponseEntity<Void> delete(@AuthenticationPrincipal AppUserPrincipal caller, @PathVariable long id,
             @RequestParam long version) {
         edits.delete(caller, id, version);
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * MANAGER / ADMIN: asks the consultant to correct a typed-in sale. Returns
+     * the sale with its flag.
+     */
+    @PostMapping("/api/transactions/{id}/flag")
+    public SavedSale flag(@AuthenticationPrincipal AppUserPrincipal caller, @PathVariable long id,
+            @RequestBody FlagSaleRequest request) {
+        return edits.flag(caller, id, request.note());
+    }
+
+    /** MANAGER / ADMIN: withdraws the flag; 204, also when there was none. */
+    @DeleteMapping("/api/transactions/{id}/flag")
+    public ResponseEntity<Void> unflag(@AuthenticationPrincipal AppUserPrincipal caller, @PathVariable long id) {
+        edits.unflag(caller, id);
         return ResponseEntity.noContent().build();
     }
 }

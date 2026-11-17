@@ -105,13 +105,15 @@ and answers `200` with the sale saved the first time.
   "quotationTotal": 1800.50,
   "bankedTotal": 1500.00,
   "replaced": false,
-  "typedIn": true
+  "typedIn": true,
+  "flag": null
 }
 ```
 
 `quotationTotal` and `bankedTotal` follow each product's "counts toward" settings, the same as the reports.
 `replaced` is `true` once that week's spreadsheet has been imported. `typedIn` is `false` for a sale from an
-import (only in `GET /api/transactions`). The response never holds an ID number or other client details.
+import (only in `GET /api/transactions`). `flag` is a manager's request to correct the sale, or `null`
+(`POST /api/transactions/{id}/flag` below). The response never holds an ID number or other client details.
 
 **Errors**
 
@@ -161,6 +163,7 @@ range, a page at a time, with the totals of the whole range.
 |---|---|
 | `from`, `to` | required dates (`2026-09-14`), both inclusive. Missing or not a date: `400`. `from` after `to`: `400 sale:invalid-date-range` |
 | `consultantId` | optional, MANAGER / ADMIN only. Unknown id: `404 consultant:not-found` |
+| `flagged` | optional, `true` for only the sales flagged for correction ("Needs correction only"). The totals are then for those sales |
 | `page`, `size` | default `0` and `25`; `size` at most 100 |
 
 Which sales, and their totals, come from `v_transaction_totals`, **the same as the Reports page**, so a week here
@@ -182,7 +185,9 @@ always adds up to the same figures there:
       "lines": [ { "productId": 1, "name": "Combo", "amount": 1500.00,
                    "countsTowardQuotation": true, "countsTowardBanked": true } ],
       "quotationTotal": 1500.00, "bankedTotal": 1500.00, "typedIn": true,
-      "clientName": "Thandi Mokoena", "consultantName": "Sipho Dlamini"
+      "clientName": "Thandi Mokoena", "consultantName": "Sipho Dlamini",
+      "flag": { "note": "The Combo amount looks wrong.", "flaggedBy": "manager@mafori.co.za",
+                "flaggedAt": "2026-09-16T08:15:00Z" }
     }
   ],
   "page": 0, "size": 25, "totalItems": 1, "totalPages": 1,
@@ -214,7 +219,8 @@ Someone else's sale, or one that does not exist: `404 sale:not-found`.
   "paymentTermId": 1, "employerId": null, "structureId": 2,
   "primaryStructureBudgetList": "Vital", "primaryStructureLoanAmount": 2500.00,
   "secondaryStructureBudgetList": null, "secondaryStructureLoanAmount": null,
-  "typedIn": true, "replaced": false, "editable": true, "version": 0
+  "typedIn": true, "replaced": false, "editable": true, "version": 0,
+  "flag": null
 }
 ```
 
@@ -253,6 +259,9 @@ changes: delete the sale and capture it again), plus the `version` from GET:
 **200** - the sale as GET returns it, with `version` one higher. Sending the sale back unchanged saves nothing and
 returns it as it is (same `version`, nothing audited).
 
+**A flagged sale:** any save by its consultant clears the flag, also an unchanged one. An unchanged save means "I
+checked it and it is right": the flag clears, the sale and its `version` stay as they were.
+
 | Status | Type | When |
 |---|---|---|
 | 403 | `sale:edit-not-allowed` | a MANAGER or ADMIN, or anyone but the sale's own consultant |
@@ -265,7 +274,8 @@ returns it as it is (same `version`, nothing audited).
 | 422 | `sale:date-in-future` and the POST ones | as for POST |
 
 Audited as `SALE_EDITED`: client, consultant, date, the names of the fields that changed, and both totals before and
-after.
+after, plus `flagCleared` (true when the save cleared a flag; an unchanged save of a flagged sale is audited with
+`changed: []`).
 
 ### DELETE /api/transactions/{id}?version=
 
@@ -278,6 +288,48 @@ delete it. A CONSULTANT gets `403 sale:delete-not-allowed`, even for their own s
 **204** - gone. The row and its lines are removed, so the reports and Sales history drop it straight away; the audit
 log keeps what it was (`SALE_DELETED`: client, consultant, date, number of products and both totals). Errors as for
 PATCH.
+
+### POST /api/transactions/{id}/flag
+
+Asks the consultant to correct a sale. Only the consultant who owns a sale may change it, so a manager who spots a
+mistake leaves a note instead. The consultant sees it on the client page, in Sales history and on the edit form;
+saving their change clears it (PATCH above).
+
+**Who:** MANAGER and ADMIN. A CONSULTANT gets `403 sale:flag-not-allowed`.
+
+**Body:** `{ "note": "The Combo amount looks wrong. Check it against the client form." }`. The note is trimmed; it
+must not be blank and may hold up to 300 characters.
+
+**200** - the sale, shaped like the POST answer, with its flag:
+
+```json
+"flag": { "note": "The Combo amount looks wrong. Check it against the client form.",
+          "flaggedBy": "manager@mafori.co.za", "flaggedAt": "2026-09-16T08:15:00Z" }
+```
+
+`flaggedBy` is the email of the manager or administrator who asked. A sale has one flag at a time: flagging it again
+replaces the note, who asked and when. Flagging does not change the sale or its `version`.
+
+Only a sale that can still change can be flagged: typed in, its week's spreadsheet not imported yet. Once the week is
+imported the spreadsheet is the record, so a flag left on a replaced sale is no longer shown anywhere (`flag: null`).
+
+| Status | Type | When |
+|---|---|---|
+| 403 | `sale:flag-not-allowed` | a CONSULTANT |
+| 404 | `sale:not-found` | no such sale |
+| 409 | `sale:imported`, `sale:replaced` | as for PATCH |
+| 422 | `sale:flag-note-invalid` | the note is missing, blank, or longer than 300 characters |
+
+**Audit:** `SALE_FLAGGED`, with `clientId`, `consultantId`, `noteLength` and `replacedEarlierFlag`. Never the note
+itself: it may name the client.
+
+### DELETE /api/transactions/{id}/flag
+
+Withdraws the flag, for example when the manager was wrong.
+
+**Who:** MANAGER and ADMIN (`403 sale:flag-not-allowed` for a CONSULTANT). **204** - also when the sale has no
+flag (nothing changes then). `404 sale:not-found` for a sale that does not exist. Audited as `SALE_FLAG_WITHDRAWN`
+(`clientId`, `consultantId`) when there was a flag to withdraw.
 
 ## 4. Not built yet
 
