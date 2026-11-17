@@ -298,7 +298,7 @@ saving their change clears it (PATCH above).
 **Who:** MANAGER and ADMIN. A CONSULTANT gets `403 sale:flag-not-allowed`.
 
 **Body:** `{ "note": "The Combo amount looks wrong. Check it against the client form." }`. The note is trimmed; it
-must not be blank and may hold up to 1000 characters.
+must not be blank and may hold up to 300 characters.
 
 **200** - the sale, shaped like the POST answer, with its flag:
 
@@ -318,7 +318,7 @@ imported the spreadsheet is the record, so a flag left on a replaced sale is no 
 | 403 | `sale:flag-not-allowed` | a CONSULTANT |
 | 404 | `sale:not-found` | no such sale |
 | 409 | `sale:imported`, `sale:replaced` | as for PATCH |
-| 422 | `sale:flag-note-invalid` | the note is missing, blank, or longer than 1000 characters |
+| 422 | `sale:flag-note-invalid` | the note is missing, blank, or longer than 300 characters |
 
 **Audit:** `SALE_FLAGGED`, with `clientId`, `consultantId`, `noteLength` and `replacedEarlierFlag`. Never the note
 itself: it may name the client.

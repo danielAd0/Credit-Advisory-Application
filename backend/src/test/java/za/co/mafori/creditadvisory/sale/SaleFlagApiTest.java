@@ -208,13 +208,13 @@ class SaleFlagApiTest extends ApiTestBase {
 
         ApiClient.Response blank = flag(manager, id, "   ");
         ApiClient.Response missing = flag(manager, id, null);
-        ApiClient.Response tooLong = flag(manager, id, "x".repeat(1001));
+        ApiClient.Response tooLong = flag(manager, id, "x".repeat(301));
 
         assertThat(blank.status()).isEqualTo(422);
         assertThat(blank.text("$.type")).isEqualTo("urn:credit-advisory:sale:flag-note-invalid");
         assertThat(missing.status()).isEqualTo(422);
         assertThat(tooLong.status()).isEqualTo(422);
-        assertThat(flag(manager, id, "x".repeat(1000)).status()).isEqualTo(200);
+        assertThat(flag(manager, id, "x".repeat(300)).status()).isEqualTo(200);
     }
 
     @Test

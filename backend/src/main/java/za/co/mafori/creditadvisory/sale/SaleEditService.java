@@ -45,8 +45,12 @@ import za.co.mafori.creditadvisory.common.web.ApiException;
 @Service
 public class SaleEditService {
 
-    /** The longest note a flag may carry (V28). */
-    static final int MAX_FLAG_NOTE = 1000;
+    /**
+     * The longest note a flag may carry, as agreed with the front end (its
+     * counter shows 300). The column (V28) allows 1000, so this can grow
+     * without a migration.
+     */
+    static final int MAX_FLAG_NOTE = 300;
 
     private final JdbcTemplate jdbc;
     private final AuditLogWriter audit;
