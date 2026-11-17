@@ -41,8 +41,20 @@ class ClientDataExportApiTest extends ApiTestBase {
         return as.post("/api/clients/" + id + "/data-export", "{}");
     }
 
+    private ApiClient.Response export(ApiClient as, long id, String format) {
+        return as.post("/api/clients/" + id + "/data-export?format=" + format, "{}");
+    }
+
     private long count(String sql, Object... args) {
         return jdbc.queryForObject(sql, Long.class, args);
+    }
+
+    /** A credit case for the client with one note, written by Thandi. */
+    private void caseWithNote(String title, String note) {
+        long caseId = thandi.post("/api/cases", """
+                {"clientId":%d,"title":"%s"}""".formatted(client, title)).number("$.id");
+        assertThat(thandi.post("/api/cases/" + caseId + "/notes", """
+                {"note":"%s"}""".formatted(note)).status()).isEqualTo(201);
     }
 
     @Test
@@ -107,6 +119,70 @@ class ClientDataExportApiTest extends ApiTestBase {
 
         assertThat(export(manager, client).status()).isEqualTo(403);
         assertThat(export(thandi, client).status()).as("not even for their own client").isEqualTo(403);
+        assertThat(count("select count(*) from audit_logs where action = 'CLIENT_DATA_EXPORTED'")).isZero();
+    }
+
+    // ---------- the file formats ----------
+
+    @Test
+    void aPdfToRead() {
+        caseWithNote("Debt review", "Called the client.");
+        confirmPassword(admin);
+
+        ApiClient.Response pdf = export(admin, client, "pdf");
+
+        assertThat(pdf.status()).isEqualTo(200);
+        assertThat(pdf.header("Content-Type")).startsWith("application/pdf");
+        assertThat(pdf.header("Content-Disposition"))
+                .isEqualTo("attachment; filename=\"client-" + client + "-data.pdf\"");
+        assertThat(pdf.header("Cache-Control")).contains("no-store");
+        assertThat(pdf.body()).startsWith("%PDF-1.4").contains("%%EOF")
+                .contains("(Client data export: Export Person)", "(" + idNumber + ")", "Debt review",
+                        "(Called the client.)");
+        assertThat(count("select count(*) from audit_logs where action = 'CLIENT_DATA_EXPORTED'"
+                + " and metadata ->> 'format' = 'pdf'")).isEqualTo(1);
+    }
+
+    @Test
+    void aCsvForASpreadsheet() {
+        caseWithNote("Debt review", "=HYPERLINK(1)");
+        confirmPassword(admin);
+
+        ApiClient.Response csv = export(admin, client, "csv");
+
+        assertThat(csv.status()).isEqualTo(200);
+        assertThat(csv.header("Content-Type")).startsWith("text/csv");
+        assertThat(csv.header("Content-Disposition"))
+                .isEqualTo("attachment; filename=\"client-" + client + "-data.csv\"");
+        assertThat(csv.header("Cache-Control")).contains("no-store");
+        assertThat(csv.body()).startsWith("\uFEFFSection,Record,Field,Value\r\n")
+                .contains("Client details,,First name,Export\r\n")
+                .contains("Client details,,ID number," + idNumber + "\r\n")
+                .as("a note that looks like a formula stays text").contains(",'=HYPERLINK(1)\r\n")
+                .doesNotContain(",=HYPERLINK");
+        assertThat(count("select count(*) from audit_logs where action = 'CLIENT_DATA_EXPORTED'"
+                + " and metadata ->> 'format' = 'csv'")).isEqualTo(1);
+    }
+
+    @Test
+    void jsonWhenNoFormatIsGiven() {
+        confirmPassword(admin);
+
+        ApiClient.Response json = export(admin, client, "json");
+
+        assertThat(json.status()).isEqualTo(200);
+        assertThat(json.header("Content-Type")).startsWith("application/json");
+        assertThat(json.text("$.client.idNumber")).isEqualTo(idNumber);
+        assertThat(count("select count(*) from audit_logs where action = 'CLIENT_DATA_EXPORTED'"
+                + " and metadata ->> 'format' = 'json'")).isEqualTo(1);
+    }
+
+    @Test
+    void anUnknownFormatIsRefused() {
+        ApiClient.Response refused = export(admin, client, "xlsx");
+
+        assertThat(refused.status()).as("checked before the password, and nothing is exported").isEqualTo(400);
+        assertThat(refused.text("$.type")).isEqualTo("urn:credit-advisory:client:export-format-invalid");
         assertThat(count("select count(*) from audit_logs where action = 'CLIENT_DATA_EXPORTED'")).isZero();
     }
 

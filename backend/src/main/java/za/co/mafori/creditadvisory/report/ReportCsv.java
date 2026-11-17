@@ -23,8 +23,12 @@ import java.util.stream.Collectors;
  * </ul>
  * Numbers are written plainly (1900.00), never guarded, so Excel can still add
  * them up.
+ *
+ * <p>
+ * Public so the client data export (client.ClientDataExportFiles) writes its
+ * CSV with the same rules.
  */
-final class ReportCsv {
+public final class ReportCsv {
 
     /**
      * Excel only reads a CSV file as UTF-8 (names with accents) when it starts with
@@ -38,7 +42,7 @@ final class ReportCsv {
     }
 
     /** The whole file: byte-order mark, header line, one line per row. */
-    static String document(List<String> header, List<List<Object>> rows) {
+    public static String document(List<String> header, List<List<Object>> rows) {
         String headerLine = header.stream().map(ReportCsv::cell).collect(Collectors.joining(","));
         String body = rows.stream()
                 .map(row -> row.stream().map(ReportCsv::cell).collect(Collectors.joining(",")))

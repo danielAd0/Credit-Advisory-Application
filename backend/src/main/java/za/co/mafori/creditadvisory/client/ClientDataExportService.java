@@ -48,9 +48,14 @@ public class ClientDataExportService {
         this.audit = audit;
     }
 
-    /** Not read-only: the export itself is written to the audit log. */
+    /**
+     * Not read-only: the export itself is written to the audit log.
+     *
+     * @param format json, pdf or csv: only recorded in the audit log here; the
+     *               controller turns the export into that file
+     */
     @Transactional
-    public Optional<ClientDataExport> export(AppUserPrincipal caller, long clientId) {
+    public Optional<ClientDataExport> export(AppUserPrincipal caller, long clientId, String format) {
         Optional<Details> client = details(clientId);
         if (client.isEmpty()) {
             return Optional.empty();
@@ -59,9 +64,9 @@ public class ClientDataExportService {
                 assignments(clientId), sales(clientId), cases(clientId), importRows(clientId),
                 accessLog(clientId));
         // Written last, so the access log above shows what happened before this export.
-        audit.record("CLIENT_DATA_EXPORTED", "CLIENT", clientId, meta("sales", export.sales().size(),
-                "creditCases", export.creditCases().size(), "assignments", export.assignmentHistory().size(),
-                "accessLogEntries", export.accessLog().size()));
+        audit.record("CLIENT_DATA_EXPORTED", "CLIENT", clientId, meta("format", format,
+                "sales", export.sales().size(), "creditCases", export.creditCases().size(),
+                "assignments", export.assignmentHistory().size(), "accessLogEntries", export.accessLog().size()));
         return Optional.of(export);
     }
 

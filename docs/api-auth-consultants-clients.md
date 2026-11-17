@@ -823,8 +823,9 @@ An employer or product quotation that was deactivated after it was chosen may be
 
 ### POST /api/clients/{id}/data-export
 
-**POPIA access request** (POPIA section 23): everything the system holds about one client, as a JSON file to
-give the client or the information officer. Read-only; nothing about the client changes.
+**POPIA access request** (POPIA section 23): everything the system holds about one client, as a file to give
+the client or the information officer: a PDF to read, a CSV for a spreadsheet, or JSON. Read-only; nothing about
+the client changes.
 
 **Who:** ADMIN only. Everyone else: `403`.
 
@@ -837,7 +838,22 @@ looked up (so the answer is the same whether the client exists or not):
 
 It is a POST so that nothing caches or prefetches it. No body.
 
-**200** - `Content-Disposition: attachment; filename="client-{id}-data.json"`, `Cache-Control: no-store`:
+**Format** - the `format` query parameter (`POST /api/clients/101/data-export?format=pdf`):
+
+| `format` | Content-Type | File name | For |
+|---|---|---|---|
+| `pdf` | `application/pdf` | `client-{id}-data.pdf` | reading and handing over: A4, one section per part below, "Page n of m" on each page |
+| `csv` | `text/csv;charset=UTF-8` | `client-{id}-data.csv` | a spreadsheet: one row per value, columns `Section, Record, Field, Value` |
+| `json`, or none | `application/json` | `client-{id}-data.json` | other systems: the shape below |
+
+Anything else is `400 client:export-format-invalid`, checked first (before the password), so nothing is exported
+or counted. All three hold the same data. The PDF and CSV show times in South African time and leave out empty
+fields. The CSV starts with a byte-order mark so Excel reads accents, and a text cell starting with `=`, `+`, `-`
+or `@` gets a `'` in front so Excel never runs it as a formula (the same rule as the report exports). Excel may
+show the 13-digit ID number as `9.00101E+12`: format that column as Text, or use the PDF.
+
+**200** - `Content-Disposition: attachment; filename="client-{id}-data.{format}"`, `Cache-Control: no-store`.
+The JSON:
 
 ```json
 {
@@ -875,21 +891,21 @@ It is a POST so that nothing caches or prefetches it. No body.
 | `sales` | every sale, typed in or imported, including ones a spreadsheet later replaced (`replaced: true`), with the consultant who made it at the time, product lines (typed in) or sheet amounts (imported), and spreadsheet columns the app has no field for |
 | `creditCases` | every case and every note, with authors |
 | `importRows` | every weekly-spreadsheet row that was matched to this client |
-| `accessLog` | every audit entry about this client (viewed, ID number shown, changed, transferred, exported): when, what and which staff member - the "who had access" part of an access request |
+| `accessLog` | every audit entry about this client (full ID number shown, changed, transferred, exported; opening a client without the full ID number is not audited, so it is not listed): when, what and which staff member - the "who had access" part of an access request |
 
 Staff are named by their work email. Audit details stay out; ask an admin for the audit log itself if needed.
 
 **Rules**
 
-- Audited as `CLIENT_DATA_EXPORTED` (target the client) with counts only, never the contents. It is written after
-  the file is put together, so a file's own `accessLog` shows earlier exports, not itself.
+- Audited as `CLIENT_DATA_EXPORTED` (target the client) with the `format` and counts only, never the contents. It
+  is written after the file is put together, so a file's own `accessLog` shows earlier exports, not itself.
 - The file holds the full ID number and everything else: hand it over as the company's POPIA procedure says,
   never by ordinary email, and do not keep copies.
 - Correction of wrong details uses the normal edit (`PATCH /api/clients/{id}`) and ID number correction above.
   Deleting a client's personal details is not built yet: it waits for the business to set a retention period.
 
-**Errors:** `403` not an admin, or the password was not re-entered; `404 client:not-found`;
-`429 client:id-reveal-limit`.
+**Errors:** `400 client:export-format-invalid` an unknown `format`; `403` not an admin, or the password was not
+re-entered; `404 client:not-found`; `429 client:id-reveal-limit`.
 
 ---
 

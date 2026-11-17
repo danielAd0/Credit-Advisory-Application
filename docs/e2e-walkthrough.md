@@ -135,8 +135,8 @@ Two-step sign-in is off locally (`app.mfa.required=false`), so nobody is asked f
 | 8.2 | Audit log | Entries for: the accounts, the client, SALE_CAPTURED, SALE_EDITED (2.7), SALE_FLAGGED (3.1b), SALE_DELETED (3.1), the import, the reassignment, the suspension, the ID number shown, the target |
 | 8.3 | Search the audit log entries' details for `9001019001089` | **Never** there: no full ID number in any entry |
 | 8.4 | Browser developer tools (F12) > Console, on a few pages | No red errors. Network tab: no full ID number in any URL |
-| 8.5 | Open Test Walkthrough, press **Export client data** (if Jack's button is in) | Asks for the password first (or uses the one from 8.1 if within 5 minutes), then downloads `client-<id>-data.json`: details with the full ID number, sales, assignment history (the 6.1 move), and an access log that includes 8.1. Managers and consultants do not get the button |
-| 8.6 | Audit log | A `CLIENT_DATA_EXPORTED` entry with counts only: no ID number, no name |
+| 8.5 | Open Test Walkthrough, press **Export client data as PDF**, then **as CSV** | Asks for the password first (or uses the one from 8.1 if within 5 minutes), then downloads `client-<id>-data.pdf` and `.csv`: details with the full ID number, sales, consultant history (the 6.1 move), cases with notes, and an access log that includes 8.1. The PDF opens in a PDF reader with page numbers; the CSV opens in Excel with accents intact. Managers and consultants do not get the buttons |
+| 8.6 | Audit log | Two `CLIENT_DATA_EXPORTED` entries, with format `pdf` and `csv` and counts only: no ID number, no name |
 
 ## 9. Optional: with two-step sign-in on
 
@@ -170,7 +170,6 @@ Steps that cannot pass until these exist. Note them in the table only if they be
 
 | Feature | Backend | Frontend |
 |---|---|---|
-| Export client data button (8.5) | done (`POST /api/clients/{id}/data-export`) | Jack. Until it is in, skip 8.5 and 8.6 |
 | First import of the full client list (FR-07 to FR-11) | Sifiso | Sifiso |
 
 When it is done: delete `C:\dev\fake-data`, or keep it outside the repository. Nothing from this run is committed

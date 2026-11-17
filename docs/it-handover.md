@@ -353,8 +353,8 @@ hold names, phone numbers and email addresses in readable form (ID numbers stay 
 like the live data. Retention: as the company's POPIA policy says.
 
 **A client asks what we hold about them (POPIA access request):** the information officer checks who is asking,
-then an administrator exports the client's data (`POST /api/clients/{id}/data-export`, or its button once the client page has one): one file
-with every stored detail, the full ID number, every sale, case, note and consultant change, and who looked at
+then an administrator exports the client's data with **Export client data as PDF** (or as CSV) on the client's
+page (`POST /api/clients/{id}/data-export?format=pdf`): one file with every stored detail, the full ID number, every sale, case, note and consultant change, and who looked at
 the client. It is audited. Hand the file over as the POPIA procedure says, never by ordinary email, and do not
 keep copies.
 
