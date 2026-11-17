@@ -5,7 +5,6 @@ export interface FieldError {
   message: string;
 }
 
-/** The parts of a ProblemDetail body (RFC 9457) the screens use. */
 export interface Problem {
   type: string | null;
   detail: string | null;
@@ -18,12 +17,10 @@ export const STALE_VERSION = 'urn:credit-advisory:conflict:stale-version';
 
 export class ApiError extends Error {
   status: number;
-  /** The ProblemDetail `type`, for example urn:credit-advisory:conflict:stale-version. */
   type: string | null;
-  /** The server's `detail`: written to be safe to show to the person. */
   detail: string | null;
-  /** One entry per bad field on a 400. */
   errors: FieldError[];
+  retryAfter: number | null = null;
   constructor(status: number, message: string, problem: Partial<Problem> | null = null) {
     super(message);
     this.status = status;
@@ -33,7 +30,6 @@ export class ApiError extends Error {
   }
 }
 
-/** Reads the ProblemDetail body of an error response, if there is one. */
 async function readProblem(res: Response): Promise<Problem | null> {
   try {
     const body: unknown = await res.json();
@@ -57,13 +53,11 @@ async function readProblem(res: Response): Promise<Problem | null> {
   }
 }
 
-/** Reads a cookie set by the backend (the CSRF cookie is deliberately readable). */
 function readCookie(name: string): string | null {
   const match = document.cookie.split('; ').find((c) => c.startsWith(`${name}=`));
   return match ? decodeURIComponent(match.slice(name.length + 1)) : null;
 }
 
-/** Makes sure the XSRF-TOKEN cookie exists and returns its value (contract section 1). */
 async function csrfToken(): Promise<string> {
   let token = readCookie('XSRF-TOKEN');
   if (!token) {
@@ -108,11 +102,22 @@ export async function signIn(email: string, password: string): Promise<Session> 
   return (await res.json()) as Session;
 }
 
-export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+function retryAfterSeconds(res: Response): number | null {
+  const value = res.headers.get('Retry-After');
+  if (!value) return null;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds)) return seconds > 0 ? seconds : null;
+  const at = Date.parse(value);
+  if (Number.isNaN(at)) return null;
+  const wait = Math.ceil((at - Date.now()) / 1000);
+  return wait > 0 ? wait : null;
+}
+
+async function send(path: string, init: RequestInit = {}): Promise<Response> {
   const method = (init.method ?? 'GET').toUpperCase();
   const headers = new Headers(init.headers);
   headers.set('Accept', 'application/json');
-  // A file upload (FormData) must set its own Content-Type, with the multipart boundary.
+
   if (init.body && !(init.body instanceof FormData) && !headers.has('Content-Type'))
     headers.set('Content-Type', 'application/json');
   if (method !== 'GET' && method !== 'HEAD') headers.set('X-XSRF-TOKEN', await csrfToken());
@@ -125,17 +130,17 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
   if (!res.ok) {
     const problem = await readProblem(res);
-    // Password right but the authenticator code not entered yet: everything else is refused.
+
     if (res.status === 403 && problem?.type === MFA_REQUIRED) {
       window.location.assign('/two-step');
       throw new ApiError(403, 'Enter the code from your authenticator app first.', problem);
     }
-    // Until the password is changed, every other request is refused: send the person there.
+
     if (res.status === 403 && problem?.type === PASSWORD_CHANGE_REQUIRED) {
       window.location.assign('/change-password');
       throw new ApiError(403, 'Choose your own password first.', problem);
     }
-    throw new ApiError(
+    const failure = new ApiError(
       res.status,
       problem?.detail ??
         (res.status === 403
@@ -143,8 +148,20 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
           : 'Something went wrong. Please try again.'),
       problem,
     );
+    failure.retryAfter = retryAfterSeconds(res);
+    throw failure;
   }
+  return res;
+}
+
+export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const res = await send(path, init);
   return res.status === 204 ? (undefined as T) : ((await res.json()) as T);
+}
+
+export async function apiFile(path: string, init: RequestInit = {}): Promise<Blob> {
+  const res = await send(path, init);
+  return res.blob();
 }
 
 export async function signOut(): Promise<void> {

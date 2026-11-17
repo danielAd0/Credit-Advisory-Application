@@ -1,27 +1,25 @@
-import { ApiError, api } from './http';
+import { ApiError, api, apiFile } from './http';
+import { saveFile } from './download';
 import * as mock from './mock';
 import type { ClientDetail } from './types';
 
-/** The server's answer when the password was not re-entered in the last 5 minutes. */
 export const REAUTHENTICATION_REQUIRED = 'urn:credit-advisory:auth:reauthentication-required';
-/** The server's answer when this user has seen 20 full ID numbers this hour. */
+
 export const ID_REVEAL_LIMIT = 'urn:credit-advisory:client:id-reveal-limit';
+
+export type ExportFormat = 'pdf' | 'csv';
+
+const CONTENT_TYPE: Record<ExportFormat, string> = { pdf: 'application/pdf', csv: 'text/csv' };
 
 const useMock = import.meta.env.VITE_USE_MOCK === 'true';
 
-/**
- * Showing a full ID number (contract section 4, GET /api/clients/{id}?include=idNumber):
- * only within 5 minutes of re-entering the password, at most 20 per hour, and every one is
- * written to the audit log. The number is never kept anywhere but the screen showing it.
- */
 const real = {
-  /** POST /api/auth/reauthenticate. A wrong password is a 400 auth:wrong-password. */
   confirmPassword: (password: string) =>
     api<{ confirmedUntil: string }>('/api/auth/reauthenticate', {
       method: 'POST',
       body: JSON.stringify({ password }),
     }),
-  /** The full number. 403 REAUTHENTICATION_REQUIRED: ask for the password, then try again. */
+
   revealIdNumber: async (clientId: number): Promise<string> => {
     const client = await api<ClientDetail & { idNumber: string | null }>(
       `/api/clients/${clientId}?include=idNumber`,
@@ -29,12 +27,74 @@ const real = {
     if (!client.idNumber) throw new ApiError(500, 'The ID number was not returned.');
     return client.idNumber;
   },
-};
 
-// ---------- mock: the password "wrong" is wrong; the limit is 20 per page load ----------
+  exportClientData: async (clientId: number, format: ExportFormat): Promise<void> => {
+    const file = await apiFile(`/api/clients/${clientId}/data-export?format=${format}`, {
+      method: 'POST',
+    });
+
+    if (!file.type.startsWith(CONTENT_TYPE[format])) {
+      const detail = `The server cannot make a ${format.toUpperCase()} file yet. Ask the backend team.`;
+      throw new ApiError(501, detail, { type: null, detail });
+    }
+    saveFile(file, `client-${clientId}-data.${format}`);
+  },
+};
 
 let mockConfirmedUntil = 0;
 let mockReveals = 0;
+
+function gate(askAgain: string) {
+  if (Date.now() > mockConfirmedUntil) {
+    throw new ApiError(403, askAgain, { type: REAUTHENTICATION_REQUIRED, detail: askAgain });
+  }
+  if (++mockReveals > 20) {
+    const detail =
+      'You have viewed the maximum number of full ID numbers for this hour. Try again later.';
+    const limit = new ApiError(429, detail, { type: ID_REVEAL_LIMIT, detail });
+    limit.retryAfter = 1800;
+    throw limit;
+  }
+}
+
+const cell = (text: string) =>
+  `"${(/^[=+\-@]/.test(text) ? `'${text}` : text).replace(/"/g, '""')}"`;
+
+function mockCsv(rows: [string, string, string][]): Blob {
+  const lines = ['section,field,value', ...rows.map((r) => r.map(cell).join(','))];
+  return new Blob(['\uFEFF' + lines.join('\r\n') + '\r\n'], { type: 'text/csv' });
+}
+
+function mockPdf(rows: [string, string, string][]): Blob {
+  const plain = (t: string) => t.replace(/[^\x20-\x7e]/g, '?').replace(/[\\()]/g, '\\$&');
+  const text = [
+    'BT',
+    '/F1 12 Tf',
+    '16 TL',
+    '56 780 Td',
+    '(Client data export - demo file) Tj T*',
+    ...rows.map(([section, field, value]) => `(${plain(`${section} / ${field}: ${value}`)}) Tj T*`),
+    'ET',
+  ].join('\n');
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
+    `<< /Length ${text.length} >>\nstream\n${text}\nendstream`,
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+  ];
+  let pdf = '%PDF-1.4\n';
+  const offsets: number[] = [];
+  objects.forEach((body, i) => {
+    offsets.push(pdf.length);
+    pdf += `${i + 1} 0 obj\n${body}\nendobj\n`;
+  });
+  const xref = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (const at of offsets) pdf += `${String(at).padStart(10, '0')} 00000 n \n`;
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return new Blob([pdf], { type: 'application/pdf' });
+}
 
 const fake = {
   confirmPassword: async (password: string) => {
@@ -50,20 +110,24 @@ const fake = {
   },
   revealIdNumber: async (clientId: number): Promise<string> => {
     await mock.delay(300);
-    if (Date.now() > mockConfirmedUntil) {
-      throw new ApiError(403, 'Enter your password again to see a full ID number.', {
-        type: REAUTHENTICATION_REQUIRED,
-        detail: 'Enter your password again to see a full ID number.',
-      });
-    }
-    if (++mockReveals > 20) {
-      const detail =
-        'You have viewed the maximum number of full ID numbers for this hour. Try again later.';
-      throw new ApiError(429, detail, { type: ID_REVEAL_LIMIT, detail });
-    }
+    gate('Enter your password again to see a full ID number.');
     const client = await mock.getClient(clientId);
-    // Not a real ID number: zeros where the mask hides digits.
     return client.idNumberMasked.replace(/\*/g, '0');
+  },
+  exportClientData: async (clientId: number, format: ExportFormat): Promise<void> => {
+    await mock.delay(500);
+    gate("Enter your password again to export this client's data.");
+    const client = await mock.getClient(clientId);
+    const rows: [string, string, string][] = [
+      ['client', 'id', String(client.id)],
+      ['client', 'firstName', client.firstName],
+      ['client', 'lastName', client.lastName],
+      ['client', 'idNumber', client.idNumberMasked.replace(/\*/g, '0')],
+      ['export', 'exportedAt', new Date().toISOString()],
+      ['export', 'exportedBy', 'mock-admin'],
+    ];
+    const name = `client-${clientId}-data.${format}`;
+    saveFile(format === 'pdf' ? mockPdf(rows) : mockCsv(rows), name);
   },
 };
 

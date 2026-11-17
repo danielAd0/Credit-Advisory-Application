@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { ApiError, data, type AssignmentEntry, type ClientDetail } from '../api';
 import { clientName, phoneForDisplay } from '../api/names';
 import ClientCases from '../components/ClientCases';
+import ExportClientData from '../components/ExportClientData';
 import RevealIdNumber from '../components/RevealIdNumber';
 import { hasAnyRole, useSession } from '../auth/useAuth';
 import ClientSales from '../components/ClientSales';
@@ -28,6 +29,7 @@ export default function ClientDetailPage() {
   const id = Number(param);
   const session = useSession();
   const isManager = hasAnyRole(session, ['ADMIN', 'MANAGER']);
+  const isAdmin = hasAnyRole(session, ['ADMIN']);
 
   const [result, setResult] = useState<{
     id: number;
@@ -53,7 +55,6 @@ export default function ClientDetailPage() {
     };
   }, [id]);
 
-  // Assignment history is for managers and admins only (consultants would get 403).
   useEffect(() => {
     if (!Number.isInteger(id) || !isManager) return;
     let current = true;
@@ -83,7 +84,6 @@ export default function ClientDetailPage() {
     );
   }
 
-  // Only trust an answer that belongs to the client in the address bar.
   if (!result || result.id !== id) {
     return (
       <div className="cd">
@@ -122,6 +122,7 @@ export default function ClientDetailPage() {
       {back}
       <h1 className="cd-name">{clientName(c)}</h1>
       <RevealIdNumber key={c.id} clientId={c.id} masked={c.idNumberMasked} />
+      {isAdmin && <ExportClientData key={c.id} clientId={c.id} />}
       <p className="cd-eyebrow">Client overview</p>
       {!isManager && (
         <p className="cd-buttons">
