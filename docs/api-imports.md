@@ -12,7 +12,18 @@ rows only ever show `idNumberMasked`.
 ## 1. Who can use it
 
 **ADMIN only**, for every endpoint below (business decision, 9 November 2026: only the admin runs imports and adds
-staff). A MANAGER or CONSULTANT gets `403`. The spec allowed managers too; this narrows it.
+staff), **except two read-only ones a MANAGER may also use**, so managers can see when the admin has uploaded a
+new week:
+
+| Endpoint | ADMIN | MANAGER | CONSULTANT |
+| --- | --- | --- | --- |
+| `GET /api/imports` (the history list) | yes | **yes** | 403 |
+| `GET /api/imports/{id}` (the summary: counts, days, totals, state, consultants) | yes | **yes** | 403 |
+| everything else: preview, week-guess, rows, issues, issues export, consultants/confirm, confirm, cancel, reconciliation, report-figures, consultant-aliases | yes | 403 | 403 |
+
+Neither of the two holds client data (no client names, no ID numbers, not even masked); the summary's consultant
+list holds staff names and emails, which managers already see on the Team page. `rows` and the issues download hold
+client data, so they stay admin-only. The spec allowed managers to run imports too; this narrows it.
 Replacing a week that was already imported also needs a reason (section 7).
 
 ## 2. The flow
@@ -87,7 +98,8 @@ The CSRF header is still required.
 
 ### GET /api/imports?page=0&size=20
 
-Import history, newest first. **200 OK** - a page of:
+Import history, newest first. **Who:** ADMIN and MANAGER. A manager uses it to see when a new file has been
+uploaded: the newest `COMMITTED` item is the latest week in the reports. **200 OK** - a page of:
 ```json
 {
   "id": 12,
@@ -106,7 +118,8 @@ Import history, newest first. **200 OK** - a page of:
 
 ### GET /api/imports/{id}
 
-**200 OK** - the **Import summary** (section 5). **404** `import:not-found`.
+**Who:** ADMIN and MANAGER (read-only for a manager). **200 OK** - the **Import summary** (section 5). **404**
+`import:not-found`.
 
 ### GET /api/imports/{id}/rows?sheet=Monday&action=NEW&page=0&size=50
 
