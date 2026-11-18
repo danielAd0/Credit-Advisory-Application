@@ -64,6 +64,13 @@ const groups: { label: string; items: NavItem[] }[] = [
       { to: '/audit-log', label: 'Audit log', icon: IconFile, roles: ['ADMIN'] },
       { to: '/reassign', label: 'Reassign clients', icon: IconSwap, roles: managers },
       {
+        to: '/uploads',
+        label: 'Uploads',
+        icon: IconDownload,
+        roles: ['MANAGER'],
+        enabled: features.import,
+      },
+      {
         to: '/import',
         label: 'Import',
         icon: IconDownload,

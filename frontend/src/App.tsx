@@ -18,6 +18,7 @@ import ImportPage from './pages/ImportPage';
 import LoginPage from './pages/LoginPage';
 import ManagersPage from './pages/ManagersPage';
 import OnboardingPage from './pages/OnboardingPage';
+import UploadsPage from './pages/UploadsPage';
 import EmployersPage from './pages/EmployersPage';
 import ProductQuotationsPage from './pages/ProductQuotationsPage';
 import ProductsPage from './pages/ProductsPage';
@@ -145,6 +146,16 @@ export default function App() {
                   element={
                     <RequireRole roles={['ADMIN']}>
                       <ImportPage />
+                    </RequireRole>
+                  }
+                />
+              )}
+              {features.import && (
+                <Route
+                  path="uploads"
+                  element={
+                    <RequireRole roles={['ADMIN', 'MANAGER']}>
+                      <UploadsPage />
                     </RequireRole>
                   }
                 />
