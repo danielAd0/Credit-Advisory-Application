@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
+import { onWake, recentlyActive } from '../auth/activity';
 import { ApiError, REAUTHENTICATION_REQUIRED, detailOf, idReveal, type PageResponse } from '../api';
 import {
   mockConfirmPassword,
@@ -411,8 +412,14 @@ export default function OnboardingPage() {
   const sending = summary ? summary.invites.QUEUED + summary.invites.SENDING > 0 : false;
   useEffect(() => {
     if (!sending) return;
-    const t = setInterval(() => void reload(), 5000);
-    return () => clearInterval(t);
+    const t = setInterval(() => {
+      if (recentlyActive()) void reload();
+    }, 5000);
+    const stopWaiting = onWake(() => void reload());
+    return () => {
+      clearInterval(t);
+      stopWaiting();
+    };
   }, [sending, reload]);
 
   async function withPassword(action: () => Promise<void>) {
@@ -476,7 +483,6 @@ export default function OnboardingPage() {
     let made = 0;
     const left: GenerateResult['skipped'] = [];
     try {
-      // 25 per call; keep going while the server makes some and some remain.
       for (;;) {
         const r = await onboarding.regenerate();
         made += r.created;

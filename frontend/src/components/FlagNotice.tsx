@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { transactions, type SaleRow } from '../api';
+import { onWake, recentlyActive } from '../auth/activity';
 import { hasAnyRole, useSession } from '../auth/useAuth';
 import './flagnotice.css';
 
@@ -46,6 +47,7 @@ export default function FlagNotice() {
     let live = true;
 
     const check = () => {
+      if (!recentlyActive()) return;
       const now = new Date();
       const yearAgo = new Date(now);
       yearAgo.setFullYear(now.getFullYear() - 1);
@@ -62,10 +64,12 @@ export default function FlagNotice() {
     check();
     const timer = window.setInterval(check, CHECK_EVERY_MS);
     window.addEventListener('focus', check);
+    const stopWaiting = onWake(check);
     return () => {
       live = false;
       window.clearInterval(timer);
       window.removeEventListener('focus', check);
+      stopWaiting();
     };
   }, [isConsultant, storeKey]);
 
