@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type ComponentType, type SVGProps } from '
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { features, type Role, type Session } from '../api';
 import { hasAnyRole, useAuth, useSession } from '../auth/useAuth';
+import FlagNotice from './FlagNotice';
+import NewSaleNotice from './NewSaleNotice';
 import {
   IconBriefcase,
   IconChart,
@@ -211,6 +213,8 @@ export default function Layout() {
         <main className="content">
           <Outlet />
         </main>
+        <FlagNotice />
+        <NewSaleNotice />
       </div>
     </div>
   );
