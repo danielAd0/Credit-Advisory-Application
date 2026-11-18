@@ -34,7 +34,12 @@ import za.co.mafori.creditadvisory.user.RoleName;
 
 @RestController
 @RequestMapping("/api/imports")
-@PreAuthorize("hasRole('ADMIN')") // only an admin runs imports (and adds staff from the sheet)
+// Only an admin runs imports (and adds staff from the sheet). A manager may
+// also see the import list and
+// each import's summary, read-only, so they know when a new week has been
+// uploaded. Neither holds client
+// data; the rows and the issues download do, and stay admin-only.
+@PreAuthorize("hasRole('ADMIN')")
 public class WeeklyImportController {
 
     private final WeeklyImportService service;
@@ -64,12 +69,14 @@ public class WeeklyImportController {
         return new WeekGuess(WeekStarting.guessFromFileName(fileName).orElse(null));
     }
 
+    @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
     @GetMapping
     public PageResponse<ImportListItem> list(@RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return service.list(page, size);
     }
 
+    @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
     @GetMapping("/{id}")
     public ImportSummary summary(@PathVariable long id) {
         return service.summary(id);
