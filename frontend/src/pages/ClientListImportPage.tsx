@@ -672,15 +672,16 @@ function ImportView({ initial, onBack }: { initial: ClientListSummary; onBack: (
     setBusy(true);
     setError(null);
     try {
-      await clientListImports.cancel(job.id);
-      onBack();
+      setJob(await clientListImports.cancel(job.id));
     } catch (err) {
       setError(detailOf(err) ?? 'Could not cancel the import.');
+    } finally {
       setBusy(false);
     }
   }
 
   const open = job.state === 'PREVIEWED';
+  const ended = job.state === 'CANCELLED' || job.state === 'EXPIRED';
 
   return (
     <>
@@ -714,8 +715,20 @@ function ImportView({ initial, onBack }: { initial: ClientListSummary; onBack: (
           ))}
         </div>
       )}
-      <SummaryCards job={job} />
-      <Details id={job.id} />
+      {ended ? (
+        <section className="wi-card" aria-label="Import details">
+          <h2>{job.fileName}</h2>
+          <p className="muted">
+            Uploaded by {job.uploadedBy} on {stamp(job.createdAt)}. The checked rows were deleted
+            when this import ended, so there is nothing more to show.
+          </p>
+        </section>
+      ) : (
+        <>
+          <SummaryCards job={job} />
+          <Details id={job.id} />
+        </>
+      )}
       {open && (
         <div className="wi-actions">
           <button
