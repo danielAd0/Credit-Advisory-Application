@@ -161,7 +161,9 @@ function History({ onOpen }: { onOpen: (id: number) => void }) {
               <tbody>
                 {result.items.map((h) => (
                   <tr key={h.id}>
-                    <td className="lp-code">{h.fileName}</td>
+                    <td className="lp-code">
+                      <span className="wi-fname">{h.fileName}</span>
+                    </td>
                     <td>
                       <span className={`badge wi-state ${h.state.toLowerCase()}`}>
                         {STATE_LABEL[h.state] ?? h.state}

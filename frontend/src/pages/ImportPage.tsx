@@ -178,7 +178,9 @@ function History({ onOpen }: { onOpen: (id: number) => void }) {
                 {result.items.map((h) => (
                   <tr key={h.id}>
                     <td className="lp-strong">{day(h.weekStarting)}</td>
-                    <td className="lp-code">{h.fileName}</td>
+                    <td className="lp-code">
+                      <span className="wi-fname">{h.fileName}</span>
+                    </td>
                     <td>
                       <span className={`badge wi-state ${h.state.toLowerCase()}`}>
                         {STATE_LABEL[h.state] ?? h.state}
@@ -445,7 +447,7 @@ function ConsultantsCard({
       try {
         onUpdated(await imports.get(job.id));
       } catch {
-        // keep the current view
+        return;
       }
     } finally {
       setBusy(false);

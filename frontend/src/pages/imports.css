@@ -310,3 +310,10 @@
 .lp .ob-steps .wi-actions {
   margin-top: 0.75rem;
 }
+
+.wi-fname {
+  display: block;
+  max-width: 20rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
