@@ -77,6 +77,13 @@ const groups: { label: string; items: NavItem[] }[] = [
         roles: ['ADMIN'],
         enabled: features.import,
       },
+      {
+        to: '/import/client-list',
+        label: 'Import client list',
+        icon: IconDownload,
+        roles: ['ADMIN'],
+        enabled: features.import,
+      },
       { to: '/consultant-logins', label: 'Consultant logins', icon: IconTeam, roles: ['ADMIN'] },
     ],
   },
@@ -190,7 +197,7 @@ export default function Layout() {
                     <li key={to}>
                       <NavLink
                         to={to}
-                        end={to === '/'}
+                        end={to === '/' || to === '/import'}
                         className={({ isActive }) => (isActive ? 'active' : '')}
                       >
                         <Icon />

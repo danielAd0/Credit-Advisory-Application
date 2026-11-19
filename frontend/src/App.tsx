@@ -15,6 +15,7 @@ import ConsultantsPage from './pages/ConsultantsPage';
 import Dashboard from './pages/Dashboard';
 import EditClientPage from './pages/EditClientPage';
 import ImportPage from './pages/ImportPage';
+import ClientListImportPage from './pages/ClientListImportPage';
 import LoginPage from './pages/LoginPage';
 import ManagersPage from './pages/ManagersPage';
 import OnboardingPage from './pages/OnboardingPage';
@@ -146,6 +147,16 @@ export default function App() {
                   element={
                     <RequireRole roles={['ADMIN']}>
                       <ImportPage />
+                    </RequireRole>
+                  }
+                />
+              )}
+              {features.import && (
+                <Route
+                  path="import/client-list"
+                  element={
+                    <RequireRole roles={['ADMIN']}>
+                      <ClientListImportPage />
                     </RequireRole>
                   }
                 />

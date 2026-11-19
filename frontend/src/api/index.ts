@@ -10,6 +10,18 @@ export { accounts } from './accounts';
 export { users } from './users';
 export type { Consultant, ConsultantAccount, UserAccount } from './accounts';
 export { imports } from './imports';
+export { clientListImports } from './clientListImport';
+export type {
+  ClientListAction,
+  ClientListBlocker,
+  ClientListConfirmResult,
+  ClientListHistoryItem,
+  ClientListIssue,
+  ClientListRow,
+  ClientListSeverity,
+  ClientListState,
+  ClientListSummary,
+} from './clientListImport';
 
 export type {
   ConfirmResult,
