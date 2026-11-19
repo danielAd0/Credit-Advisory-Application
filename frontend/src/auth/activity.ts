@@ -1,4 +1,4 @@
-const ACTIVE_WINDOW_MS = 5 * 60_00;
+const ACTIVE_WINDOW_MS = 5 * 60_000;
 const SIGNS_OF_LIFE = ['mousemove', 'keydown', 'click', 'touchstart', 'scroll'] as const;
 
 let lastActivity = Date.now();
