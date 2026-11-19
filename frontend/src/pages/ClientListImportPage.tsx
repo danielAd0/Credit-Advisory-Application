@@ -121,6 +121,9 @@ function History({ onOpen }: { onOpen: (id: number) => void }) {
   const [page, setPage] = useState(0);
   const [result, setResult] = useState<PageResponse<ClientListHistoryItem> | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
+  const [asking, setAsking] = useState<number | null>(null);
+  const [cancelling, setCancelling] = useState<number | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -131,7 +134,22 @@ function History({ onOpen }: { onOpen: (id: number) => void }) {
     return () => {
       live = false;
     };
-  }, [page]);
+  }, [page, tick]);
+
+  async function cancelRow(id: number) {
+    if (cancelling !== null) return;
+    setCancelling(id);
+    setError(null);
+    try {
+      await clientListImports.cancel(id);
+      setAsking(null);
+      setTick((n) => n + 1);
+    } catch {
+      setError('Could not cancel that import. Open it with Review and try again.');
+    } finally {
+      setCancelling(null);
+    }
+  }
 
   return (
     <section className="wi-card" aria-label="Client list history">
@@ -174,9 +192,49 @@ function History({ onOpen }: { onOpen: (id: number) => void }) {
                     <td>{h.uploadedBy}</td>
                     <td>{stamp(h.createdAt)}</td>
                     <td>
-                      <button type="button" className="btn lp-row-btn" onClick={() => onOpen(h.id)}>
-                        {h.state === 'PREVIEWED' ? 'Review' : 'View'}
-                      </button>
+                      {asking === h.id ? (
+                        <>
+                          <span>Cancel this import? </span>
+                          <button
+                            type="button"
+                            className="btn lp-row-btn"
+                            onClick={() => void cancelRow(h.id)}
+                            disabled={cancelling !== null}
+                          >
+                            {cancelling === h.id ? 'Cancelling...' : 'Yes, cancel'}
+                          </button>{' '}
+                          <button
+                            type="button"
+                            className="btn lp-row-btn"
+                            onClick={() => setAsking(null)}
+                            disabled={cancelling !== null}
+                          >
+                            No
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            className="btn lp-row-btn"
+                            onClick={() => onOpen(h.id)}
+                          >
+                            {h.state === 'PREVIEWED' ? 'Review' : 'View'}
+                          </button>
+                          {h.state === 'PREVIEWED' && (
+                            <>
+                              {' '}
+                              <button
+                                type="button"
+                                className="btn lp-row-btn"
+                                onClick={() => setAsking(h.id)}
+                              >
+                                Cancel
+                              </button>
+                            </>
+                          )}
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -672,10 +730,10 @@ function ImportView({ initial, onBack }: { initial: ClientListSummary; onBack: (
     setBusy(true);
     setError(null);
     try {
-      setJob(await clientListImports.cancel(job.id));
+      await clientListImports.cancel(job.id);
+      onBack();
     } catch (err) {
       setError(detailOf(err) ?? 'Could not cancel the import.');
-    } finally {
       setBusy(false);
     }
   }
