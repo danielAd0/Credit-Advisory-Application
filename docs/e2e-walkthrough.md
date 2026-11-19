@@ -166,11 +166,9 @@ Set `app.mfa.required=false` again afterwards if you want to.
 
 ### Waiting on other parts (known before the run)
 
-Steps that cannot pass until these exist. Note them in the table only if they behave differently from this list.
-
-| Feature | Backend | Frontend |
-|---|---|---|
-| First import of the full client list (FR-07 to FR-11) | Sifiso | Sifiso |
+Nothing at the moment: every feature in this script is built. The launch client list import (FR-07 to FR-11,
+Import client list page) is not part of this run; it is tested with the real file once, before go-live
+(docs/api-client-list-import.md).
 
 When it is done: delete `C:\dev\fake-data`, or keep it outside the repository. Nothing from this run is committed
 except this file's findings, if the team wants them kept.

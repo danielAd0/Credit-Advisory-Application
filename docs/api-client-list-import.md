@@ -32,27 +32,32 @@ Client list imports do **not** appear in `/api/imports` (the weekly register lis
 
 - One visible sheet with a **header row** in its first 20 rows. Rows above it (a title) are fine.
 - Columns are found by their **header text**, in any order. Spellings are rows in `client_list_header_aliases`
-  (V29); a new spelling is one row in a new migration.
+  (V29, V30); a new spelling is one row in a new migration.
+- **The real launch list** has the header row `FILNO, IDNO, SURNAME, NAME, C_EMPLOYER, WORK_TEL, HOME_TEL, CELL_TEL,
+  C_BRANCHNAME, FILEID`. All ten are recognised (V30 added `IDNO`, `FILNO`, `WORK_TEL`, `HOME_TEL`, `CELL_TEL`). It
+  has **no consultant and no email column**, so every new client arrives without a consultant: they show on the
+  Overview under "Waiting for a consultant", and a manager assigns them in Reassign clients.
 
 | Field | Required | Headers accepted (examples) | Stored as |
 | --- | --- | --- | --- |
 | Name | yes | Name, First name, Firstname | `first_name` |
 | Surname | yes | Surname, Last name | `last_name` |
-| ID number | yes | ID number, ID No, IDNumber, ID | encrypted + keyed hash, last 4 digits |
+| ID number | yes | ID number, ID No, IDNO, IDNumber, ID | encrypted + keyed hash, last 4 digits |
 | Consultant | no | Consultant, Consultant name | the client's consultant |
 | Consultant email | no | Consultant email | identifies the consultant (section 4) |
 | Email | no | Email, E-mail, Email address | the **client's** email |
-| Cellphone | no | Cell, Cellphone, Mobile, Phone | `phone`, as +27... |
-| Work phone | no | Work, Work phone, Tel (W) | `work_phone`, as +27... |
-| Home phone | no | Home, Home phone, Tel (H) | `home_phone`, as +27... |
-| Employer | no | Employer | `employer_id`; "DEBIT ORDER ..." means payment method DEBIT_ORDER, no employer |
+| Cellphone | no | Cell, Cellphone, CELL_TEL, Mobile, Phone | `phone`, as +27... |
+| Work phone | no | Work, Work phone, WORK_TEL, Tel (W) | `work_phone`, as +27... |
+| Home phone | no | Home, Home phone, HOME_TEL, Tel (H) | `home_phone`, as +27... |
+| Employer | no | Employer, C_EMPLOYER | `employer_id`; "DEBIT ORDER ..." means payment method DEBIT_ORDER, no employer |
 | Product quotation | no | C_BRANCHNAME, Branch, Product quotation | `product_quotation_id` |
-| File number | no | File number, File No | `file_number` (digits) |
-| File ID | no | File ID | `file_id` (digits) |
+| File number | no | File number, File No, FILNO | `file_number` (digits) |
+| File ID | no | File ID, FILEID | `file_id` (digits) |
 
 Any other column (for example **Date**) is listed as "not imported" (info) and read past.
 
-**Plain "Email" is the client's address** (assumption: please confirm). The weekly register's email column is the
+**Plain "Email" is the client's address** (assumption: please confirm; the real launch list has no email column,
+so it does not affect that file). The weekly register's email column is the
 consultant's. If the launch list's Email is the consultant's, it is one row in a migration:
 `UPDATE client_list_header_aliases SET field = 'CONSULTANT_EMAIL' WHERE alias = 'EMAIL';`
 
