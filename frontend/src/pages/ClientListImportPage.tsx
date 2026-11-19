@@ -672,10 +672,10 @@ function ImportView({ initial, onBack }: { initial: ClientListSummary; onBack: (
     setBusy(true);
     setError(null);
     try {
-      setJob(await clientListImports.cancel(job.id));
+      await clientListImports.cancel(job.id);
+      onBack();
     } catch (err) {
       setError(detailOf(err) ?? 'Could not cancel the import.');
-    } finally {
       setBusy(false);
     }
   }
