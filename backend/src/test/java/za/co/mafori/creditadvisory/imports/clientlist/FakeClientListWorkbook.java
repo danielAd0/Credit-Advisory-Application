@@ -39,6 +39,27 @@ public final class FakeClientListWorkbook {
         }
     }
 
+    /** The real launch list's header row, exactly as spelled in the file (V30). */
+    public static final String[] REAL_HEADER = { "FILNO", "IDNO", "SURNAME", "NAME", "C_EMPLOYER", "WORK_TEL",
+            "HOME_TEL", "CELL_TEL", "C_BRANCHNAME", "FILEID" };
+
+    /**
+     * One made-up client in the real list's layout: the ID number and file
+     * number stored as numbers, as Excel does, and no consultant column.
+     */
+    public static byte[] buildWithRealHeaders(String id) {
+        try (XSSFWorkbook wb = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            XSSFSheet sheet = wb.createSheet("Sheet1");
+            write(sheet.createRow(0), (Object[]) REAL_HEADER);
+            write(sheet.createRow(1), 3001.0, Double.valueOf(id), "Echo", "Test", "Test Local Municipality",
+                    "011 555 0001", "011 555 0002", "082 555 0003", "Test Branch South", "4001");
+            wb.write(out);
+            return out.toByteArray();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
     private static void write(Row row, Object... values) {
         for (int c = 0; c < values.length; c++) {
             Object v = values[c];
