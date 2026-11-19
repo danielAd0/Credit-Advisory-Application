@@ -196,6 +196,29 @@ function History({ onOpen }: { onOpen: (id: number) => void }) {
   );
 }
 
+function NameList({ title, names }: { title: string; names: string[] }) {
+  const [all, setAll] = useState(false);
+  const SHOWN = 12;
+  const long = names.length > SHOWN;
+  const shown = all || !long ? names : names.slice(0, SHOWN);
+  return (
+    <div className="cl-names">
+      <p>
+        <strong>{title}</strong>
+      </p>
+      <p className={all ? 'cl-names-all' : undefined}>
+        {shown.join(', ')}
+        {long && !all ? ` and ${names.length - SHOWN} more` : ''}
+      </p>
+      {long && (
+        <button type="button" className="btn" onClick={() => setAll((v) => !v)}>
+          {all ? 'Show fewer' : `View all ${names.length}`}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function Stat({ value, label, bad }: { value: number; label: string; bad?: boolean }) {
   return (
     <div className={`wi-stat${bad && value > 0 ? ' bad' : ''}`}>
@@ -428,28 +451,21 @@ function SummaryCards({ job }: { job: ClientListSummary }) {
           <Stat value={a.debitOrders} label="Debit orders" />
           <Stat value={a.withoutConsultant} label="New clients with no consultant" />
         </div>
-        {(job.newEmployers.length > 0 || job.newProductQuotations.length > 0) && (
-          <>
-            {job.newEmployers.length > 0 && (
-              <p>
-                <strong>{plural(job.newEmployers.length, 'new employer', 'new employers')}:</strong>{' '}
-                {job.newEmployers.join(', ')}
-              </p>
+        {job.newEmployers.length > 0 && (
+          <NameList
+            title={plural(job.newEmployers.length, 'new employer', 'new employers')}
+            names={job.newEmployers}
+          />
+        )}
+        {job.newProductQuotations.length > 0 && (
+          <NameList
+            title={plural(
+              job.newProductQuotations.length,
+              'new product quotation',
+              'new product quotations',
             )}
-            {job.newProductQuotations.length > 0 && (
-              <p>
-                <strong>
-                  {plural(
-                    job.newProductQuotations.length,
-                    'new product quotation',
-                    'new product quotations',
-                  )}
-                  :
-                </strong>{' '}
-                {job.newProductQuotations.join(', ')}
-              </p>
-            )}
-          </>
+            names={job.newProductQuotations}
+          />
         )}
         <details>
           <summary>How the columns were read ({job.columns.length})</summary>
