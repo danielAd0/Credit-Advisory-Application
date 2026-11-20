@@ -14,11 +14,11 @@ import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.DateUtil;
 import org.apache.poi.ss.usermodel.FormulaError;
 import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.xssf.XLSBUnsupportedException;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
-
 
 @Component
 public class PoiWorkbookReader {
@@ -29,8 +29,10 @@ public class PoiWorkbookReader {
     private static final byte[] OLE2_SIGNATURE = { (byte) 0xD0, (byte) 0xCF, 0x11, (byte) 0xE0 };
 
     static {
-        // Any entry that expands more than 100x is treated as a zip bomb (POI's default is 100x too,
-        // set explicitly so a library upgrade cannot loosen it), and no entry may exceed 200 MB.
+        // Any entry that expands more than 100x is treated as a zip bomb (POI's default
+        // is 100x too,
+        // set explicitly so a library upgrade cannot loosen it), and no entry may
+        // exceed 200 MB.
         ZipSecureFile.setMinInflateRatio(0.01);
         ZipSecureFile.setMaxEntrySize(200L * 1024 * 1024);
     }
@@ -58,8 +60,12 @@ public class PoiWorkbookReader {
             throw e;
         } catch (EncryptedDocumentException e) {
             throw encrypted(e);
+        } catch (XLSBUnsupportedException e) {
+            // An .xlsb file renamed to .xlsx: same answer as an .xlsb upload.
+            throw binaryFormat(e);
         } catch (IOException | RuntimeException e) {
-            // Corrupt ZIP, not an Office file, zip bomb, broken XML ... The cause is never shown.
+            // Corrupt ZIP, not an Office file, zip bomb, broken XML ... The cause is never
+            // shown.
             throw new WorkbookRejectedException("file:corrupt",
                     "The file could not be read as an Excel workbook. Open it in Excel, save it as .xlsx and try again.",
                     e);
@@ -81,6 +87,9 @@ public class PoiWorkbookReader {
         if (name.endsWith(".xls")) {
             throw new WorkbookRejectedException("file:old-format",
                     "Old .xls files are not supported. Open it in Excel and save it as .xlsx.");
+        }
+        if (name.endsWith(".xlsb")) {
+            throw binaryFormat(null);
         }
         if (!name.isEmpty() && !name.endsWith(".xlsx")) {
             throw new WorkbookRejectedException("file:not-xlsx", "Only Excel .xlsx files can be imported.");
@@ -168,6 +177,19 @@ public class PoiWorkbookReader {
     private static WorkbookRejectedException encrypted(Throwable cause) {
         return new WorkbookRejectedException("file:encrypted",
                 "The file is password-protected or in an old Excel format. Remove the password, save it as .xlsx and try again.",
+                cause);
+    }
+
+    /**
+     * An Excel Binary Workbook (.xlsb). Not read on purpose: POI only reads those
+     * as display text (a 13-digit ID number can come back as 9.00101E+12) and
+     * without formulas, which the weekly workbook check needs. Excel's Save As
+     * .xlsx keeps every stored value, so that is the way in.
+     */
+    private static WorkbookRejectedException binaryFormat(Throwable cause) {
+        return new WorkbookRejectedException("file:binary-format",
+                "Excel Binary Workbooks (.xlsb) are not accepted. Open it in Excel, choose File > Save As, pick "
+                        + "\"Excel Workbook (*.xlsx)\" as the type and upload that file.",
                 cause);
     }
 

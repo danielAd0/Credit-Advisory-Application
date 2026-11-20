@@ -24,10 +24,13 @@ public class EmployerController {
 
     private final EmployerService service;
     private final EmployerMergeService merges;
+    private final EmployerDuplicateService duplicates;
 
-    public EmployerController(EmployerService service, EmployerMergeService merges) {
+    public EmployerController(EmployerService service, EmployerMergeService merges,
+            EmployerDuplicateService duplicates) {
         this.service = service;
         this.merges = merges;
+        this.duplicates = duplicates;
     }
 
     @GetMapping
@@ -39,6 +42,16 @@ public class EmployerController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
         return service.search(search, active, employerType, needsReview, page, size);
+    }
+
+    /**
+     * Groups of employers that are probably the same employer, to merge
+     * (docs/api-admin.md, section 3). Suggestions only: nothing changes.
+     */
+    @GetMapping("/duplicate-suggestions")
+    @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
+    public EmployerDuplicatesResponse duplicateSuggestions() {
+        return duplicates.suggestions();
     }
 
     @GetMapping("/{id}/aliases")

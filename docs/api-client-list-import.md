@@ -17,7 +17,7 @@ Built by Sifiso: `backend/.../imports/clientlist/`, migration V29. Nothing in th
 
 | Method | Path | What |
 | --- | --- | --- |
-| POST | `/api/imports/client-list/preview` | Upload the list (`multipart/form-data`, part `file`, `.xlsx`). **201** + the summary |
+| POST | `/api/imports/client-list/preview` | Upload the list (`multipart/form-data`, part `file`, `.xlsx`; an `.xlsb` is refused with `file:binary-format`, so save it as `.xlsx` in Excel first). **201** + the summary |
 | GET | `/api/imports/client-list` | Client list imports, newest first (paged) |
 | GET | `/api/imports/client-list/{id}` | The summary again |
 | GET | `/api/imports/client-list/{id}/rows?action=` | Staged rows (paged). `action`: NEW, UPDATE, UNCHANGED, CONFLICT, DUPLICATE, INVALID |
@@ -77,6 +77,10 @@ consultant's. If the launch list's Email is the consultant's, it is one row in a
 - Phones are stored as `+27...`. A number cell that lost its leading zero (821234567) gets it back.
 - A value that cannot be stored (a phone that is not a phone, an email without `@`, a File number with letters) is
   left out with a **warning**; the client is still imported.
+- Text that was saved with the wrong encoding somewhere before the file reached us (`AIRLOOM DÃƒâ€šÃ‚°COR` instead of
+  `AIRLOOM DÉCOR`) gets a `row:garbled-text` **warning** for that column, and is imported as it is. It matters most
+  for employers: every garbled spelling becomes an employer of its own. The issues CSV lists every such row, so the
+  file can be fixed before confirm. Real accents (`Zoë`, `São`, `CAFÉ`) are not flagged.
 - Employers that match no employer or spelling are **created at confirm, marked needs review** (as the weekly
   register does). Product quotations that are not in the list are **added** at confirm.
 - Every new client: audit `CLIENT_CREATED` (`source: CLIENT_LIST`). Every filled-in client: `CLIENT_UPDATED` with
@@ -162,6 +166,7 @@ nothing is created twice.
 | `row:id-leading-zero-restored` | WARNING | ID number typed as a number; the zero was added back |
 | `row:phone-leading-zero-restored` | INFO | Same for a phone |
 | `row:invalid-phone`, `row:invalid-email`, `row:invalid-consultant-email`, `row:invalid-file-reference`, `row:email-without-consultant`, `row:formula-error-ignored` | WARNING | That value is left out |
+| `row:garbled-text` | WARNING | Text saved with the wrong encoding before it reached us (for example `Ã©` where `é` belongs). Imported as it is; fix it in the file |
 | `row:no-client` | WARNING | Values but no name, surname or ID number |
 | `row:duplicate-id-number` | WARNING | Same ID number as an earlier row |
 | `client:name-differs` | WARNING | Stored under another name: not imported |

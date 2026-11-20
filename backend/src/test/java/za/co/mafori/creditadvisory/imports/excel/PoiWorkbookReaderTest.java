@@ -38,6 +38,8 @@ class PoiWorkbookReaderTest {
         assertEquals("file:empty", rejection(new byte[0], "a.xlsx"));
         assertEquals("file:old-format", rejection(zipHeaderThenJunk, "a.xls"));
         assertEquals("file:macro-enabled", rejection(zipHeaderThenJunk, "a.xlsm"));
+        assertEquals("file:binary-format", rejection(zipHeaderThenJunk, "a.xlsb"));
+        assertEquals("file:binary-format", rejection(zipHeaderThenJunk, "Client List.XLSB"));
         assertEquals("file:not-xlsx", rejection(zipHeaderThenJunk, "a.csv"));
         assertEquals("file:encrypted", rejection(ole2, "a.xlsx"));
         assertEquals("file:not-xlsx", rejection("NAME,SURNAME".getBytes(StandardCharsets.UTF_8), "a.xlsx"));

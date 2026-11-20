@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 import org.springframework.stereotype.Component;
 import za.co.mafori.creditadvisory.client.PaymentMethod;
 import za.co.mafori.creditadvisory.common.idnumber.InvalidIdNumberException;
@@ -34,6 +35,9 @@ import za.co.mafori.creditadvisory.imports.register.ParseIssue.Severity;
  * an @) is a WARNING and left out, and the client is still imported.</li>
  * <li>"DEBIT ORDER ..." in the employer column is not an employer: the client
  * gets payment method DEBIT_ORDER and no employer.</li>
+ * <li>Text that was saved with the wrong encoding somewhere before the file
+ * reached us (garbled letters in place of an accented one) is a WARNING, so it
+ * can be fixed in the file. The value is still imported as it is.</li>
  * <li>Messages never contain a value from the sheet, only the column and the
  * reason (an ID number or a name must never reach import_errors).</li>
  * </ul>
@@ -64,10 +68,37 @@ public class ClientListParser {
     public static final String ROW_EMAIL_WITHOUT_CONSULTANT = "row:email-without-consultant";
     public static final String ROW_INVALID_FILE_REFERENCE = "row:invalid-file-reference";
     public static final String ROW_FORMULA_ERROR_IGNORED = "row:formula-error-ignored";
+    public static final String ROW_GARBLED_TEXT = "row:garbled-text";
     public static final String ROW_NO_CLIENT = "row:no-client";
 
     private static final String EMAIL = "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$";
     private static final String FILE_REFERENCE = "^[0-9]{1,20}$";
+
+    /**
+     * What UTF-8 text looks like after it was read as Windows-1252, once or more
+     * (mojibake): an accented letter such as e-acute turns into A-tilde followed
+     * by a second character, a degree sign into A-circumflex and the sign, and
+     * curly quotes and dashes into a-circumflex, euro sign and a third character.
+     * Also the replacement character, left where a byte could not be read at all.
+     *
+     * <ul>
+     * <li>A-tilde followed by one of the characters Windows-1252 shows for the
+     * bytes 0x80 to 0xBF.</li>
+     * <li>A-circumflex followed by a character from U+00A0 to U+00BF.</li>
+     * <li>a-circumflex followed by the euro sign.</li>
+     * <li>U+FFFD.</li>
+     * </ul>
+     * Real names with accents (Zoe with a diaeresis, Sao with a tilde) never
+     * match: an accented letter is never followed by one of these characters.
+     */
+    static final Pattern GARBLED = Pattern.compile("\u00C3[\u0080-\u00BF\u0152\u0153\u0160\u0161\u0178"
+            + "\u017D\u017E\u0192\u02C6\u02DC\u2013\u2014\u2018-\u201E\u2020-\u2022\u2026\u2030"
+            + "\u2039\u203A\u20AC\u2122]|\u00C2[\u00A0-\u00BF]|\u00E2\u20AC|\uFFFD");
+
+    /** True if the text looks garbled (see GARBLED). */
+    static boolean looksGarbled(String text) {
+        return text != null && GARBLED.matcher(text).find();
+    }
 
     /**
      * One column of the sheet: its header as written, and the field it is (null =
@@ -258,7 +289,17 @@ public class ClientListParser {
                 return null;
             }
             value = value.strip().replaceAll("\\s+", " ");
-            return value.isEmpty() ? null : value;
+            if (value.isEmpty()) {
+                return null;
+            }
+            if (cell.kind() == RawCell.Kind.TEXT && looksGarbled(value)) {
+                // The message never repeats the value: only the column and how to recognise it.
+                add(Severity.WARNING, ROW_GARBLED_TEXT, field, field.label()
+                        + " has garbled letters (for example \u00C3\u00A9 where \u00E9 belongs): the text was "
+                        + "saved with the wrong encoding before it reached us. It is imported as it is; fix it in "
+                        + "the file.");
+            }
+            return value;
         }
 
         private static String plain(BigDecimal n) {
