@@ -195,6 +195,7 @@ java -jar credit-advisory-0.0.1-SNAPSHOT.jar
 | `MAIL_GRAPH_CLIENT_ID`     | for login emails | its application (client) ID                                                                                          |
 | `MAIL_GRAPH_CLIENT_SECRET` | for login emails | its client secret                                                                                                    |
 | `MAIL_SENDER`              | for login emails | the mailbox the emails come from, e.g. `no-reply@mafori.co.za`                                                        |
+| `DORMANT_LOGINS_AFTER`     | no               | disable logins nobody has used for this long, checked once a day, e.g. `90d`; default `0d` = never. Never the last active administrator (`docs/api-auth-consultants-clients.md`, "Dormant logins") |
 
 Rules:
 
