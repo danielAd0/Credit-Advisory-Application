@@ -114,6 +114,53 @@ Every sale still keeps the spelling it was imported with. `version` is employer 
 
 Audited as `EMPLOYER_MERGED` (with both names and the counts) and `EMPLOYER_REVIEWED`.
 
+### Duplicate suggestions
+
+`GET /api/employers/duplicate-suggestions` (MANAGER, ADMIN): groups of employers that are probably the same
+employer, so an admin can merge them without searching by hand. Nothing changes and nothing is audited; merging is
+still `POST /api/employers/{id}/merge`, one employer at a time.
+
+Two names are put in one group when they are equal after:
+
+- ignoring case, spaces and punctuation (`Shoprite (Pty) Ltd.` and `SHOPRITE PTY LTD`);
+- dropping company endings at the end: PTY, LTD, LIMITED, PROPRIETARY, CC, INC, NPC, SOC, RF (`SHOPRITE` and
+  `SHOPRITE PTY LTD`);
+- reading `&` as AND, and a leading THE as nothing;
+- writing out short forms: MUN, MUNIC, MUNICIP (MUNICIPALITY), DEPT, GOVT, DIST, SVCS, HOSP
+  (`PHUMELELA LOCAL MUNIC` and `PHUMELELA LOCAL MUNICIPALITY`);
+- ignoring accents, and letters garbled by a wrong text encoding, so `AIRLOOM DÃƒâ€šÃ‚°COR PTY LTD`,
+  `AIRLOOM DÉCOR` and `Airloom Decor` end up in one group.
+
+Different words stay apart: `SHOPRITE CHECKERS` is not grouped with `SHOPRITE`. These are suggestions: the admin
+decides.
+
+`200` →
+```json
+{
+  "groupCount": 1,
+  "employerCount": 2,
+  "groups": [
+    {
+      "suggestedTargetId": 12,
+      "employers": [
+        { "id": 12, "name": "TEST RETAIL", "active": true, "needsReview": false, "clients": 0, "version": 3 },
+        { "id": 81, "name": "Test Retail (Pty) Ltd", "active": true, "needsReview": true, "clients": 1, "version": 0 }
+      ]
+    }
+  ]
+}
+```
+
+- **`suggestedTargetId`**: the employer to keep. It is active, preferably already checked (`needsReview` false),
+  then the one with the most clients, then the oldest. `null` when no employer in the group is active: a merge
+  needs an active target, so activate one first.
+- **`employers`**: the suggested target first, then by name. `version` is what the merge needs for that employer.
+- Groups are sorted biggest first.
+
+Suggested screen (Jack): on the Employers page, a "Possible duplicates" list. Each group shows its names with the
+client counts and a "Merge into [suggested target]" button, which sends one merge per other employer in the group
+(reason, for example, "Same employer: spelling variant") and reloads the list.
+
 Frontend: an "Employers to review" list (`needsReview=true`), each with **Merge into…** (an employer picker
 plus a reason) and **Keep**.
 
