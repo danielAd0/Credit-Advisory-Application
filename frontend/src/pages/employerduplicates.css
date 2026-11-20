@@ -1,0 +1,51 @@
+.ed-card {
+  margin-bottom: 1.25rem;
+}
+
+.ed-reason {
+  max-width: 36rem;
+  margin: 0.75rem 0 1rem;
+}
+
+.ed-groups {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ed-group {
+  padding: 0.9rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.ed-members {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  list-style: none;
+}
+
+.ed-members li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.ed-meta {
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+.ed-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}

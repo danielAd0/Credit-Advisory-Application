@@ -8,7 +8,6 @@ import Pager from '../components/Pager';
 import { hasAnyRole, useSession } from '../auth/useAuth';
 import './clientsactions.css';
 
-/** An empty cell, so a missing value reads as missing rather than as a layout gap. */
 const Dash = () => (
   <span className="lp-none" aria-label="none">
     &mdash;
@@ -133,7 +132,7 @@ export default function ClientsPage() {
           <div className="lp-filters">
             <input
               type="search"
-              placeholder="Search by name, File number or File ID"
+              placeholder="Search by name, File number, File ID or phone"
               value={query}
               onChange={(e) => {
                 setQuery(e.target.value);

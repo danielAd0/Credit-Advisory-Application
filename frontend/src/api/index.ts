@@ -90,7 +90,16 @@ export type { NewTarget, Target, TargetsResponse } from './targets';
 export { audit } from './audit';
 export type { AuditEntry, AuditFilter } from './audit';
 export { catalogue } from './catalogue';
-export type { Employer, MergeEmployerResult, Product, ProductQuotation } from './catalogue';
+export type {
+  Employer,
+  EmployerDuplicate,
+  EmployerDuplicateGroup,
+  EmployerDuplicateSuggestions,
+  MergeEmployerResult,
+  MergeGroupResult,
+  Product,
+  ProductQuotation,
+} from './catalogue';
 export { detailOf, isStale } from './errors';
 export { mfa, mfaPending } from './mfa';
 export { ID_REVEAL_LIMIT, REAUTHENTICATION_REQUIRED, idReveal } from './idReveal';

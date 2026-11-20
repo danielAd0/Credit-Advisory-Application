@@ -20,6 +20,7 @@ const ACTIONS: Partial<Record<string, string>> = {
   USER_CONSULTANT_LINK_CHANGED: 'User linked to a different consultant',
   USER_ENABLED: 'User enabled',
   USER_DISABLED: 'User disabled',
+  USER_DISABLED_DORMANT: 'User disabled (not used for a long time)',
   USER_PASSWORD_RESET: 'Password reset by an administrator',
   USER_UNLOCKED: 'Account unlocked',
   PASSWORD_CHANGED: 'Password changed',
@@ -111,10 +112,8 @@ const TARGETS = [
   'TRANSACTION',
 ];
 
-/** Shown names that differ from the code: product quotations are called branches in the app. */
 const TARGET_NAMES: Partial<Record<string, string>> = { PRODUCT_QUOTATION: 'Branch' };
 
-/** IMPORT_JOB -> Import, PRODUCT_QUOTATION -> Branch. */
 const targetLabel = (t: string) =>
   TARGET_NAMES[t] ??
   (t.charAt(0) + t.slice(1).toLowerCase()).replace('_job', '').replace(/_/g, ' ');
@@ -132,7 +131,6 @@ function actionLabel(code: string): string {
   return ACTIONS[code] ?? code;
 }
 
-/** Colour family of an action, for its chip in the "What" column. */
 type Tone = 'alert' | 'security' | 'move' | 'ok' | 'info' | 'plain';
 
 function toneOf(code: string): Tone {
@@ -150,11 +148,9 @@ function toneOf(code: string): Tone {
   return 'plain';
 }
 
-/** ACTIVE -> Active */
 const word = (v: unknown) =>
   typeof v === 'string' ? v.charAt(0) + v.slice(1).toLowerCase().replace(/_/g, ' ') : String(v);
 
-/** Every labelled metadata field as "Label: value". */
 function fields(e: AuditEntry, skip: string[] = []): string[] {
   if (!e.metadata) return [];
   return Object.entries(e.metadata).flatMap(([key, value]) => {
@@ -165,7 +161,6 @@ function fields(e: AuditEntry, skip: string[] = []): string[] {
   });
 }
 
-/** The Details cell: a short headline, plus the reason on its own line when there is one. */
 function summary(e: AuditEntry): { main: string; reason: string | null } {
   const m = e.metadata ?? {};
   const reason = typeof m.reason === 'string' && m.reason.trim() ? m.reason.trim() : null;
@@ -194,8 +189,6 @@ const startOf = (date: string, addDays = 0) => {
   d.setDate(d.getDate() + addDays);
   return d.toISOString();
 };
-
-// ---------- time, shown in South African time ----------
 
 const TZ = 'Africa/Johannesburg';
 const DAY = new Intl.DateTimeFormat('en-GB', {
