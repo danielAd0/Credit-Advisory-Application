@@ -58,12 +58,22 @@ export interface Employer {
   company: string | null;
   employerType: string | null;
   active: boolean;
+  needsReview: boolean;
   version: number;
   createdAt: string;
   updatedAt: string;
 }
 
-/** A product quotation (the old spreadsheets' C_BRANCHNAME): a list admins manage. */
+export interface MergeEmployerResult {
+  mergedEmployerId: number;
+  mergedEmployerName: string;
+  target: Employer;
+  clientsMoved: number;
+  transactionsMoved: number;
+  aliasesMoved: number;
+  nameKeptAsAlias: boolean;
+}
+
 export interface ProductQuotation {
   id: number;
   name: string;
@@ -79,8 +89,6 @@ export interface AssignClientsResult {
   consultant: { id: number; consultantCode: string; fullName: string };
 }
 
-// ---------- helpers ----------
-
 const json = (method: 'POST' | 'PATCH', body: unknown): RequestInit => ({
   method,
   body: JSON.stringify(body),
@@ -95,9 +103,6 @@ function query(params: Record<string, string | number | boolean | undefined>): s
   return s ? `?${s}` : '';
 }
 
-// ---------- consultants and their logins ----------
-
-/** POST /api/consultant-accounts - consultant record + CONSULTANT login in one step (ADMIN). */
 export const createConsultantAccount = (input: {
   consultantCode: string;
   fullName: string;
@@ -105,12 +110,10 @@ export const createConsultantAccount = (input: {
   temporaryPassword: string;
 }) => api<ConsultantAccount>('/api/consultant-accounts', json('POST', input));
 
-/** GET /api/consultants (MANAGER, ADMIN). */
 export const listConsultants = (
   params: { search?: string; status?: ConsultantStatus; page?: number; size?: number } = {},
 ) => api<PageResponse<Consultant>>(`/api/consultants${query(params)}`);
 
-/** PATCH /api/consultants/{id}/status (ADMIN). */
 export const changeConsultantStatus = (
   id: number,
   status: ConsultantStatus,
@@ -118,12 +121,10 @@ export const changeConsultantStatus = (
   version: number,
 ) => api<Consultant>(`/api/consultants/${id}/status`, json('PATCH', { status, reason, version }));
 
-/** GET /api/users (ADMIN) - optionally only users with one role. Sorted by email. */
 export const listUsers = (
   params: { search?: string; role?: Role; page?: number; size?: number } = {},
 ) => api<PageResponse<UserAccount>>(`/api/users${query(params)}`);
 
-/** POST /api/users (ADMIN) - a login with any roles; CONSULTANT also needs consultantId. */
 export const createUser = (input: {
   email: string;
   temporaryPassword: string;
@@ -131,23 +132,17 @@ export const createUser = (input: {
   consultantId?: number | null;
 }) => api<UserAccount>('/api/users', json('POST', input));
 
-/** PATCH /api/users/{id}/roles (ADMIN) - replaces the roles; signs the user out. */
 export const changeUserRoles = (id: number, roles: Role[], version: number) =>
   api<UserAccount>(`/api/users/${id}/roles`, json('PATCH', { roles, version }));
 
-/** PATCH /api/users/{id}/consultant (ADMIN) - link a consultant record, or null to unlink. */
 export const changeUserConsultant = (id: number, consultantId: number | null, version: number) =>
   api<UserAccount>(`/api/users/${id}/consultant`, json('PATCH', { consultantId, version }));
 
-/** PATCH /api/users/{id}/enabled (ADMIN) - disabling signs the user out. */
 export const setUserEnabled = (id: number, enabled: boolean, version: number) =>
   api<UserAccount>(`/api/users/${id}/enabled`, json('PATCH', { enabled, version }));
 
-/** POST /api/users/{id}/password-reset (ADMIN) - sets a new temporary password and unlocks. */
 export const resetPassword = (userId: number, temporaryPassword: string) =>
   api<UserAccount>(`/api/users/${userId}/password-reset`, json('POST', { temporaryPassword }));
-
-// ---------- products ----------
 
 export const listProducts = (
   params: { search?: string; active?: boolean; page?: number; size?: number } = {},
@@ -177,13 +172,12 @@ export const updateProduct = (
 export const setProductActive = (id: number, active: boolean, version: number) =>
   api<Product>(`/api/products/${id}/active`, json('PATCH', { active, version }));
 
-// ---------- employers ----------
-
 export const listEmployers = (
   params: {
     search?: string;
     active?: boolean;
     employerType?: string;
+    needsReview?: boolean;
     page?: number;
     size?: number;
   } = {},
@@ -203,40 +197,37 @@ export const updateEmployer = (
 export const setEmployerActive = (id: number, active: boolean, version: number) =>
   api<Employer>(`/api/employers/${id}/active`, json('PATCH', { active, version }));
 
-// ---------- product quotations ----------
+export const mergeEmployer = (
+  id: number,
+  input: { targetEmployerId: number; version: number; reason: string },
+) => api<MergeEmployerResult>(`/api/employers/${id}/merge`, json('POST', input));
 
-/** GET /api/product-quotations - everyone signed in. Sorted by name. */
+export const keepEmployer = (id: number, version: number) =>
+  api<Employer>(`/api/employers/${id}/review`, json('PATCH', { version }));
+
 export const listProductQuotations = (
   params: { search?: string; active?: boolean; page?: number; size?: number } = {},
 ) => api<PageResponse<ProductQuotation>>(`/api/product-quotations${query(params)}`);
 
-/** POST /api/product-quotations (ADMIN). */
 export const createProductQuotation = (input: { name: string }) =>
   api<ProductQuotation>('/api/product-quotations', json('POST', input));
 
-/** PATCH /api/product-quotations/{id} (ADMIN): rename. */
 export const updateProductQuotation = (id: number, input: { name: string; version: number }) =>
   api<ProductQuotation>(`/api/product-quotations/${id}`, json('PATCH', input));
 
-/** PATCH /api/product-quotations/{id}/active (ADMIN). */
 export const setProductQuotationActive = (id: number, active: boolean, version: number) =>
   api<ProductQuotation>(`/api/product-quotations/${id}/active`, json('PATCH', { active, version }));
 
-// ---------- client assignment ----------
-
-/** GET /api/clients?unassigned=true (MANAGER, ADMIN). */
 export const listUnassignedClients = (
   params: { search?: string; page?: number; size?: number } = {},
 ) => api<PageResponse<ClientSummary>>(`/api/clients${query({ ...params, unassigned: true })}`);
 
-/** POST /api/client-assignments - give unassigned clients to an ACTIVE consultant (MANAGER, ADMIN). */
 export const assignClients = (consultantId: number, clientIds: number[], reason: string) =>
   api<AssignClientsResult>(
     '/api/client-assignments',
     json('POST', { consultantId, clientIds, reason }),
   );
 
-/** POST /api/client-transfers - move clients that already have a consultant (MANAGER, ADMIN). */
 export const transferClients = (
   fromConsultantId: number,
   toConsultantId: number,
