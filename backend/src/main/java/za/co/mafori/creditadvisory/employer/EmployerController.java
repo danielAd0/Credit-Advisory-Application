@@ -66,6 +66,17 @@ public class EmployerController {
         return merges.merge(id, request);
     }
 
+    /**
+     * Merges several employers into employer {id} at once, all or nothing
+     * (docs/api-admin.md, section 3).
+     */
+    @PostMapping("/{id}/merge-group")
+    @PreAuthorize("hasRole('ADMIN')")
+    public EmployerMergeGroupResponse mergeGroup(@PathVariable long id,
+            @Valid @RequestBody EmployerMergeGroupRequest request) {
+        return merges.mergeGroup(id, request);
+    }
+
     @PatchMapping("/{id}/review")
     @PreAuthorize("hasRole('ADMIN')")
     public EmployerResponse markReviewed(@PathVariable long id, @Valid @RequestBody EmployerReviewRequest request) {

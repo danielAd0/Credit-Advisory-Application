@@ -91,6 +91,7 @@ nobody had seen ("PHUMELELA LOCAL MUNIC"). An admin then either merges it into t
 | GET | `/api/employers?needsReview=true` | – (the list to clean up) | any signed-in user |
 | GET | `/api/employers/{id}/aliases` | – → `[ { id, alias, createdAt } ]`, the spellings matched to it | MANAGER, ADMIN |
 | POST | `/api/employers/{id}/merge` | `{ targetEmployerId, version, reason }` | ADMIN |
+| POST | `/api/employers/{id}/merge-group` | `{ employers: [ { id, version } ], reason }`: merge several into employer `{id}` at once | ADMIN |
 | PATCH | `/api/employers/{id}/review` | `{ version }`: keep it as an employer of its own (`needsReview` → false) | ADMIN |
 
 **Merge** moves employer `{id}`'s clients, sales and spellings to the target in one transaction. It then removes
@@ -113,6 +114,36 @@ Every sale still keeps the spelling it was imported with. `version` is employer 
 | 400 | | no `reason` (max 500) |
 
 Audited as `EMPLOYER_MERGED` (with both names and the counts) and `EMPLOYER_REVIEWED`.
+
+### Merge a group
+
+`POST /api/employers/{id}/merge-group` (ADMIN) merges up to **50** employers into employer `{id}` in **one
+transaction: all or nothing**. If any of them cannot be merged, nothing is merged and the answer says why. Each
+merge is exactly a single merge (clients, sales and spellings move; the name is kept as a spelling) and is audited
+as its own `EMPLOYER_MERGED`. Made for the duplicate suggestions below: one call per group.
+
+```json
+{ "employers": [ { "id": 81, "version": 0 }, { "id": 95, "version": 2 } ],
+  "reason": "Same employer: spelling variant" }
+```
+
+`200` →
+```json
+{ "target": { "id": 12, "name": "TEST RETAIL", "...": "..." },
+  "merged": [ { "mergedEmployerId": 81, "...": "same as a single merge" }, { "mergedEmployerId": 95, "...": "..." } ],
+  "clientsMoved": 7, "transactionsMoved": 12 }
+```
+
+`merged` is in id order. Every `version` is the one the screen last read (the duplicate suggestions give them).
+
+| Status | type | When |
+| --- | --- | --- |
+| 422 | `employer:merge-into-itself` | employer `{id}` is in the list |
+| 422 | `employer:merge-group-duplicate` | an employer is in the list twice |
+| 409 | `conflict:stale-version` | one of them was changed meanwhile; `detail` names it. Reload and try again |
+| 409 | `employer:merge-target-inactive` | employer `{id}` is inactive |
+| 404 | `employer:not-found` | employer `{id}` or one in the list does not exist |
+| 400 | | empty list, more than 50, or no `reason` |
 
 ### Duplicate suggestions
 
@@ -158,8 +189,9 @@ decides.
 - Groups are sorted biggest first.
 
 Suggested screen (Jack): on the Employers page, a "Possible duplicates" list. Each group shows its names with the
-client counts and a "Merge into [suggested target]" button, which sends one merge per other employer in the group
-(reason, for example, "Same employer: spelling variant") and reloads the list.
+client counts and a "Merge into [suggested target]" button, which sends one `merge-group` call with the other
+employers of the group and their `version` (reason, for example, "Same employer: spelling variant") and reloads the
+list. An admin can untick a name that does not belong before merging.
 
 Frontend: an "Employers to review" list (`needsReview=true`), each with **Merge into…** (an employer picker
 plus a reason) and **Keep**.
