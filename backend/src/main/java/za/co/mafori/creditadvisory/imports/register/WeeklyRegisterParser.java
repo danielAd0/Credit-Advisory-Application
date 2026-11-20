@@ -51,6 +51,9 @@ public class WeeklyRegisterParser {
             DateTimeFormatter.ofPattern("d/M/uuuu", Locale.ROOT),
             DateTimeFormatter.ofPattern("d-M-uuuu", Locale.ROOT),
             DateTimeFormatter.ofPattern("d.M.uuuu", Locale.ROOT),
+            // 09\11\2026: typed with backslashes, which Excel keeps as text (week of 9 Nov
+            // 2026).
+            DateTimeFormatter.ofPattern("d\\M\\uuuu", Locale.ROOT),
             DateTimeFormatter.ofPattern("d MMM uuuu", Locale.ENGLISH),
             DateTimeFormatter.ofPattern("d MMMM uuuu", Locale.ENGLISH));
     private static final LocalDate EXCEL_EPOCH = LocalDate.of(1899, 12, 30);
