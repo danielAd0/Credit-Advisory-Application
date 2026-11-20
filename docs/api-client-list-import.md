@@ -17,7 +17,7 @@ Built by Sifiso: `backend/.../imports/clientlist/`, migration V29. Nothing in th
 
 | Method | Path | What |
 | --- | --- | --- |
-| POST | `/api/imports/client-list/preview` | Upload the list (`multipart/form-data`, part `file`, `.xlsx`). **201** + the summary |
+| POST | `/api/imports/client-list/preview` | Upload the list (`multipart/form-data`, part `file`, `.xlsx`; an `.xlsb` is refused with `file:binary-format`, so save it as `.xlsx` in Excel first). **201** + the summary |
 | GET | `/api/imports/client-list` | Client list imports, newest first (paged) |
 | GET | `/api/imports/client-list/{id}` | The summary again |
 | GET | `/api/imports/client-list/{id}/rows?action=` | Staged rows (paged). `action`: NEW, UPDATE, UNCHANGED, CONFLICT, DUPLICATE, INVALID |

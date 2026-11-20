@@ -91,7 +91,7 @@ The CSRF header is still required.
 |---|---|---|
 | 400 | `import:week-required` | no `weekStarting` and none in the file name |
 | 400 | `import:week-not-monday` | `weekStarting` is not a Monday |
-| 400 | `file:empty`, `file:corrupt`, `file:not-xlsx`, `file:old-format`, `file:encrypted`, `file:macro-enabled` | the file is not a usable `.xlsx` |
+| 400 | `file:empty`, `file:corrupt`, `file:not-xlsx`, `file:old-format`, `file:binary-format`, `file:encrypted`, `file:macro-enabled` | the file is not a usable `.xlsx`. `file:binary-format` is an Excel Binary Workbook (`.xlsb`, or one renamed to `.xlsx`): the message tells the user to open it in Excel and use **File > Save As > Excel Workbook (\*.xlsx)**. Save As keeps every stored value; `.xlsb` is not read directly because the only reader for it gives display text (a 13-digit ID number can come back as `9.00101E+12`) and no formulas |
 | 400 | `file:unreadable` | the upload itself could not be read |
 | 413 | `file:too-large` | larger than 10 MB (but see section 8: the upload limit is currently 1 MB) |
 | 409 | `import:duplicate-file` | exactly this file (same SHA-256) was already **committed** |
