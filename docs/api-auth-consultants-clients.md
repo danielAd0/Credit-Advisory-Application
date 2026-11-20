@@ -119,6 +119,7 @@ Every successful change below writes one row to `audit_logs` in the **same trans
 | `USER_ROLES_CHANGED`             | user                         | `from`, `to` (role lists)                                                                                                             |
 | `USER_CONSULTANT_LINK_CHANGED`   | user                         | `fromConsultantId`, `toConsultantId`                                                                                                  |
 | `USER_ENABLED` / `USER_DISABLED` | user                         | -                                                                                                                                     |
+| `AUDIT_LOG_EXPORTED` | none | `rows`, and the filters used (`action`, `targetType`, `targetId`, `actorUserId`, `from`, `to`) - an admin downloaded the audit log |
 | `USER_DISABLED_DORMANT` | user | `lastLoginAt`, `dormantAfterDays` - disabled by the server because nobody had signed in with it for that long (no actor) |
 | `USER_PASSWORD_RESET`            | user                         | - (never the password)                                                                                                                |
 | `USER_UNLOCKED`                  | user                         | -                                                                                                                                     |
@@ -1393,6 +1394,36 @@ Sorted newest first.
 - Useful links from other screens: a consultant's history is `?targetType=CONSULTANT&targetId={id}`, a user's is `?targetType=USER&targetId={id}`.
 
 **Errors:** `400` bad date format, or `from` not before `to` (`urn:credit-advisory:validation:invalid-filter`); `401` not signed in; `403` not ADMIN.
+
+### GET /api/audit-logs/export
+
+**Who:** ADMIN
+
+**Purpose:** the audit trail as a file for an auditor or the information officer ("everything from March").
+
+**Query parameters:** the same filters as the list (`action`, `targetType`, `targetId`, `actorUserId`, `from`,
+`to`), no paging. Leave `from`/`to` out for everything.
+
+**200 OK** - `text/csv` (UTF-8 with a byte-order mark, so Excel reads accents), saved as
+`audit-log-<today>.csv`, never cached. **Oldest first**, as a file is read. Columns:
+
+| Column | |
+| --- | --- |
+| Time (South Africa) | `2026-11-02 11:31:12` |
+| Action | `CONSULTANT_STATUS_CHANGED` |
+| By | the user's email, or `the system` when nobody was signed in |
+| By user id | empty for the system |
+| Target type, Target id | as in the list |
+| Details | the metadata JSON, as in the list |
+
+A cell that starts with `=`, `+`, `-` or `@` gets a `'` in front, so Excel never runs it as a formula. The audit log
+never holds a full ID number or a password, so neither does the file.
+
+The export is audited as `AUDIT_LOG_EXPORTED` (who, the filters and the row count). It is written after the rows
+are read, so it is in the next file, not its own.
+
+**Errors:** as the list, plus `422` `urn:credit-advisory:audit:export-too-large` when the filters match more than
+100,000 entries (`app.audit.export-max-rows`): choose a shorter period.
 
 ---
 

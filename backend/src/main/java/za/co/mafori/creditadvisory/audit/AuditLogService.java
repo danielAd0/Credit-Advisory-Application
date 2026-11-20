@@ -32,9 +32,10 @@ public class AuditLogService {
     /**
      * Every filter is optional. Each parameter is given an explicit SQL type, so a
      * null filter is still understood by PostgreSQL (an untyped null is what caused
-     * the "lower(bytea)" error in the employer search).
+     * the "lower(bytea)" error in the employer search). Shared with the export
+     * (AuditLogExportService), so the file holds exactly what the list shows.
      */
-    private static final String WHERE = """
+    static final String WHERE = """
             where (cast(:action as varchar) is null or a.action = :action)
               and (cast(:targetType as varchar) is null or a.target_type = :targetType)
               and (cast(:targetId as varchar) is null or a.target_id = :targetId)
@@ -63,20 +64,9 @@ public class AuditLogService {
 
     @Transactional(readOnly = true)
     public PageResponse<AuditLogEntry> search(AuditLogQuery query, int page, int size) {
-        if (query.from() != null && query.to() != null && !query.from().isBefore(query.to())) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "validation:invalid-filter", "Invalid filter",
-                    "'from' must be before 'to'.");
-        }
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
-
-        MapSqlParameterSource params = new MapSqlParameterSource()
-                .addValue("action", upperOrNull(query.action()), Types.VARCHAR)
-                .addValue("targetType", upperOrNull(query.targetType()), Types.VARCHAR)
-                .addValue("targetId", blankToNull(query.targetId()), Types.VARCHAR)
-                .addValue("actorUserId", query.actorUserId(), Types.BIGINT)
-                .addValue("from", isoOrNull(query.from()), Types.VARCHAR)
-                .addValue("to", isoOrNull(query.to()), Types.VARCHAR);
+        MapSqlParameterSource params = filters(query);
 
         Long total = jdbc.queryForObject(COUNT, params, Long.class);
         long totalItems = total == null ? 0 : total;
@@ -87,6 +77,23 @@ public class AuditLogService {
 
         int totalPages = (int) ((totalItems + safeSize - 1) / safeSize);
         return new PageResponse<>(items, safePage, safeSize, totalItems, totalPages);
+    }
+
+    /**
+     * The parameters for WHERE. 400 when 'from' is not before 'to'.
+     */
+    static MapSqlParameterSource filters(AuditLogQuery query) {
+        if (query.from() != null && query.to() != null && !query.from().isBefore(query.to())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "validation:invalid-filter", "Invalid filter",
+                    "'from' must be before 'to'.");
+        }
+        return new MapSqlParameterSource()
+                .addValue("action", upperOrNull(query.action()), Types.VARCHAR)
+                .addValue("targetType", upperOrNull(query.targetType()), Types.VARCHAR)
+                .addValue("targetId", blankToNull(query.targetId()), Types.VARCHAR)
+                .addValue("actorUserId", query.actorUserId(), Types.BIGINT)
+                .addValue("from", isoOrNull(query.from()), Types.VARCHAR)
+                .addValue("to", isoOrNull(query.to()), Types.VARCHAR);
     }
 
     private static AuditLogEntry toEntry(ResultSet rs, int rowNum) throws SQLException {
