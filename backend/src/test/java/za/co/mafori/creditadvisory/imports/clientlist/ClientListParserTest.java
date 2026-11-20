@@ -186,6 +186,42 @@ class ClientListParserTest {
     }
 
     @Test
+    void garbledTextIsAWarningAndStillImported() {
+        // "AIRLOOM DECOR" with the accented E saved with the wrong encoding several
+        // times, as in the real list.
+        String garbledEmployer = "AIRLOOM D\u00C3\u0192\u00E2\u20AC\u0161\u00C3\u201A\u00B0COR PTY LTD";
+        String garbledName = "Ren\u00C3\u00A9"; // an e-acute read as Windows-1252 once
+        ClientListParser.Result r = parse(sheet("Clients")
+                .row("Name", "Surname", "ID number", "Employer", "Consultant")
+                .row(garbledName, "Alpha", ID_1, garbledEmployer, "Test Consultant")
+                .row("Zo\u00EB", "S\u00E3o", ID_2, "CAF\u00C9 \u00C0 LA CARTE", "Test Consultant"));
+
+        List<ParseIssue> garbled = codes(r, ClientListParser.ROW_GARBLED_TEXT);
+        assertEquals(2, garbled.size(), "one per garbled cell; real accents are fine");
+        assertTrue(garbled.stream().allMatch(i -> i.severity() == Severity.WARNING && i.row() == 2));
+        assertEquals(List.of("Name", "Employer"), garbled.stream().map(ParseIssue::field).toList());
+        assertTrue(garbled.stream().noneMatch(i -> i.message().contains("AIRLOOM") || i.message().contains("Ren")),
+                "the message never repeats the value");
+
+        ClientListParser.Row a = r.rows().get(0);
+        assertFalse(a.rejected(), "the client is still imported");
+        assertEquals(garbledEmployer, a.employerName(), "imported as it is, to be fixed in the file");
+        assertEquals(garbledName, a.firstName());
+    }
+
+    @Test
+    void whatCountsAsGarbled() {
+        assertTrue(ClientListParser.looksGarbled("D\u00C3\u00A9COR")); // e-acute
+        assertTrue(ClientListParser.looksGarbled("25\u00C2\u00B0")); // degree sign
+        assertTrue(ClientListParser.looksGarbled("O\u00E2\u20AC\u2122NEILL")); // curly apostrophe
+        assertTrue(ClientListParser.looksGarbled("SMIT\uFFFDH")); // unreadable byte
+        assertFalse(ClientListParser.looksGarbled("Zo\u00EB S\u00E3o Andr\u00E9"));
+        assertFalse(ClientListParser.looksGarbled("\u00C3O PAULO")); // A-tilde before a plain letter
+        assertFalse(ClientListParser.looksGarbled("SHOPRITE"));
+        assertFalse(ClientListParser.looksGarbled(null));
+    }
+
+    @Test
     void fileLevelProblemsBlockTheImport() {
         ClientListParser.Result none = parse(sheet("Notes").row("Name", "Comment").row("x", "y"));
         assertTrue(none.blocked());
