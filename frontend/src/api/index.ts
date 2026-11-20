@@ -42,6 +42,15 @@ export type {
 } from './imports';
 
 export { reports } from './reports';
+export { workbookCheck } from './workbookCheck';
+export type {
+  WorkbookCheckDefect,
+  WorkbookCheckFigure,
+  WorkbookCheckFilter,
+  WorkbookCheckSection,
+  WorkbookCheckStatus,
+  WorkbookCheckSummary,
+} from './workbookCheck';
 
 export type {
   BudgetResponse,
@@ -87,7 +96,6 @@ export { mfa, mfaPending } from './mfa';
 export { ID_REVEAL_LIMIT, REAUTHENTICATION_REQUIRED, idReveal } from './idReveal';
 export type { ExportFormat } from './idReveal';
 export type { MfaEnabled, MfaSetup } from './mfa';
-
 export const features = {
   import: true,
   removeClient: true,

@@ -1,0 +1,42 @@
+.ws-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.wc-filters select {
+  height: 2.5rem;
+  max-width: 100%;
+  padding: 0 0.6rem;
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.wc-wrap {
+  min-width: 14rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.wc-formula {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--muted, #6b6b6b);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.wc-diff {
+  color: var(--err-ink);
+  font-weight: 600;
+}
+
+.wc-figures {
+  margin-top: 0.5rem;
+}

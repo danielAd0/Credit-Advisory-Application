@@ -19,6 +19,7 @@ import {
 import { hasAnyRole, useSession } from '../auth/useAuth';
 import ListPage from '../components/ListPage';
 import Pager from '../components/Pager';
+import WorkbookCheck from './WorkbookCheck';
 import './addclient.css';
 import './consultants.css';
 import './imports.css';
@@ -909,6 +910,7 @@ function ImportView({ initial, onBack }: { initial: ImportSummary; onBack: () =>
 
       {outcome && <ResultCard job={job} result={outcome} />}
       {previewed && !consultantsPending && <ConsultantsCard job={job} onUpdated={setJob} />}
+      {(job.state === 'PREVIEWED' || job.state === 'COMMITTED') && <WorkbookCheck id={job.id} />}
       <Details id={job.id} />
     </>
   );
