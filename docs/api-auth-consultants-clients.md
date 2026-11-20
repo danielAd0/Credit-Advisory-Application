@@ -119,6 +119,7 @@ Every successful change below writes one row to `audit_logs` in the **same trans
 | `USER_ROLES_CHANGED`             | user                         | `from`, `to` (role lists)                                                                                                             |
 | `USER_CONSULTANT_LINK_CHANGED`   | user                         | `fromConsultantId`, `toConsultantId`                                                                                                  |
 | `USER_ENABLED` / `USER_DISABLED` | user                         | -                                                                                                                                     |
+| `USER_DISABLED_DORMANT` | user | `lastLoginAt`, `dormantAfterDays` - disabled by the server because nobody had signed in with it for that long (no actor) |
 | `USER_PASSWORD_RESET`            | user                         | - (never the password)                                                                                                                |
 | `USER_UNLOCKED`                  | user                         | -                                                                                                                                     |
 | `PASSWORD_CHANGED`               | user (the user themselves)   | -                                                                                                                                     |
@@ -604,7 +605,7 @@ If department-level manager scope is confirmed later (SRS 4), MANAGER will be li
 **Query parameters**
 | Name | Example | Meaning | CONSULTANT may use? |
 |---|---|---|---|
-| `search` | `moko` | first or last name, partial, case-insensitive. A search of digits only (up to 20) also finds a client whose File number or File ID is **exactly** that | yes |
+| `search` | `moko` | first or last name, partial, case-insensitive. A search of digits only (up to 20) also finds a client whose File number or File ID is **exactly** that. A **whole phone number** also finds a client by their cell, work or home phone (see the rules) | yes |
 | `consultantId` | `4` | only clients of this consultant | no - ignored |
 | `consultantStatus` | `INACTIVE` | only clients whose consultant has this status | no - ignored |
 | `unassigned` | `true` | only clients with no consultant | no - ignored |
@@ -618,6 +619,11 @@ Sorted by `lastName`, then `firstName`.
 
 - For a CONSULTANT, the filters marked "no" are ignored and results are always limited to their own clients, whatever parameters are sent.
 - `unassigned=true` cannot be combined with `consultantId` or `consultantStatus`; doing so returns `400`.
+- **Phone numbers:** a search made only of digits, spaces, brackets, dots, hyphens and a leading `+`, with at least
+  9 digits, is read as a phone number the way phones are stored: `082 123 4567`, `0821234567`, `27821234567`,
+  `+27 82 123 4567` and `821234567` (the zero Excel drops) all mean `+27821234567`. It finds the client whose cell,
+  work or home phone is **exactly** that number, next to the name and file-number matches. Part of a number finds
+  nothing by phone.
 - Searching by ID number is not supported here - use `POST /api/clients/lookup`.
 
 **Errors:** `400` invalid parameters.
@@ -1226,6 +1232,21 @@ Disabling a user signs them out: their next request returns `401` (FR-18).
 | 400 | missing fields |
 | 404 | user does not exist |
 | 409 | stale `version`; disabling the last enabled admin (`urn:credit-advisory:user:last-admin`) |
+
+#### Dormant logins
+
+Once a day the server disables every login nobody has used for longer than `app.auth.dormant-after`
+(environment variable `DORMANT_LOGINS_AFTER`, for example `90d`). An account of someone who left, and that nobody
+remembered to disable, should not stay a way in to every client's ID number.
+
+- **Off by default** (`0d`) until the business sets the period.
+- Only logins that signed in at least once, and not since then. A login that never signed in has a temporary
+  password, which expires on its own.
+- **Never the last enabled administrator**: that one is left enabled and a warning is logged.
+- Each one is audited as `USER_DISABLED_DORMANT` (no actor: the system did it) with `lastLoginAt` and
+  `dormantAfterDays`. Its `version` goes up, so an edit that was open gets a stale-version.
+- To let the person back in: `PATCH /api/users/{id}/enabled` with `{ "enabled": true, ... }`, as for any disabled
+  user. The User object's `lastLoginAt` shows when they last signed in.
 
 ### POST /api/users/{id}/password-reset
 
