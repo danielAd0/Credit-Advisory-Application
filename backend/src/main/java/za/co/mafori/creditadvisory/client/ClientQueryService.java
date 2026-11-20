@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import za.co.mafori.creditadvisory.auth.AppUserPrincipal;
+import za.co.mafori.creditadvisory.common.phone.PhoneNumbers;
 import za.co.mafori.creditadvisory.common.web.ApiException;
 import za.co.mafori.creditadvisory.common.web.LikePattern;
 import za.co.mafori.creditadvisory.common.web.PageResponse;
@@ -66,7 +67,7 @@ public class ClientQueryService {
 
         PageRequest pageable = PageRequest.of(safePage, safeSize,
                 Sort.by("lastName").and(Sort.by("firstName")).and(Sort.by("id")));
-        Page<Client> found = clients.search(LikePattern.contains(search), fileReference(search),
+        Page<Client> found = clients.search(LikePattern.contains(search), fileReference(search), phone(search),
                 effectiveConsultantId, effectiveStatus, effectiveUnassigned, pageable);
         // Payment term and structure come from each client's latest sale: one query
         // for the whole page.
@@ -84,6 +85,31 @@ public class ClientQueryService {
         }
         String trimmed = search.strip();
         return trimmed.matches("[0-9]{1,20}") ? trimmed : null;
+    }
+
+    /**
+     * A search that looks like a whole phone number (082 123 4567, 0821234567,
+     * 27821234567, +27 82 123 4567, or 821234567 without its leading zero, as
+     * Excel shows it) is also matched against the client's three phones, in the
+     * form they are stored (+27821234567). Null for anything else, a name or part
+     * of a number: a phone is only found by the whole number.
+     */
+    static String phone(String search) {
+        if (search == null) {
+            return null;
+        }
+        String trimmed = search.strip();
+        if (!trimmed.matches("\\+?[0-9 ().\\-]+") || trimmed.replaceAll("[^0-9]", "").length() < 9) {
+            return null;
+        }
+        if (trimmed.matches("[1-9][0-9]{8}")) {
+            trimmed = "0" + trimmed; // the leading zero Excel drops, as the imports add it back
+        }
+        try {
+            return PhoneNumbers.normalise(trimmed);
+        } catch (PhoneNumbers.InvalidPhoneNumberException e) {
+            return null;
+        }
     }
 
     public static boolean seesAllClients(AppUserPrincipal caller) {
