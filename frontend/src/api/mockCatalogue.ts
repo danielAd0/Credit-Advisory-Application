@@ -1,6 +1,6 @@
 import { ApiError } from './http';
 import { delay } from './mock';
-import type { Employer, Product, ProductQuotation } from './admin';
+import type { Employer, MergeEmployerResult, Product, ProductQuotation } from './admin';
 import type { NamedRef, PageResponse } from './types';
 
 const now = () => new Date().toISOString();
@@ -38,12 +38,19 @@ const products: Product[] = [
   product(4, 'MAFORI_CARD', 'Mafori Card', 175),
 ];
 
-const employer = (id: number, name: string, company: string, type: string): Employer => ({
+const employer = (
+  id: number,
+  name: string,
+  company: string | null,
+  type: string | null,
+  needsReview = false,
+): Employer => ({
   id,
   name,
   company,
   employerType: type,
   active: true,
+  needsReview,
   version: 0,
   createdAt: now(),
   updatedAt: now(),
@@ -53,6 +60,9 @@ const employers: Employer[] = [
   employer(1, 'Sample Municipality', 'Sample Group', 'Government'),
   employer(2, 'Example Hospital', 'Example Health', 'Health'),
   employer(3, 'Demo Mining Co', 'Demo Holdings', 'Mining'),
+  employer(4, 'SAMPLE MUNIC', null, null, true),
+  employer(5, 'EXAMPLE HOSP', null, null, true),
+  employer(6, 'Demo Mining Company', null, null, true),
 ];
 
 const quotation = (id: number, name: string): ProductQuotation => ({
@@ -76,10 +86,6 @@ const namedRef = (x: { id: number; name: string; active: boolean }): NamedRef =>
   active: x.active,
 });
 
-/**
- * For the mock clients: the employer as a client shows it, or null if there is none.
- * Mirrors the server: 404 for an unknown id, 422 for a newly chosen inactive one.
- */
 export function mockEmployerRef(id: number | null, currentId?: number | null): NamedRef | null {
   if (id === null) return null;
   const e = employers.find((x) => x.id === id);
@@ -93,7 +99,6 @@ export function mockEmployerRef(id: number | null, currentId?: number | null): N
   return namedRef(e);
 }
 
-/** Same as mockEmployerRef, for branches. */
 export function mockQuotationRef(id: number | null, currentId?: number | null): NamedRef | null {
   if (id === null) return null;
   const q = productQuotations.find((x) => x.id === id);
@@ -186,6 +191,7 @@ export async function listEmployers(
     search?: string;
     active?: boolean;
     employerType?: string;
+    needsReview?: boolean;
     page?: number;
     size?: number;
   } = {},
@@ -194,6 +200,7 @@ export async function listEmployers(
   const q = (params.search ?? '').trim().toLowerCase();
   const all = employers
     .filter((e) => params.active === undefined || e.active === params.active)
+    .filter((e) => params.needsReview === undefined || e.needsReview === params.needsReview)
     .filter((e) => !params.employerType || e.employerType === params.employerType)
     .filter((e) => !q || e.name.toLowerCase().includes(q))
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -211,6 +218,7 @@ export async function createEmployer(input: EmployerInput): Promise<Employer> {
     company: input.company,
     employerType: input.employerType,
     active: true,
+    needsReview: false,
     version: 0,
     createdAt: now(),
     updatedAt: now(),
@@ -255,7 +263,42 @@ export async function setEmployerActive(
   return { ...e };
 }
 
-// ---------- branches ----------
+export async function mergeEmployer(
+  id: number,
+  input: { targetEmployerId: number; version: number; reason: string },
+): Promise<MergeEmployerResult> {
+  await delay();
+  const e = employers.find((x) => x.id === id);
+  const target = employers.find((x) => x.id === input.targetEmployerId);
+  if (!e || !target) throw problem(404, 'employer:not-found', 'Employer not found.');
+  if (e.id === target.id)
+    throw problem(422, 'employer:merge-into-itself', 'Choose a different employer to merge into.');
+  if (!target.active)
+    throw problem(409, 'employer:merge-target-inactive', 'Activate the target employer first.');
+  if (e.version !== input.version)
+    throw problem(409, 'conflict:stale-version', 'Someone else changed this employer first.');
+  if (!input.reason.trim()) throw problem(400, 'validation:invalid-request', 'Give a reason.');
+  employers.splice(employers.indexOf(e), 1);
+  return {
+    mergedEmployerId: e.id,
+    mergedEmployerName: e.name,
+    target: { ...target },
+    clientsMoved: 6,
+    transactionsMoved: 9,
+    aliasesMoved: 0,
+    nameKeptAsAlias: true,
+  };
+}
+
+export async function keepEmployer(id: number, version: number): Promise<Employer> {
+  await delay();
+  const e = employers.find((x) => x.id === id);
+  if (!e) throw problem(404, 'employer:not-found', 'Employer not found.');
+  if (e.version !== version)
+    throw problem(409, 'conflict:stale-version', 'Someone else changed this employer first.');
+  Object.assign(e, { needsReview: false, version: e.version + 1, updatedAt: now() });
+  return { ...e };
+}
 
 export async function listProductQuotations(
   params: { search?: string; active?: boolean; page?: number; size?: number } = {},
