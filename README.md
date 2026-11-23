@@ -175,8 +175,11 @@ java -jar credit-advisory-0.0.1-SNAPSHOT.jar
 | -------------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------- |
 | `SPRING_PROFILES_ACTIVE`   | yes              | always `prod`                                                                                                        |
 | `DB_URL`                   | yes              | e.g. `jdbc:postgresql://db-host:5432/credit_advisory?sslmode=verify-full` - a database on another machine **must** use `sslmode=verify-full` (or at least `require`) |
-| `DB_USERNAME`              | yes              | database user that owns the schema                                                                                   |
+| `DB_USERNAME`              | yes              | the application's database account: reads and writes rows only (docs/it-handover.md section 3)                      |
 | `DB_PASSWORD`              | yes              | its password                                                                                                         |
+| `DB_MIGRATION_USERNAME`    | yes              | the database account that owns the tables and runs the migrations at start-up; must differ from `DB_USERNAME`        |
+| `DB_MIGRATION_PASSWORD`    | yes              | its password; must differ from `DB_PASSWORD`                                                                         |
+| `CLAMD_HOST` / `CLAMD_PORT`| no               | the ClamAV daemon that scans every upload (default `127.0.0.1` / `3310`); the app refuses uploads it cannot scan     |
 | `ID_NUMBER_LOOKUP_KEY`     | yes              | 32 random bytes, base64 - made on the server by a key holder                                                         |
 | `ID_NUMBER_ENCRYPTION_KEY` | yes              | another 32 random bytes, base64 - a **different** key                                                                |
 | `MFA_ENCRYPTION_KEY`       | yes              | a third 32 random bytes, base64 - encrypts the authenticator secrets; must differ from both ID-number keys          |
@@ -243,8 +246,10 @@ firewall, so the server admins tick these off before go-live:
    app server's address, with `hostssl` and `scram-sha-256`; never `0.0.0.0/0` or `trust`. The database
    has a TLS certificate, and `DB_URL` uses `sslmode=verify-full`.
 5. **No other ports are open** on the application or database server (SSH only from the admin network).
-6. **The server can make no outgoing connections except to the database.** The application never calls
-   the internet, so blocking it stops stolen data from leaving the easy way.
+6. **The server can make no outgoing connections except to the database, Microsoft 365 and the ClamAV
+   signature updates.** Allowed on port 443 only: `login.microsoftonline.com` and `graph.microsoft.com` (the
+   onboarding emails, docs/consultant-onboarding.md) and `database.clamav.net` (freshclam, or an internal
+   mirror). Everything else is blocked, so stolen data cannot leave the easy way.
 7. **Backups of the database and the three keys** are stored apart from each other, and a restore is
    tested once before go-live.
 8. Check from a machine **outside** the network that only 443 answers (for example

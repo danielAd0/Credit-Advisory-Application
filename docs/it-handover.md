@@ -59,16 +59,45 @@ address**, so no CORS set-up is needed.
 
 ## 3. Database
 
-Run as the PostgreSQL superuser. Choose a long random password; it goes into `DB_PASSWORD` later.
+**Two database accounts** (docs/security-accounts-and-uploads.md):
+
+| Account | Used by | Can |
+| --- | --- | --- |
+| `ca_owner` | the migrations, for a moment at each start-up (`DB_MIGRATION_USERNAME`) | create and change tables: it owns them |
+| `ca_app` | the running application (`DB_USERNAME`) | read and write rows only: no creating, changing or dropping tables, no switching off triggers, no changing or deleting the audit log |
+
+Someone who breaks into the running application then gets `ca_app`, which cannot wipe the tables or rewrite
+history. The application refuses to start in production if the two are the same account, or if `ca_app` can do
+more than it should.
+
+Run as the PostgreSQL superuser. Choose two different long random passwords; they go into
+`DB_MIGRATION_PASSWORD` and `DB_PASSWORD` later.
 
 ```sql
-CREATE ROLE ca_app LOGIN PASSWORD 'choose-a-long-random-password';
-CREATE DATABASE credit_advisory OWNER ca_app;
+CREATE ROLE ca_owner LOGIN PASSWORD 'choose-a-long-random-password';
+CREATE ROLE ca_app   LOGIN PASSWORD 'choose-another-long-random-password';
+CREATE DATABASE credit_advisory OWNER ca_owner;
 REVOKE ALL ON DATABASE credit_advisory FROM PUBLIC;
+GRANT CONNECT ON DATABASE credit_advisory TO ca_app;
 ```
 
-The application creates and updates its own tables (Flyway) on every start-up - nobody runs SQL scripts
-by hand.
+Neither account is a superuser, and neither may create roles or databases. The application creates and updates
+its own tables (Flyway, as `ca_owner`) on every start-up, and then gives `ca_app` its rights - nobody runs SQL
+scripts by hand, and nobody grants anything by hand.
+
+**A database that already exists with `ca_app` as owner** (set up before 18 November): stop the application, then
+as the superuser, connected to `credit_advisory`:
+
+```sql
+CREATE ROLE ca_owner LOGIN PASSWORD 'choose-a-long-random-password';
+ALTER DATABASE credit_advisory OWNER TO ca_owner;
+REASSIGN OWNED BY ca_app TO ca_owner;   -- the tables, sequences and functions
+ALTER SCHEMA public OWNER TO ca_owner;
+GRANT CONNECT ON DATABASE credit_advisory TO ca_app;
+```
+
+Then add `DB_MIGRATION_USERNAME` and `DB_MIGRATION_PASSWORD` (section 5.2) and start it: the start-up gives `ca_app`
+its rights and checks them.
 
 `postgresql.conf`:
 
@@ -81,7 +110,8 @@ password_encryption = scram-sha-256
 `pg_hba.conf` - the application server's address only, encrypted, never `trust`:
 
 ```
-hostssl  credit_advisory  ca_app  10.0.0.5/32  scram-sha-256
+hostssl  credit_advisory  ca_owner  10.0.0.5/32  scram-sha-256
+hostssl  credit_advisory  ca_app    10.0.0.5/32  scram-sha-256
 ```
 
 `DB_URL` then ends in `?sslmode=verify-full`, e.g.
@@ -202,6 +232,8 @@ SPRING_PROFILES_ACTIVE=prod
 DB_URL=jdbc:postgresql://db.internal:5432/credit_advisory?sslmode=verify-full
 DB_USERNAME=ca_app
 DB_PASSWORD=...
+DB_MIGRATION_USERNAME=ca_owner
+DB_MIGRATION_PASSWORD=...
 ID_NUMBER_LOOKUP_KEY=...
 ID_NUMBER_ENCRYPTION_KEY=...
 MFA_ENCRYPTION_KEY=...
@@ -219,6 +251,14 @@ The `MAIL_*` settings let the app email consultants their login details through 
 (Microsoft Graph, an Entra ID app registration with `Mail.Send` limited to the sender mailbox).
 Set-up steps: `docs/consultant-onboarding.md`, section 5. The server must reach
 `login.microsoftonline.com` and `graph.microsoft.com` on port 443. Note the client secret's expiry date.
+
+**Virus scan of uploads.** Every uploaded file is scanned by ClamAV before the application reads it; the
+application refuses to start in production without it. Install it on the application server (Ubuntu/Debian:
+`apt install clamav-daemon clamav-freshclam`; Windows: the ClamAV installer, with `clamd` as a service) and make
+`clamd` listen on `127.0.0.1` port `3310` only (`clamd.conf`: `TCPSocket 3310`, `TCPAddr 127.0.0.1`). Set
+`StreamMaxLength 25M` (uploads are at most 10 MB). If clamd runs elsewhere, set `CLAMD_HOST` / `CLAMD_PORT`.
+`freshclam` updates the virus signatures several times a day and needs `database.clamav.net` on port 443 (or an
+internal mirror). If clamd is down, uploads are refused with "File not scanned" - never let through.
 
 `SERVER_ADDRESS` is the private address the proxy connects to. Leave it out if the proxy runs on the same
 machine (the default `127.0.0.1` is right then). The health check listens on `127.0.0.1:8081` unless
@@ -332,8 +372,15 @@ only believes `X-Forwarded-For` from such addresses, and uses it for the sign-in
 ## 7. Before go-live
 
 - Work through the **Network checklist** in the README (8 items: what is public, firewall rules,
-  `pg_hba.conf`, no outgoing connections except the database and Microsoft 365, backups, testing from outside).
+  `pg_hba.conf`, no outgoing connections except the database, Microsoft 365 and the ClamAV signature updates,
+  backups, testing from outside).
 - From the application server: `curl http://127.0.0.1:8081/actuator/health` answers `{"status":"UP"}`.
+- The application started, so the two database accounts are right (it refuses to start otherwise). Check once
+  by hand, connected as `ca_app`: `UPDATE audit_logs SET action = action;` must fail with "permission denied".
+- **Virus scan:** download the EICAR test file (`eicar.com`, a harmless file every scanner reports as a virus,
+  from eicar.org), rename it `test.xlsx`, and upload it on the Import page. It must be refused with "File refused
+  ... Eicar", and the audit log shows `UPLOAD_REJECTED`. Then stop `clamd` and upload a real register: it must
+  be refused with "File not scanned". Start `clamd` again.
 - From outside the network: only port 443 answers; `https://<address>/actuator/health` is a 404.
 - Sign in on a phone and on a laptop; make sure the browser shows a valid certificate.
 - Restore the latest database backup to a separate, non-production server once, and start a copy of the
