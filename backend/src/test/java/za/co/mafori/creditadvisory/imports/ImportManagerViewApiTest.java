@@ -72,7 +72,10 @@ class ImportManagerViewApiTest extends ApiTestBase {
         assertThat(summary.status()).as(summary.body()).isEqualTo(200);
         assertThat(summary.text("$.state")).isEqualTo("COMMITTED");
         assertThat(summary.size("$.days")).isEqualTo(7);
-        assertThat(summary.body()).as("no full ID numbers in the summary").doesNotContainPattern("\\d{13}");
+        // The file's SHA-256 (64 hex characters) can hold 13 digits in a row by chance:
+        // left out of the check.
+        assertThat(summary.body().replaceAll("[0-9a-f]{64}", "")).as("no full ID numbers in the summary")
+                .doesNotContainPattern("\\d{13}");
         assertThat(FakeWeeklyRegisterWorkbook.allRows())
                 .as("no client surname in the summary")
                 .noneMatch(r -> r.surname().strip().length() > 4 && summary.body().contains(r.surname().strip()));
