@@ -67,8 +67,10 @@ class ClientListImportApiTest extends ApiTestBase {
                 assertThat(p.texts("$.newEmployers")).containsExactly("Test Local Municipality");
                 assertThat(p.number("$.additions.debitOrders")).isEqualTo(1);
                 assertThat(p.value("$.canConfirm")).isEqualTo(true);
-                assertThat(p.body()).doesNotContainPattern("\\d{13}");
-
+                // The file's SHA-256 (64 hex characters) can hold 13 digits in a row by chance,
+                // so it
+                // is left out of the check; everything else must have no 13-digit number.
+                assertThat(p.body().replaceAll("[0-9a-f]{64}", "")).doesNotContainPattern("\\d{13}");
                 assertThat(count("select count(*) from clients")).isZero();
                 assertThat(count("select count(*) from audit_logs where action = 'IMPORT_PREVIEWED'"
                                 + " and metadata ->> 'importType' = 'CLIENT_LIST'")).isEqualTo(1);
