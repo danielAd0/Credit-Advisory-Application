@@ -1,57 +1,147 @@
+/* Team page tabs and the Name spellings card. Classes start with "ca-". */
+
+/* Tabs: a segmented control under the page title */
 .ca-tabs {
-  display: flex;
+  display: inline-flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
+  gap: 0.25rem;
+  margin-top: 1.5rem;
+  padding: 0.25rem;
+  background: var(--lp-pill, #eceef2);
+  border-radius: 8px;
+}
+.lp .ca-tabs .btn {
+  min-height: 2.25rem;
+  padding: 0.4rem 1.1rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 500;
+  box-shadow: none;
+}
+.lp .ca-tabs .btn:hover:not(:disabled) {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.6);
+}
+.lp .ca-tabs .btn[aria-pressed='true'],
+.lp .ca-tabs .btn[aria-pressed='true']:hover {
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.12);
+}
+.ca-tabs + .lp-card {
+  margin-top: 1rem;
 }
 
+/* Intro text under the card heading */
+.ca-intro {
+  max-width: 52rem;
+  margin: -0.5rem 0 1.25rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* The add form: a shaded band, separated from the table below */
 .ca-add {
   display: grid;
-  grid-template-columns: minmax(14rem, 1fr) minmax(14rem, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
   align-items: end;
-  gap: 0 1rem;
-  margin: 0.75rem 0 1rem;
+  gap: 1rem;
+  margin: 0 0 1.5rem;
+  padding: 1.1rem 1.25rem;
+  background: var(--lp-band, #f4f5f8);
+  border: 1px solid var(--line);
+  border-radius: 10px;
 }
-
-.ca-add .ac-field {
-  margin: 0 !important;
+.ca-field {
   min-width: 0;
 }
-
-.ca-add .ca-submit {
+.ca-field label {
   display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.ca-field input,
+.ca-field select {
+  display: block;
+  width: 100%;
   height: 2.75rem;
-  margin: 0 !important;
+  padding: 0 0.85rem;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 0.95rem;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--lp-field, #d6d9df);
+  border-radius: 6px;
+}
+.ca-field input:focus,
+.ca-field select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(255, 90, 0, 0.2);
+}
+.lp .ca-add .ca-submit {
+  height: 2.75rem;
+  margin: 0;
   white-space: nowrap;
+}
+
+/* Messages sit between the form and the table */
+.lp-card > .alert {
+  margin: 0 0 1.25rem;
+}
+
+/* Consultant filter in the card header */
+.ca-filters select {
+  min-width: 12rem;
+  max-width: 100%;
+}
+
+/* Table cells */
+.ca-spelling {
+  font-weight: 600;
+}
+.ca-code {
+  margin-left: 0.4rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.ca-added {
+  white-space: nowrap;
+}
+.ca-by {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.ca-ask {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--muted);
 }
 
 @media (max-width: 720px) {
   .ca-add {
     grid-template-columns: 1fr;
-    gap: 0.75rem;
+    padding: 1rem;
   }
-}
-
-.ca-add select,
-.ca-filters select {
-  height: 2.75rem;
-  max-width: 100%;
-  padding: 0 0.75rem;
-  font: inherit;
-  color: var(--ink);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-}
-
-.ca-spelling {
-  font-weight: 600;
-}
-
-.ca-ask {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-  white-space: normal;
+  .lp .ca-add .ca-submit {
+    width: 100%;
+  }
+  .ca-tabs {
+    display: flex;
+  }
+  .lp .ca-tabs .btn {
+    flex: 1 1 auto;
+  }
 }

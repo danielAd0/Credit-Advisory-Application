@@ -419,7 +419,8 @@ export default function ConsultantsPage() {
       description="Consultants, their status and how many clients each one holds. Consultants are deactivated or suspended, never deleted."
       footer="Confidential staff information"
       action={
-        isAdmin && (
+        isAdmin &&
+        tab === 'consultants' && (
           <Link className="btn primary" to="/consultants/new">
             Add consultant
           </Link>
