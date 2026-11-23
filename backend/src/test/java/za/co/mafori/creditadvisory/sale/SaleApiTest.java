@@ -90,8 +90,9 @@ class SaleApiTest extends ApiTestBase {
         assertThat(saved.text("$.weekStarting")).isEqualTo("2026-09-14");
         assertThat(saved.number("$.dayOfWeek")).isEqualTo(2);
         assertThat(saved.size("$.lines")).isEqualTo(2);
-        assertThat(money(saved, "$.quotationTotal")).isEqualTo(1800.5);
-        assertThat(money(saved, "$.bankedTotal")).isEqualTo(1500.0);
+        // The product lines plus the amount to client (5000) count toward both totals.
+        assertThat(money(saved, "$.quotationTotal")).isEqualTo(6800.5);
+        assertThat(money(saved, "$.bankedTotal")).isEqualTo(6500.0);
         assertThat(saved.value("$.replaced")).isEqualTo(false);
 
         long id = saved.number("$.id");

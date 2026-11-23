@@ -396,6 +396,12 @@ public class WeeklyRegisterParser {
                 }
             }
 
+            // The standard rule also counts AMOUNT TO CLIENT toward both totals.
+            if (amountToClient != null) {
+                byRuleQ = byRuleQ.add(amountToClient);
+                byRuleB = byRuleB.add(amountToClient);
+            }
+
             Map<String, Object> extras = extras(cells, issues);
 
             return new ParsedRow(sheet.name(), day, rowNumber, date, first, last, id, consultant, consultantEmail,

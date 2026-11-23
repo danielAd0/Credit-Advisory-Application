@@ -292,8 +292,10 @@ export default function ConsultantActionsPage() {
   const sum = (pick: (p: Entry['product']) => boolean) =>
     lines.filter((l) => pick(l.product)).reduce((s, l) => s + l.cents, 0);
   const toClient = parseMoney(extras.amountToClient);
-  const quotation = sum((p) => p.countsTowardQuotation);
-  const banked = sum((p) => p.countsTowardBanked);
+  // Amount to client counts toward both totals, like the product lines.
+  const toClientCents = typeof toClient === 'number' && toClient > 0 ? toClient : 0;
+  const quotation = sum((p) => p.countsTowardQuotation) + toClientCents;
+  const banked = sum((p) => p.countsTowardBanked) + toClientCents;
 
   const setAmount = (id: number) => (e: ChangeEvent<HTMLInputElement>) => {
     setAmounts((a) => ({ ...a, [id]: e.target.value }));

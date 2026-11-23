@@ -495,8 +495,8 @@ public class SaleEditService {
                 banked = banked.add(line.amount());
             }
         }
-        BigDecimal quotationTotal = quotation;
-        BigDecimal bankedTotal = banked;
+        BigDecimal baseQuotation = quotation;
+        BigDecimal baseBanked = banked;
         return jdbc.queryForObject("""
                 select t.id, t.client_id, t.consultant_id, t.transaction_date, w.week_starting, t.day_of_week,
                        t.amount_to_client, t.third_party_settlement, t.payment_term_id, t.employer_id, t.structure_id,
@@ -511,6 +511,10 @@ public class SaleEditService {
                 """, (rs, n) -> {
             boolean typedIn = rs.getBoolean(16);
             boolean replaced = rs.getBoolean(17);
+            // Amount to client counts toward both totals, like the product lines.
+            BigDecimal toClient = rs.getBigDecimal(7);
+            BigDecimal quotationTotal = toClient == null ? baseQuotation : baseQuotation.add(toClient);
+            BigDecimal bankedTotal = toClient == null ? baseBanked : baseBanked.add(toClient);
             return new SaleDetail(rs.getLong(1), rs.getLong(2), rs.getObject(3, Long.class),
                     rs.getObject(4, LocalDate.class), rs.getObject(5, LocalDate.class), rs.getObject(6, Integer.class),
                     lines, quotationTotal, bankedTotal, rs.getBigDecimal(7), rs.getBigDecimal(8),

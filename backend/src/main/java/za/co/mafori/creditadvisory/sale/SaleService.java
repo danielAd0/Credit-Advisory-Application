@@ -369,7 +369,7 @@ public class SaleService {
         named.query("""
                 select t.id, t.client_id, t.consultant_id, t.transaction_date, w.week_starting, t.day_of_week,
                        t.superseded_by_import_job_id is not null, t.import_job_id is null,
-                       t.flag_note, f.email, t.flagged_at
+                       t.flag_note, f.email, t.flagged_at, t.amount_to_client
                 from client_transactions t
                          left join reporting_weeks w on w.id = t.reporting_week_id
                          left join users f on f.id = t.flagged_by_user_id
@@ -386,6 +386,12 @@ public class SaleService {
                 if (line.countsTowardBanked()) {
                     banked = banked.add(line.amount());
                 }
+            }
+            // Amount to client counts toward both totals, like the product lines.
+            BigDecimal toClient = rs.getBigDecimal(12);
+            if (toClient != null) {
+                quotation = quotation.add(toClient);
+                banked = banked.add(toClient);
             }
             boolean replaced = rs.getBoolean(7);
             boolean typedIn = rs.getBoolean(8);

@@ -141,8 +141,9 @@ class SaleEditApiTest extends ApiTestBase {
         assertThat(changed.status()).as(changed.body()).isEqualTo(200);
         assertThat(changed.text("$.transactionDate")).isEqualTo("2026-09-16");
         assertThat(changed.number("$.dayOfWeek")).isEqualTo(3);
-        assertThat(money(changed, "$.quotationTotal")).isEqualTo(1300.0);
-        assertThat(money(changed, "$.bankedTotal")).isEqualTo(1300.0);
+        // The product lines (1300) plus the amount to client (4000) count toward both totals.
+        assertThat(money(changed, "$.quotationTotal")).isEqualTo(5300.0);
+        assertThat(money(changed, "$.bankedTotal")).isEqualTo(5300.0);
         assertThat(money(changed, "$.amountToClient")).isEqualTo(4000.0);
         assertThat(changed.number("$.version")).isEqualTo(1);
         assertThat(count("select count(*) from client_transaction_lines where transaction_id = ?", id))
@@ -155,7 +156,7 @@ class SaleEditApiTest extends ApiTestBase {
 
         ApiClient.Response summary = manager.get("/api/reports/weeks/2026-09-14/summary");
         assertThat(money(summary, "$.week.quotationTotal")).as("the reports count the new figures")
-                .isEqualTo(1300.0);
+                .isEqualTo(5300.0);
     }
 
     @Test

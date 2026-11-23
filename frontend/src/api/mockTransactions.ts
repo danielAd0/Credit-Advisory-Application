@@ -100,6 +100,7 @@ function priceLines(
   t: {
     transactionDate: string;
     lines: { productId: number; amount: number }[];
+    amountToClient?: number | null;
   },
   existing: SavedTransaction['lines'] = [],
 ) {
@@ -127,8 +128,10 @@ function priceLines(
       countsTowardBanked: p.countsTowardBanked,
     };
   });
+  // Amount to client counts toward both totals, like the product lines.
+  const toClient = t.amountToClient && t.amountToClient > 0 ? cents(t.amountToClient) : 0;
   const sum = (pick: (l: (typeof lines)[number]) => boolean) =>
-    lines.filter(pick).reduce((s, l) => s + cents(l.amount), 0) / 100;
+    (lines.filter(pick).reduce((s, l) => s + cents(l.amount), 0) + toClient) / 100;
 
   const weekday = new Date(`${t.transactionDate}T00:00:00`).getDay();
   return {
