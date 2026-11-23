@@ -98,54 +98,76 @@ export default function SalesHistoryPage() {
         {manager ? '' : ' You see your own sales.'}
       </p>
 
-      <div className="ms-filters">
-        <div className="ms-field">
-          <label htmlFor="ms-from">From</label>
-          <input
-            id="ms-from"
-            type="date"
-            max={to || undefined}
-            value={from}
-            onChange={(e) => {
-              setFrom(e.target.value);
-              setPage(0);
-            }}
-          />
-        </div>
-        <div className="ms-field">
-          <label htmlFor="ms-to">To</label>
-          <input
-            id="ms-to"
-            type="date"
-            min={from || undefined}
-            value={to}
-            onChange={(e) => {
-              setTo(e.target.value);
-              setPage(0);
-            }}
-          />
-        </div>
-        {manager && (
+      <section className="ms-filters" aria-label="Filter sales">
+        <div className="ms-row">
           <div className="ms-field">
-            <label htmlFor="ms-consultant">Consultant</label>
-            <select
-              id="ms-consultant"
-              value={consultantId}
+            <label htmlFor="ms-from">From</label>
+            <input
+              id="ms-from"
+              type="date"
+              max={to || undefined}
+              value={from}
               onChange={(e) => {
-                setConsultantId(e.target.value);
+                setFrom(e.target.value);
                 setPage(0);
               }}
-            >
-              <option value="">All consultants</option>
-              {staff.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.fullName} ({c.consultantCode})
-                </option>
-              ))}
-            </select>
+            />
           </div>
-        )}
-        <div className="ms-field">
+          <div className="ms-field">
+            <label htmlFor="ms-to">To</label>
+            <input
+              id="ms-to"
+              type="date"
+              min={from || undefined}
+              value={to}
+              onChange={(e) => {
+                setTo(e.target.value);
+                setPage(0);
+              }}
+            />
+          </div>
+          {manager && (
+            <div className="ms-field ms-field-wide">
+              <label htmlFor="ms-consultant">Consultant</label>
+              <select
+                id="ms-consultant"
+                value={consultantId}
+                onChange={(e) => {
+                  setConsultantId(e.target.value);
+                  setPage(0);
+                }}
+              >
+                <option value="">All consultants</option>
+                {staff.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.fullName} ({c.consultantCode})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+        <div className="ms-row ms-row-foot">
+          <div className="ms-presets" role="group" aria-label="Quick date range">
+            <span className="ms-presets-label">Quick range</span>
+            <button type="button" className="btn" onClick={() => preset(thisMonday, today)}>
+              This week
+            </button>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => preset(addDays(thisMonday, -7), addDays(thisMonday, -1))}
+            >
+              Last week
+            </button>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => preset(addDays(today, -29), today)}
+            >
+              Last 30 days
+            </button>
+          </div>
           <label className="ms-check">
             <input
               type="checkbox"
@@ -158,22 +180,7 @@ export default function SalesHistoryPage() {
             Needs correction only
           </label>
         </div>
-        <div className="ms-presets">
-          <button type="button" className="btn" onClick={() => preset(thisMonday, today)}>
-            This week
-          </button>
-          <button
-            type="button"
-            className="btn"
-            onClick={() => preset(addDays(thisMonday, -7), addDays(thisMonday, -1))}
-          >
-            Last week
-          </button>
-          <button type="button" className="btn" onClick={() => preset(addDays(today, -29), today)}>
-            Last 30 days
-          </button>
-        </div>
-      </div>
+      </section>
 
       {!valid && (
         <p className="alert error" role="alert">
@@ -215,62 +222,63 @@ export default function SalesHistoryPage() {
               )}
             </p>
           ) : (
-            <div className="table-wrap">
-              <table className="ms-table">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Client</th>
-                    {manager && <th>Consultant</th>}
-                    <th>Products</th>
-                    <th className="num">Quotation</th>
-                    <th className="num">Banked</th>
-                    <th>Source</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {paged.items.map((s) => (
-                    <tr key={s.id}>
-                      <td>{dayLabel(s.transactionDate)}</td>
-                      <td>
-                        <Link to={`/clients/${s.clientId}`}>{s.clientName}</Link>
-                      </td>
-                      {manager && <td>{s.consultantName}</td>}
-                      <td className="ms-products">
-                        <ul className="ms-lines">
-                          {s.lines.map((l) => (
-                            <li key={l.productId}>
-                              <span>{l.name}</span>
-                              <span className="muted">{rand(l.amount)}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </td>
-                      <td className="num">{rand(s.quotationTotal)}</td>
-                      <td className="num">{rand(s.bankedTotal)}</td>
-                      <td>
-                        {s.typedIn === false ? 'Imported' : 'Typed in'}
-                        {s.flag && (
-                          <div className="ms-flag">
-                            <strong>Needs correction</strong>
-                            <p>{s.flag.note}</p>
-                          </div>
-                        )}
-                      </td>
+            <div className="ms-card">
+              <div className="ms-scroll">
+                <table className="ms-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Client</th>
+                      {manager && <th>Consultant</th>}
+                      <th>Products</th>
+                      <th className="num">Quotation</th>
+                      <th className="num">Banked</th>
+                      <th>Source</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {paged.items.map((s) => (
+                      <tr key={s.id}>
+                        <td className="ms-date">{dayLabel(s.transactionDate)}</td>
+                        <td className="ms-client">
+                          <Link to={`/clients/${s.clientId}`}>{s.clientName}</Link>
+                        </td>
+                        {manager && <td className="ms-wrap">{s.consultantName}</td>}
+                        <td className="ms-products">
+                          <ul className="ms-lines">
+                            {s.lines.map((l) => (
+                              <li key={l.productId}>
+                                <span>{l.name}</span>
+                                <span className="ms-amount">{rand(l.amount)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </td>
+                        <td className="num">{rand(s.quotationTotal)}</td>
+                        <td className="num">{rand(s.bankedTotal)}</td>
+                        <td className="ms-source">
+                          {s.typedIn === false ? 'Imported' : 'Typed in'}
+                          {s.flag && (
+                            <div className="ms-flag">
+                              <strong>Needs correction</strong>
+                              <p>{s.flag.note}</p>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <Pager
+                page={paged.page}
+                size={paged.size}
+                totalItems={paged.totalItems}
+                totalPages={paged.totalPages}
+                onPage={setPage}
+              />
             </div>
           )}
-
-          <Pager
-            page={paged.page}
-            size={paged.size}
-            totalItems={paged.totalItems}
-            totalPages={paged.totalPages}
-            onPage={setPage}
-          />
         </>
       )}
     </div>

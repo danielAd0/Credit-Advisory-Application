@@ -1,42 +1,63 @@
+/* Sales history page. Classes start with "ms-". */
 .ms {
-  max-width: 1100px;
+  --ms-pad: 1.25rem;
+  --ms-band: #f4f5f8;
+  --ms-field: #d6d9df;
+  max-width: 1280px;
 }
 
+/* Filter card: date range and consultant on top, quick ranges and the tick box below */
 .ms-filters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-  align-items: flex-end;
   margin: 1.25rem 0 1rem;
-  padding: 1rem 1.25rem;
   background: var(--surface);
   border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.ms-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 1rem;
+  padding: 1rem var(--ms-pad);
+}
+.ms-row-foot {
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+  background: var(--ms-band);
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 12px 12px;
 }
 
-.ms-filed {
+.ms-field {
   display: grid;
-  gap: 0.3rem;
+  gap: 0.35rem;
+  flex: 0 1 11rem;
+  min-width: 0;
 }
-
+.ms-field-wide {
+  flex: 1 1 16rem;
+  max-width: 24rem;
+}
 .ms-field label {
   font-size: 0.85rem;
   font-weight: 600;
 }
-
 .ms-field input,
 .ms-field select {
   box-sizing: border-box;
+  width: 100%;
   height: 2.5rem;
   padding: 0 0.75rem;
   font: inherit;
+  font-size: 0.95rem;
   color: var(--ink);
   background-color: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  border: 1px solid var(--ms-field);
+  border-radius: 6px;
 }
-
 .ms-field select {
-  min-width: 16rem;
   padding-right: 2.25rem;
   cursor: pointer;
   appearance: none;
@@ -45,93 +66,150 @@
   background-repeat: no-repeat;
   background-position: right 0.85rem center;
 }
-
 .ms-field input:focus,
 .ms-field select:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(255, 90, 0, 0.25);
+  box-shadow: 0 0 0 3px rgba(255, 90, 0, 0.2);
 }
 
+/* Quick ranges */
 .ms-presets {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.5rem;
-  margin-left: auto;
+}
+.ms-presets-label {
+  margin-right: 0.25rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+.ms-presets .btn {
+  padding: 0.4rem 0.85rem;
+  font-size: 0.9rem;
+  border-radius: 6px;
+  background: var(--surface);
 }
 
+.ms-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+.ms-check input {
+  width: 1.05rem;
+  height: 1.05rem;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* Totals */
 .ms-tiles {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
   gap: 1rem;
   margin-bottom: 1rem;
 }
-
 .ms-tile {
   display: grid;
   gap: 0.2rem;
-  padding: 1rem 1.25rem;
+  padding: 1rem var(--ms-pad);
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 12px;
 }
-
 .ms-tile span {
   font-size: 0.85rem;
   color: var(--muted);
 }
-
 .ms-tile strong {
   font-size: 1.4rem;
   font-weight: 600;
 }
 
+/* Table card */
+.ms-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.ms-scroll {
+  overflow-x: auto;
+}
+.ms-table th {
+  padding: 0.85rem 1rem;
+  background: var(--ms-band);
+  font-weight: 500;
+}
 .ms-table td {
+  padding: 0.9rem 1rem;
   vertical-align: top;
 }
-
+.ms-table th:first-child,
+.ms-table td:first-child {
+  padding-left: var(--ms-pad);
+}
+.ms-table th:last-child,
+.ms-table td:last-child {
+  padding-right: var(--ms-pad);
+}
+.ms-table tbody tr:hover {
+  background: #fafbfc;
+}
 .ms-table td a {
   color: var(--ink);
-  font-weight: 500;
+  font-weight: 600;
   text-decoration: none;
 }
-
 .ms-table td a:hover {
   color: var(--accent);
   text-decoration: underline;
 }
-
-.ms-table td.ms-products {
-  min-width: 15rem;
+.ms-table td.ms-date {
+  color: var(--muted);
+}
+.ms-table td.ms-client {
+  min-width: 11rem;
   white-space: normal;
 }
-
+.ms-table td.ms-wrap {
+  min-width: 8rem;
+  white-space: normal;
+}
+.ms-table td.ms-products {
+  min-width: 13rem;
+  white-space: normal;
+}
 .ms-lines {
   display: grid;
-  gap: 0.15rem;
+  gap: 0.25rem;
   margin: 0;
   padding: 0;
   list-style: none;
   font-size: 0.9rem;
 }
-
 .ms-lines li {
   display: flex;
   justify-content: space-between;
   gap: 1rem;
 }
-
-.ms-check {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding-top: 1.6rem;
+.ms-amount {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
-
-.ms-check input {
-  width: auto;
-  height: auto;
-  padding: 0;
+.ms-table td.num {
+  font-variant-numeric: tabular-nums;
+}
+.ms-table td.ms-source {
+  white-space: nowrap;
 }
 
 .ms-flag {
@@ -141,7 +219,29 @@
   font-size: 0.85rem;
   color: var(--accent-ink);
 }
-
 .ms-flag p {
   margin: 0.15rem 0 0;
+}
+
+/* Pager sits under the table, separated by a rule */
+.ms-card .pager {
+  margin: 0;
+  padding: 0.85rem var(--ms-pad);
+  border-top: 1px solid var(--line);
+  font-size: 0.9rem;
+}
+
+@media (max-width: 700px) {
+  .ms {
+    --ms-pad: 1rem;
+  }
+  .ms-field,
+  .ms-field-wide {
+    flex: 1 1 100%;
+    max-width: none;
+  }
+  .ms-row-foot {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
