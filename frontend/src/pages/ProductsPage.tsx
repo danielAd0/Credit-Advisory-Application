@@ -1,123 +1,79 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { catalogue, detailOf, isStale, type PageResponse, type Product } from '../api';
 import { hasAnyRole, useSession } from '../auth/useAuth';
 import ListPage from '../components/ListPage';
 import { countOf } from '../components/countOf';
 import Pager from '../components/Pager';
+import ProductFields from './ProductFields';
+import { productFields, toForm, type Form } from './productForm';
 import './addclient.css';
 import './consultants.css';
 
 const SIZE = 25;
 
-interface Form {
-  code: string;
-  name: string;
-  price: string;
-  quotation: boolean;
-  banked: boolean;
-  order: string;
-}
-
-const EMPTY: Form = { code: '', name: '', price: '', quotation: true, banked: true, order: '' };
-
-const toForm = (p: Product): Form => ({
-  code: p.code,
-  name: p.name,
-  price: p.standardPrice === null ? '' : String(p.standardPrice),
-  quotation: p.countsTowardQuotation,
-  banked: p.countsTowardBanked,
-  order: String(p.displayOrder),
-});
-
 const money = (n: number | null) =>
   n === null ? 'Negotiated' : `R ${n.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}`;
 
 interface PanelProps {
-  product: Product | null;
-  /** ADMIN only. A MANAGER can add a product but not change or deactivate it. */
-  canEdit: boolean;
-  onSaved: (p: Product, isNew: boolean) => void;
+  product: Product;
+  onSaved: (p: Product) => void;
   onClose: () => void;
 }
 
-function ProductPanel({ product, canEdit, onSaved, onClose }: PanelProps) {
-  const [v, setV] = useState<Form>(product ? toForm(product) : EMPTY);
+function ProductPanel({ product, onSaved, onClose }: PanelProps) {
+  const [v, setV] = useState<Form>(toForm(product));
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [current, setCurrent] = useState<Product | null>(product);
+  const [current, setCurrent] = useState<Product>(product);
+
+  const staleText = 'Someone else changed this product. Close this panel, reopen it and try again.';
 
   async function save(e: FormEvent) {
     e.preventDefault();
     if (busy) return;
     setError(null);
     setOk(null);
-    const price = v.price.trim() === '' ? null : Number(v.price);
-    const order = v.order.trim() === '' ? 0 : Number(v.order);
-    if (!v.name.trim()) return setError('Enter the product name.');
-    if (!current && !v.code.trim()) return setError('Enter a product code.');
-    if (price !== null && (!Number.isFinite(price) || price < 0))
-      return setError('The price must be a number, or empty if it is negotiated.');
-    if (!Number.isInteger(order)) return setError('The display order must be a whole number.');
+    const checked = productFields(v);
+    if (checked.error !== undefined) return setError(checked.error);
     setBusy(true);
     try {
-      const fields = {
-        name: v.name.trim(),
-        standardPrice: price,
-        countsTowardQuotation: v.quotation,
-        countsTowardBanked: v.banked,
-        displayOrder: order,
-      };
-      const saved = current
-        ? await catalogue.updateProduct(current.id, { ...fields, version: current.version })
-        : await catalogue.createProduct({ ...fields, code: v.code.trim() });
-      onSaved(saved, !current);
-      if (!current && !canEdit) {
-        // A manager stays on an empty form: they cannot edit what they just added.
-        setV(EMPTY);
-        setOk(
-          `Added ${saved.name} (${saved.code}). Only an administrator can change or deactivate it.`,
-        );
-        return;
-      }
+      const saved = await catalogue.updateProduct(current.id, {
+        ...checked.fields,
+        version: current.version,
+      });
+      onSaved(saved);
       setCurrent(saved);
       setV(toForm(saved));
       setOk('Saved.');
     } catch (err) {
-      setError(
-        isStale(err)
-          ? 'Someone else changed this product. Close this panel, reopen it and try again.'
-          : (detailOf(err) ?? 'Could not save the product.'),
-      );
+      setError(isStale(err) ? staleText : (detailOf(err) ?? 'Could not save the product.'));
     } finally {
       setBusy(false);
     }
   }
 
   async function toggleActive() {
-    if (busy || !current) return;
+    if (busy) return;
     setBusy(true);
     setError(null);
     setOk(null);
     try {
       const saved = await catalogue.setProductActive(current.id, !current.active, current.version);
-      onSaved(saved, false);
+      onSaved(saved);
       setCurrent(saved);
       setOk(saved.active ? 'The product is active.' : 'The product is deactivated.');
     } catch (err) {
-      setError(
-        isStale(err)
-          ? 'Someone else changed this product. Close this panel, reopen it and try again.'
-          : (detailOf(err) ?? 'Could not change the product.'),
-      );
+      setError(isStale(err) ? staleText : (detailOf(err) ?? 'Could not change the product.'));
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <section className="cn-panel" aria-label={current ? `Edit ${current.name}` : 'Add product'}>
-      <h2>{current ? `Edit ${current.name}` : 'Add product'}</h2>
+    <section className="cn-panel" aria-label={`Edit ${current.name}`}>
+      <h2>Edit {current.name}</h2>
       {error && (
         <p className="alert error" role="alert">
           {error}
@@ -129,81 +85,14 @@ function ProductPanel({ product, canEdit, onSaved, onClose }: PanelProps) {
         </p>
       )}
       <form onSubmit={save} noValidate>
-        <div className="ac-field">
-          <label htmlFor="pr-code">Code</label>
-          <input
-            id="pr-code"
-            value={v.code}
-            disabled={!!current}
-            onChange={(e) => setV({ ...v, code: e.target.value })}
-            autoComplete="off"
-          />
-          <p className="ac-hint">
-            {current
-              ? 'The code never changes.'
-              : 'Saved in capitals, for example "funeral cover" becomes FUNERAL_COVER.'}
-          </p>
-        </div>
-        <div className="ac-field">
-          <label htmlFor="pr-name">Name</label>
-          <input
-            id="pr-name"
-            value={v.name}
-            onChange={(e) => setV({ ...v, name: e.target.value })}
-            autoComplete="off"
-          />
-        </div>
-        <div className="ac-row">
-          <div className="ac-field">
-            <label htmlFor="pr-price">Standard price (R)</label>
-            <input
-              id="pr-price"
-              inputMode="decimal"
-              value={v.price}
-              onChange={(e) => setV({ ...v, price: e.target.value })}
-              autoComplete="off"
-            />
-            <p className="ac-hint">Leave empty if the price is negotiated.</p>
-          </div>
-          <div className="ac-field">
-            <label htmlFor="pr-order">Display order</label>
-            <input
-              id="pr-order"
-              inputMode="numeric"
-              value={v.order}
-              onChange={(e) => setV({ ...v, order: e.target.value })}
-              autoComplete="off"
-            />
-          </div>
-        </div>
-        <p>
-          <label>
-            <input
-              type="checkbox"
-              checked={v.quotation}
-              onChange={(e) => setV({ ...v, quotation: e.target.checked })}
-            />{' '}
-            Counts toward quotation
-          </label>
-          <br />
-          <label>
-            <input
-              type="checkbox"
-              checked={v.banked}
-              onChange={(e) => setV({ ...v, banked: e.target.checked })}
-            />{' '}
-            Counts toward banked
-          </label>
-        </p>
+        <ProductFields v={v} onChange={setV} codeLocked />
         <div className="cn-actions">
           <button type="submit" className="btn primary" disabled={busy}>
-            {current ? 'Save changes' : 'Add product'}
+            Save changes
           </button>
-          {current && (
-            <button type="button" className="btn" onClick={toggleActive} disabled={busy}>
-              {current.active ? 'Deactivate' : 'Activate'}
-            </button>
-          )}
+          <button type="button" className="btn" onClick={toggleActive} disabled={busy}>
+            {current.active ? 'Deactivate' : 'Activate'}
+          </button>
           <button type="button" className="btn" onClick={onClose}>
             Close
           </button>
@@ -224,7 +113,7 @@ export default function ProductsPage() {
   const [reload, setReload] = useState(0);
   const [result, setResult] = useState<PageResponse<Product> | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [panel, setPanel] = useState<{ product: Product | null } | null>(null);
+  const [panel, setPanel] = useState<Product | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -260,9 +149,9 @@ export default function ProductsPage() {
       description="The columns of the weekly register. Products are never deleted, only deactivated."
       action={
         canAdd && (
-          <button type="button" className="btn primary" onClick={() => setPanel({ product: null })}>
+          <Link className="btn primary" to="/products/new">
             Add product
-          </button>
+          </Link>
         )
       }
     >
@@ -323,10 +212,7 @@ export default function ProductsPage() {
                 </thead>
                 <tbody>
                   {result.items.map((p) => (
-                    <tr
-                      key={p.id}
-                      className={panel?.product?.id === p.id ? 'lp-selected' : undefined}
-                    >
+                    <tr key={p.id} className={panel?.id === p.id ? 'lp-selected' : undefined}>
                       <td className="lp-code">{p.code}</td>
                       <td className="lp-strong">{p.name}</td>
                       <td className={p.standardPrice === null ? 'num lp-none' : 'num'}>
@@ -349,7 +235,7 @@ export default function ProductsPage() {
                           <button
                             type="button"
                             className="btn lp-row-btn"
-                            onClick={() => setPanel({ product: p })}
+                            onClick={() => setPanel(p)}
                           >
                             Edit
                           </button>
@@ -373,13 +259,9 @@ export default function ProductsPage() {
 
       {panel && (
         <ProductPanel
-          key={panel.product?.id ?? 'new'}
-          product={panel.product}
-          canEdit={isAdmin}
-          onSaved={(saved, isNew) => {
-            if (isNew && isAdmin) setPanel({ product: saved });
-            setReload((n) => n + 1);
-          }}
+          key={panel.id}
+          product={panel}
+          onSaved={() => setReload((n) => n + 1)}
           onClose={() => setPanel(null)}
         />
       )}

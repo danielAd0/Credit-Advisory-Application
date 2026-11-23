@@ -10,7 +10,11 @@ import AuditLogPage from './pages/AuditLogPage';
 import AddClientPage from './pages/AddClientPage';
 import ClientDetailPage from './pages/ClientDetailPage';
 import ClientsPage from './pages/ClientsPage';
+import AddBranchPage from './pages/AddBranchPage';
 import AddConsultantPage from './pages/AddConsultantPage';
+import AddEmployerPage from './pages/AddEmployerPage';
+import AddManagerPage from './pages/AddManagerPage';
+import AddProductPage from './pages/AddProductPage';
 import ConsultantsPage from './pages/ConsultantsPage';
 import Dashboard from './pages/Dashboard';
 import EditClientPage from './pages/EditClientPage';
@@ -87,6 +91,14 @@ export default function App() {
                 }
               />
               <Route
+                path="managers/new"
+                element={
+                  <RequireRole roles={['ADMIN']}>
+                    <AddManagerPage />
+                  </RequireRole>
+                }
+              />
+              <Route
                 path="audit-log"
                 element={
                   <RequireRole roles={['ADMIN']}>
@@ -122,12 +134,36 @@ export default function App() {
                 }
               />
               <Route path="products" element={<ProductsPage />} />
+              <Route
+                path="products/new"
+                element={
+                  <RequireRole roles={['ADMIN']}>
+                    <AddProductPage />
+                  </RequireRole>
+                }
+              />
               <Route path="employers" element={<EmployersPage />} />
+              <Route
+                path="employers/new"
+                element={
+                  <RequireRole roles={['ADMIN']}>
+                    <AddEmployerPage />
+                  </RequireRole>
+                }
+              />
               <Route
                 path="branches"
                 element={
                   <RequireRole roles={managers}>
                     <ProductQuotationsPage />
+                  </RequireRole>
+                }
+              />
+              <Route
+                path="branches/new"
+                element={
+                  <RequireRole roles={['ADMIN']}>
+                    <AddBranchPage />
                   </RequireRole>
                 }
               />

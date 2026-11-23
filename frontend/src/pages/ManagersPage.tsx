@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import {
   detailOf,
   isStale,
@@ -14,6 +15,7 @@ import ListPage from '../components/ListPage';
 import { countOf } from '../components/countOf';
 import Pager from '../components/Pager';
 import TempPassword from '../components/TempPassword';
+import { accessLabel } from './managerAccess';
 import './addclient.css';
 import './consultants.css';
 
@@ -28,10 +30,6 @@ const isManager = (u: UserAccount) => u.roles.includes('MANAGER');
 const isMixed = (u: UserAccount) =>
   isManager(u) && (u.roles.includes('CONSULTANT') || u.consultant !== null);
 
-function accessLabel(u: UserAccount): string {
-  return isAdmin(u) ? 'Manager + administrator' : 'Manager';
-}
-
 function StateBadge({ user }: { user: UserAccount }) {
   if (!user.enabled) return <span className="badge suspended">disabled</span>;
   if (user.locked) return <span className="badge suspended">locked</span>;
@@ -44,136 +42,6 @@ const signIn = (at: string | null) => (at ? new Date(at).toLocaleString('en-ZA')
 function rolesWith(user: UserAccount, admin: boolean): Role[] {
   const rest = user.roles.filter((r) => r !== 'ADMIN' && r !== 'MANAGER');
   return admin ? [...rest, 'MANAGER', 'ADMIN'] : [...rest, 'MANAGER'];
-}
-
-// ---------- add ----------
-
-function AddManager({ onCreated, onClose }: { onCreated: () => void; onClose: () => void }) {
-  const [email, setEmail] = useState('');
-  const [temp, setTemp] = useState('');
-  const [alsoAdmin, setAlsoAdmin] = useState(false);
-  const [errors, setErrors] = useState<{ email?: string; temp?: string }>({});
-  const [failure, setFailure] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [created, setCreated] = useState<{ user: UserAccount; password: string } | null>(null);
-
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    if (saving) return;
-    const found: typeof errors = {};
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()))
-      found.email = 'That email address does not look right.';
-    const bad = passwordProblem(temp, email);
-    if (bad) found.temp = bad;
-    setErrors(found);
-    setFailure(null);
-    if (found.email || found.temp) return;
-    setSaving(true);
-    try {
-      const user = await users.createUser({
-        email: email.trim().toLowerCase(),
-        temporaryPassword: temp,
-        roles: alsoAdmin ? ['MANAGER', 'ADMIN'] : ['MANAGER'],
-      });
-      setCreated({ user, password: temp });
-      setEmail('');
-      setTemp('');
-      setAlsoAdmin(false);
-      onCreated();
-    } catch (err) {
-      setFailure(detailOf(err) ?? 'Could not create the manager. Try again.');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  if (created) {
-    return (
-      <section className="cn-panel" role="status" aria-label="Manager added">
-        <h2>Manager added</h2>
-        <p>
-          <strong>{created.user.email}</strong> can now sign in as{' '}
-          {accessLabel(created.user).toLowerCase()}.
-        </p>
-        <p>
-          Give them this temporary password in person. It is not shown again, and they must choose
-          their own when they first sign in:
-        </p>
-        <p>
-          <span className="cn-secret">{created.password}</span>
-        </p>
-        <div className="cn-actions">
-          <button type="button" className="btn primary" onClick={() => setCreated(null)}>
-            Add another manager
-          </button>
-          <button type="button" className="btn" onClick={onClose}>
-            Close
-          </button>
-        </div>
-      </section>
-    );
-  }
-
-  return (
-    <section className="cn-panel" aria-label="Add manager">
-      <h2>Add manager</h2>
-      <form onSubmit={submit} noValidate>
-        {failure && (
-          <p className="alert error" role="alert">
-            {failure}
-          </p>
-        )}
-        <div className="ac-field">
-          <label htmlFor="mg-email">Email (used to sign in)</label>
-          <input
-            id="mg-email"
-            type="email"
-            autoComplete="off"
-            spellCheck={false}
-            value={email}
-            onChange={(e) => {
-              setEmail(e.target.value);
-              setErrors((x) => ({ ...x, email: undefined }));
-            }}
-            aria-invalid={errors.email ? true : undefined}
-          />
-          {errors.email && <p className="ac-err">{errors.email}</p>}
-        </div>
-        <TempPassword
-          id="mg-temp"
-          label="Temporary password"
-          recipient="manager"
-          value={temp}
-          onChange={(v) => {
-            setTemp(v);
-            setErrors((x) => ({ ...x, temp: undefined }));
-          }}
-          error={errors.temp}
-        />
-        <div className="ac-field">
-          <label>
-            <input
-              type="checkbox"
-              checked={alsoAdmin}
-              onChange={(e) => setAlsoAdmin(e.target.checked)}
-            />{' '}
-            Also an administrator
-          </label>
-          <p className="ac-hint">
-            Administrators can also manage users, consultants and the audit log.
-          </p>
-        </div>
-        <div className="cn-actions">
-          <button type="submit" className="btn primary" disabled={saving}>
-            {saving ? 'Saving...' : 'Create manager'}
-          </button>
-          <button type="button" className="btn" onClick={onClose}>
-            Cancel
-          </button>
-        </div>
-      </form>
-    </section>
-  );
 }
 
 // ---------- manage ----------
@@ -558,11 +426,9 @@ export default function ManagersPage() {
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(0);
-  const [reload, setReload] = useState(0);
   const [result, setResult] = useState<PageResponse<UserAccount> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [adding, setAdding] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -585,7 +451,7 @@ export default function ManagersPage() {
     return () => {
       current = false;
     };
-  }, [query, page, reload]);
+  }, [query, page]);
 
   const replace = useCallback((u: UserAccount) => {
     setResult((r) => r && { ...r, items: r.items.map((x) => (x.id === u.id ? u : x)) });
@@ -599,24 +465,11 @@ export default function ManagersPage() {
       description="Sign-ins for managers and administrators. Consultants are managed under Team."
       footer="Confidential staff information"
       action={
-        !adding && (
-          <button
-            type="button"
-            className="btn primary"
-            onClick={() => {
-              setAdding(true);
-              setSelectedId(null);
-            }}
-          >
-            Add manager
-          </button>
-        )
+        <Link className="btn primary" to="/managers/new">
+          Add manager
+        </Link>
       }
     >
-      {adding && (
-        <AddManager onCreated={() => setReload((n) => n + 1)} onClose={() => setAdding(false)} />
-      )}
-
       <section className="lp-card" aria-labelledby="lp-title">
         <div className="lp-head">
           <h2 id="lp-title">Manager sign-ins</h2>
@@ -684,10 +537,7 @@ export default function ManagersPage() {
                         <button
                           type="button"
                           className="btn lp-row-btn"
-                          onClick={() => {
-                            setSelectedId(u.id);
-                            setAdding(false);
-                          }}
+                          onClick={() => setSelectedId(u.id)}
                         >
                           Manage
                         </button>

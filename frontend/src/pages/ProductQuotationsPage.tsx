@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { catalogue, detailOf, isStale, type PageResponse, type ProductQuotation } from '../api';
 import { hasAnyRole, useSession } from '../auth/useAuth';
 import ListPage from '../components/ListPage';
@@ -10,19 +11,17 @@ import './consultants.css';
 const SIZE = 25;
 
 interface PanelProps {
-  quotation: ProductQuotation | null;
-  /** The panel was just reopened on a new entry: say it was added. */
-  justAdded: boolean;
-  onSaved: (q: ProductQuotation, isNew: boolean) => void;
+  quotation: ProductQuotation;
+  onSaved: (q: ProductQuotation) => void;
   onClose: () => void;
 }
 
-function QuotationPanel({ quotation, justAdded, onSaved, onClose }: PanelProps) {
-  const [name, setName] = useState(quotation?.name ?? '');
+function QuotationPanel({ quotation, onSaved, onClose }: PanelProps) {
+  const [name, setName] = useState(quotation.name);
   const [error, setError] = useState<string | null>(null);
-  const [ok, setOk] = useState<string | null>(justAdded ? 'Added.' : null);
+  const [ok, setOk] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [current, setCurrent] = useState<ProductQuotation | null>(quotation);
+  const [current, setCurrent] = useState<ProductQuotation>(quotation);
 
   const staleText = 'Someone else changed this branch. Close this panel, reopen it and try again.';
 
@@ -34,13 +33,11 @@ function QuotationPanel({ quotation, justAdded, onSaved, onClose }: PanelProps) 
     if (!name.trim()) return setError('Enter the branch name.');
     setBusy(true);
     try {
-      const saved = current
-        ? await catalogue.updateProductQuotation(current.id, {
-            name: name.trim(),
-            version: current.version,
-          })
-        : await catalogue.createProductQuotation({ name: name.trim() });
-      onSaved(saved, !current);
+      const saved = await catalogue.updateProductQuotation(current.id, {
+        name: name.trim(),
+        version: current.version,
+      });
+      onSaved(saved);
       setCurrent(saved);
       setName(saved.name);
       setOk('Saved.');
@@ -52,7 +49,7 @@ function QuotationPanel({ quotation, justAdded, onSaved, onClose }: PanelProps) 
   }
 
   async function toggleActive() {
-    if (busy || !current) return;
+    if (busy) return;
     setBusy(true);
     setError(null);
     setOk(null);
@@ -62,7 +59,7 @@ function QuotationPanel({ quotation, justAdded, onSaved, onClose }: PanelProps) 
         !current.active,
         current.version,
       );
-      onSaved(saved, false);
+      onSaved(saved);
       setCurrent(saved);
       setOk(
         saved.active
@@ -77,8 +74,8 @@ function QuotationPanel({ quotation, justAdded, onSaved, onClose }: PanelProps) 
   }
 
   return (
-    <section className="cn-panel" aria-label={current ? `Edit ${current.name}` : 'Add branch'}>
-      <h2>{current ? `Edit ${current.name}` : 'Add branch'}</h2>
+    <section className="cn-panel" aria-label={`Edit ${current.name}`}>
+      <h2>Edit {current.name}</h2>
       {error && (
         <p className="alert error" role="alert">
           {error}
@@ -106,13 +103,11 @@ function QuotationPanel({ quotation, justAdded, onSaved, onClose }: PanelProps) 
         </div>
         <div className="cn-actions">
           <button type="submit" className="btn primary" disabled={busy}>
-            {current ? 'Save changes' : 'Add branch'}
+            Save changes
           </button>
-          {current && (
-            <button type="button" className="btn" onClick={toggleActive} disabled={busy}>
-              {current.active ? 'Deactivate' : 'Activate'}
-            </button>
-          )}
+          <button type="button" className="btn" onClick={toggleActive} disabled={busy}>
+            {current.active ? 'Deactivate' : 'Activate'}
+          </button>
           <button type="button" className="btn" onClick={onClose}>
             Close
           </button>
@@ -133,10 +128,7 @@ export default function ProductQuotationsPage() {
   const [reload, setReload] = useState(0);
   const [result, setResult] = useState<PageResponse<ProductQuotation> | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [panel, setPanel] = useState<{
-    quotation: ProductQuotation | null;
-    justAdded: boolean;
-  } | null>(null);
+  const [panel, setPanel] = useState<ProductQuotation | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -172,13 +164,9 @@ export default function ProductQuotationsPage() {
       description="The list consultants choose from on a client. Branches are deactivated, not deleted."
       action={
         isAdmin && (
-          <button
-            type="button"
-            className="btn primary"
-            onClick={() => setPanel({ quotation: null, justAdded: false })}
-          >
+          <Link className="btn primary" to="/branches/new">
             Add branch
-          </button>
+          </Link>
         )
       }
     >
@@ -237,10 +225,7 @@ export default function ProductQuotationsPage() {
                 </thead>
                 <tbody>
                   {result.items.map((q) => (
-                    <tr
-                      key={q.id}
-                      className={panel?.quotation?.id === q.id ? 'lp-selected' : undefined}
-                    >
+                    <tr key={q.id} className={panel?.id === q.id ? 'lp-selected' : undefined}>
                       <td className="lp-strong">{q.name}</td>
                       <td>
                         <span className={`badge ${q.active ? 'active' : 'inactive'}`}>
@@ -252,7 +237,7 @@ export default function ProductQuotationsPage() {
                           <button
                             type="button"
                             className="btn lp-row-btn"
-                            onClick={() => setPanel({ quotation: q, justAdded: false })}
+                            onClick={() => setPanel(q)}
                           >
                             Edit
                           </button>
@@ -276,13 +261,9 @@ export default function ProductQuotationsPage() {
 
       {panel && (
         <QuotationPanel
-          key={panel.quotation?.id ?? 'new'}
-          quotation={panel.quotation}
-          justAdded={panel.justAdded}
-          onSaved={(saved, isNew) => {
-            if (isNew) setPanel({ quotation: saved, justAdded: true });
-            setReload((n) => n + 1);
-          }}
+          key={panel.id}
+          quotation={panel}
+          onSaved={() => setReload((n) => n + 1)}
           onClose={() => setPanel(null)}
         />
       )}

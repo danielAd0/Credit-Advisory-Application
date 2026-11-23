@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import {
   catalogue,
   detailOf,
@@ -12,6 +13,8 @@ import ListPage from '../components/ListPage';
 import { countOf } from '../components/countOf';
 import Pager from '../components/Pager';
 import EmployerDuplicates from './EmployerDuplicates';
+import EmployerFields from './EmployerFields';
+import { employerFields, toForm, type Form } from './employerForm';
 import './addclient.css';
 import './consultants.css';
 
@@ -19,32 +22,18 @@ const SIZE = 25;
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
-interface Form {
-  name: string;
-  company: string;
-  employerType: string;
-}
-
-const EMPTY: Form = { name: '', company: '', employerType: '' };
-
-const toForm = (e: Employer): Form => ({
-  name: e.name,
-  company: e.company ?? '',
-  employerType: e.employerType ?? '',
-});
-
 interface PanelProps {
-  employer: Employer | null;
-  onSaved: (e: Employer, isNew: boolean) => void;
+  employer: Employer;
+  onSaved: (e: Employer) => void;
   onClose: () => void;
 }
 
 function EmployerPanel({ employer, onSaved, onClose }: PanelProps) {
-  const [v, setV] = useState<Form>(employer ? toForm(employer) : EMPTY);
+  const [v, setV] = useState<Form>(toForm(employer));
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [current, setCurrent] = useState<Employer | null>(employer);
+  const [current, setCurrent] = useState<Employer>(employer);
 
   const staleText =
     'Someone else changed this employer. Close this panel, reopen it and try again.';
@@ -57,15 +46,11 @@ function EmployerPanel({ employer, onSaved, onClose }: PanelProps) {
     if (!v.name.trim()) return setError('Enter the employer name.');
     setBusy(true);
     try {
-      const fields = {
-        name: v.name.trim(),
-        company: v.company.trim() || null,
-        employerType: v.employerType.trim() || null,
-      };
-      const saved = current
-        ? await catalogue.updateEmployer(current.id, { ...fields, version: current.version })
-        : await catalogue.createEmployer(fields);
-      onSaved(saved, !current);
+      const saved = await catalogue.updateEmployer(current.id, {
+        ...employerFields(v),
+        version: current.version,
+      });
+      onSaved(saved);
       setCurrent(saved);
       setV(toForm(saved));
       setOk('Saved.');
@@ -77,13 +62,13 @@ function EmployerPanel({ employer, onSaved, onClose }: PanelProps) {
   }
 
   async function toggleActive() {
-    if (busy || !current) return;
+    if (busy) return;
     setBusy(true);
     setError(null);
     setOk(null);
     try {
       const saved = await catalogue.setEmployerActive(current.id, !current.active, current.version);
-      onSaved(saved, false);
+      onSaved(saved);
       setCurrent(saved);
       setOk(saved.active ? 'The employer is active.' : 'The employer is deactivated.');
     } catch (err) {
@@ -94,8 +79,8 @@ function EmployerPanel({ employer, onSaved, onClose }: PanelProps) {
   }
 
   return (
-    <section className="cn-panel" aria-label={current ? `Edit ${current.name}` : 'Add employer'}>
-      <h2>{current ? `Edit ${current.name}` : 'Add employer'}</h2>
+    <section className="cn-panel" aria-label={`Edit ${current.name}`}>
+      <h2>Edit {current.name}</h2>
       {error && (
         <p className="alert error" role="alert">
           {error}
@@ -107,45 +92,14 @@ function EmployerPanel({ employer, onSaved, onClose }: PanelProps) {
         </p>
       )}
       <form onSubmit={save} noValidate>
-        <div className="ac-field">
-          <label htmlFor="em-name">Employer name</label>
-          <input
-            id="em-name"
-            value={v.name}
-            onChange={(e) => setV({ ...v, name: e.target.value })}
-            autoComplete="off"
-          />
-          <p className="ac-hint">Names must be unique, ignoring capitals and extra spaces.</p>
-        </div>
-        <div className="ac-row">
-          <div className="ac-field">
-            <label htmlFor="em-company">Company</label>
-            <input
-              id="em-company"
-              value={v.company}
-              onChange={(e) => setV({ ...v, company: e.target.value })}
-              autoComplete="off"
-            />
-          </div>
-          <div className="ac-field">
-            <label htmlFor="em-type">Employer type</label>
-            <input
-              id="em-type"
-              value={v.employerType}
-              onChange={(e) => setV({ ...v, employerType: e.target.value })}
-              autoComplete="off"
-            />
-          </div>
-        </div>
+        <EmployerFields v={v} onChange={setV} />
         <div className="cn-actions">
           <button type="submit" className="btn primary" disabled={busy}>
-            {current ? 'Save changes' : 'Add employer'}
+            Save changes
           </button>
-          {current && (
-            <button type="button" className="btn" onClick={toggleActive} disabled={busy}>
-              {current.active ? 'Deactivate' : 'Activate'}
-            </button>
-          )}
+          <button type="button" className="btn" onClick={toggleActive} disabled={busy}>
+            {current.active ? 'Deactivate' : 'Activate'}
+          </button>
           <button type="button" className="btn" onClick={onClose}>
             Close
           </button>
@@ -330,7 +284,7 @@ export default function EmployersPage() {
   const [reload, setReload] = useState(0);
   const [result, setResult] = useState<PageResponse<Employer> | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [panel, setPanel] = useState<{ employer: Employer | null } | null>(null);
+  const [panel, setPanel] = useState<Employer | null>(null);
   const [merge, setMerge] = useState<Employer | null>(null);
   const [reviewCount, setReviewCount] = useState(0);
   const [keeping, setKeeping] = useState<number | null>(null);
@@ -398,16 +352,9 @@ export default function EmployersPage() {
       description="From the Mafori Employer Schedule and the weekly imports. Employers are deactivated, not deleted."
       action={
         isAdmin && (
-          <button
-            type="button"
-            className="btn primary"
-            onClick={() => {
-              setMerge(null);
-              setPanel({ employer: null });
-            }}
-          >
+          <Link className="btn primary" to="/employers/new">
             Add employer
-          </button>
+          </Link>
         )
       }
     >
@@ -493,9 +440,7 @@ export default function EmployersPage() {
                     <tr
                       key={e.id}
                       className={
-                        panel?.employer?.id === e.id || merge?.id === e.id
-                          ? 'lp-selected'
-                          : undefined
+                        panel?.id === e.id || merge?.id === e.id ? 'lp-selected' : undefined
                       }
                     >
                       <td className="lp-strong">{e.name}</td>
@@ -520,7 +465,7 @@ export default function EmployersPage() {
                               className="btn lp-row-btn"
                               onClick={() => {
                                 setMerge(null);
-                                setPanel({ employer: e });
+                                setPanel(e);
                               }}
                             >
                               Edit
@@ -569,12 +514,9 @@ export default function EmployersPage() {
 
       {panel && (
         <EmployerPanel
-          key={panel.employer?.id ?? 'new'}
-          employer={panel.employer}
-          onSaved={(saved, isNew) => {
-            if (isNew) setPanel({ employer: saved });
-            setReload((n) => n + 1);
-          }}
+          key={panel.id}
+          employer={panel}
+          onSaved={() => setReload((n) => n + 1)}
           onClose={() => setPanel(null)}
         />
       )}
