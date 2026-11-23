@@ -10,7 +10,6 @@ import {
 import { countOf } from '../components/countOf';
 import Pager from '../components/Pager';
 import StatusBadge from '../components/StatusBadge';
-import './addclient.css';
 import './consultantaliases.css';
 
 const SIZE = 50;
@@ -114,15 +113,39 @@ export default function ConsultantAliases() {
       <div className="lp-head">
         <h2 id="ca-title">Name spellings</h2>
         {result && <span className="lp-count">{countOf(result.totalItems, 'spelling')}</span>}
+        <div className="lp-filters ca-filters">
+          <input
+            type="search"
+            placeholder="Search by spelling or name"
+            aria-label="Search name spellings"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <select
+            aria-label="Filter by consultant"
+            value={filterId}
+            onChange={(e) => {
+              setFilterId(e.target.value);
+              setPage(0);
+            }}
+          >
+            <option value="">All consultants</option>
+            {people.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.fullName}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
-      <p className="ac-hint">
+      <p className="ca-intro">
         The weekly workbook sometimes writes a consultant&apos;s name another way. A spelling saved
         here is matched to that consultant by later imports, so the import does not register a
         second consultant. Imports save new spellings here by themselves too.
       </p>
 
-      <form className="ca-add" onSubmit={add} noValidate>
-        <div className="ac-field">
+      <form className="ca-add" onSubmit={add} noValidate aria-label="Add a name spelling">
+        <div className="ca-field">
           <label htmlFor="ca-consultant">Consultant</label>
           <select id="ca-consultant" value={addId} onChange={(e) => setAddId(e.target.value)}>
             <option value="">Choose a consultant</option>
@@ -133,13 +156,14 @@ export default function ConsultantAliases() {
             ))}
           </select>
         </div>
-        <div className="ac-field">
+        <div className="ca-field">
           <label htmlFor="ca-alias">Spelling in the workbook</label>
           <input
             id="ca-alias"
             value={alias}
             maxLength={200}
             onChange={(e) => setAlias(e.target.value)}
+            placeholder="e.g. CENNET TSHISIMBA"
             autoComplete="off"
           />
         </div>
@@ -158,31 +182,6 @@ export default function ConsultantAliases() {
           {error}
         </p>
       )}
-
-      <div className="lp-filters ca-filters">
-        <input
-          type="search"
-          placeholder="Search by spelling or name"
-          aria-label="Search name spellings"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        <select
-          aria-label="Filter by consultant"
-          value={filterId}
-          onChange={(e) => {
-            setFilterId(e.target.value);
-            setPage(0);
-          }}
-        >
-          <option value="">All consultants</option>
-          {people.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.fullName}
-            </option>
-          ))}
-        </select>
-      </div>
 
       {!error && result === null && <p className="lp-empty">Loading...</p>}
       {result && result.items.length === 0 && (
@@ -213,15 +212,16 @@ export default function ConsultantAliases() {
                   <tr key={a.id}>
                     <td className="ca-spelling">{a.alias}</td>
                     <td>
-                      {a.consultantName} <span className="mono muted">{a.consultantCode}</span>
+                      {a.consultantName}
+                      <span className="ca-code">{a.consultantCode}</span>
                     </td>
                     <td>
                       <StatusBadge status={a.consultantStatus} />
                     </td>
                     <td className="num">{a.transactions}</td>
-                    <td>
+                    <td className="ca-added">
                       {new Date(a.createdAt).toLocaleDateString('en-ZA')}
-                      {a.createdBy ? ` by ${a.createdBy}` : ''}
+                      {a.createdBy && <span className="ca-by">by {a.createdBy}</span>}
                     </td>
                     <td>
                       {asking === a.id ? (
