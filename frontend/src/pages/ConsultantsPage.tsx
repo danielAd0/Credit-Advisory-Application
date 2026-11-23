@@ -17,6 +17,7 @@ import { countOf } from '../components/countOf';
 import Pager from '../components/Pager';
 import StatusBadge from '../components/StatusBadge';
 import TempPassword from '../components/TempPassword';
+import ConsultantAliases from './ConsultantAliases';
 import './consultants.css';
 
 const SIZE = 25;
@@ -376,6 +377,7 @@ export default function ConsultantsPage() {
   const [result, setResult] = useState<PageResponse<Consultant> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [tab, setTab] = useState<'consultants' | 'spellings'>('consultants');
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -424,102 +426,133 @@ export default function ConsultantsPage() {
         )
       }
     >
-      <section className="lp-card" aria-labelledby="lp-title">
-        <div className="lp-head">
-          <h2 id="lp-title">Consultants</h2>
-          {result && <span className="lp-count">{countOf(result.totalItems, 'consultant')}</span>}
-          <div className="lp-filters">
-            <input
-              type="search"
-              placeholder="Search by name or code"
-              aria-label="Search consultants"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            <select
-              aria-label="Filter by status"
-              value={status}
-              onChange={(e) => {
-                setStatus(e.target.value as ConsultantStatus | '');
-                setPage(0);
-              }}
-            >
-              <option value="">All statuses</option>
-              {STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {s.charAt(0) + s.slice(1).toLowerCase()}
-                </option>
-              ))}
-            </select>
-          </div>
+      {isAdmin && (
+        <div className="ca-tabs" role="group" aria-label="Team sections">
+          <button
+            type="button"
+            className={`btn${tab === 'consultants' ? ' primary' : ''}`}
+            aria-pressed={tab === 'consultants'}
+            onClick={() => setTab('consultants')}
+          >
+            Consultants
+          </button>
+          <button
+            type="button"
+            className={`btn${tab === 'spellings' ? ' primary' : ''}`}
+            aria-pressed={tab === 'spellings'}
+            onClick={() => setTab('spellings')}
+          >
+            Name spellings
+          </button>
         </div>
+      )}
 
-        {error && (
-          <p className="alert error" role="alert">
-            {error}
-          </p>
-        )}
-        {!error && result === null && <p className="lp-empty">Loading...</p>}
-        {result && result.items.length === 0 && <p className="lp-empty">No consultants found.</p>}
-        {result && result.items.length > 0 && (
-          <>
-            <div className="lp-table">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Code</th>
-                    <th>Name</th>
-                    <th>Status</th>
-                    <th className="num">Clients</th>
-                    <th>Since</th>
-                    <th>
-                      <span className="sr-only">Actions</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {result.items.map((c) => (
-                    <tr key={c.id} className={c.id === selectedId ? 'lp-selected' : undefined}>
-                      <td className="lp-code">{c.consultantCode}</td>
-                      <td className="lp-strong">{c.fullName}</td>
-                      <td>
-                        <StatusBadge status={c.status} />
-                      </td>
-                      <td className="num">{c.clientCount}</td>
-                      <td>{new Date(c.statusChangedAt).toLocaleDateString('en-ZA')}</td>
-                      <td>
-                        <button
-                          type="button"
-                          className="btn lp-row-btn"
-                          onClick={() => setSelectedId(c.id)}
-                        >
-                          {isAdmin ? 'Manage' : 'View'}
-                        </button>
-                      </td>
-                    </tr>
+      {isAdmin && tab === 'spellings' ? (
+        <ConsultantAliases />
+      ) : (
+        <>
+          <section className="lp-card" aria-labelledby="lp-title">
+            <div className="lp-head">
+              <h2 id="lp-title">Consultants</h2>
+              {result && (
+                <span className="lp-count">{countOf(result.totalItems, 'consultant')}</span>
+              )}
+              <div className="lp-filters">
+                <input
+                  type="search"
+                  placeholder="Search by name or code"
+                  aria-label="Search consultants"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+                <select
+                  aria-label="Filter by status"
+                  value={status}
+                  onChange={(e) => {
+                    setStatus(e.target.value as ConsultantStatus | '');
+                    setPage(0);
+                  }}
+                >
+                  <option value="">All statuses</option>
+                  {STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {s.charAt(0) + s.slice(1).toLowerCase()}
+                    </option>
                   ))}
-                </tbody>
-              </table>
+                </select>
+              </div>
             </div>
-            <Pager
-              page={result.page}
-              size={result.size}
-              totalItems={result.totalItems}
-              totalPages={result.totalPages}
-              onPage={setPage}
-            />
-          </>
-        )}
-      </section>
 
-      {selected && (
-        <ManagePanel
-          key={selected.id}
-          consultant={selected}
-          isAdmin={isAdmin}
-          onChanged={replace}
-          onClose={() => setSelectedId(null)}
-        />
+            {error && (
+              <p className="alert error" role="alert">
+                {error}
+              </p>
+            )}
+            {!error && result === null && <p className="lp-empty">Loading...</p>}
+            {result && result.items.length === 0 && (
+              <p className="lp-empty">No consultants found.</p>
+            )}
+            {result && result.items.length > 0 && (
+              <>
+                <div className="lp-table">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Code</th>
+                        <th>Name</th>
+                        <th>Status</th>
+                        <th className="num">Clients</th>
+                        <th>Since</th>
+                        <th>
+                          <span className="sr-only">Actions</span>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.items.map((c) => (
+                        <tr key={c.id} className={c.id === selectedId ? 'lp-selected' : undefined}>
+                          <td className="lp-code">{c.consultantCode}</td>
+                          <td className="lp-strong">{c.fullName}</td>
+                          <td>
+                            <StatusBadge status={c.status} />
+                          </td>
+                          <td className="num">{c.clientCount}</td>
+                          <td>{new Date(c.statusChangedAt).toLocaleDateString('en-ZA')}</td>
+                          <td>
+                            <button
+                              type="button"
+                              className="btn lp-row-btn"
+                              onClick={() => setSelectedId(c.id)}
+                            >
+                              {isAdmin ? 'Manage' : 'View'}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <Pager
+                  page={result.page}
+                  size={result.size}
+                  totalItems={result.totalItems}
+                  totalPages={result.totalPages}
+                  onPage={setPage}
+                />
+              </>
+            )}
+          </section>
+
+          {selected && (
+            <ManagePanel
+              key={selected.id}
+              consultant={selected}
+              isAdmin={isAdmin}
+              onChanged={replace}
+              onClose={() => setSelectedId(null)}
+            />
+          )}
+        </>
       )}
     </ListPage>
   );

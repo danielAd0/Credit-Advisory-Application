@@ -1,0 +1,57 @@
+.ca-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.ca-add {
+  display: grid;
+  grid-template-columns: minmax(14rem, 1fr) minmax(14rem, 1fr) auto;
+  align-items: end;
+  gap: 0 1rem;
+  margin: 0.75rem 0 1rem;
+}
+
+.ca-add .ac-field {
+  margin: 0 !important;
+  min-width: 0;
+}
+
+.ca-add .ca-submit {
+  display: block;
+  height: 2.75rem;
+  margin: 0 !important;
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .ca-add {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+}
+
+.ca-add select,
+.ca-filters select {
+  height: 2.75rem;
+  max-width: 100%;
+  padding: 0 0.75rem;
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.ca-spelling {
+  font-weight: 600;
+}
+
+.ca-ask {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  white-space: normal;
+}

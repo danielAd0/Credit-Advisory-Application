@@ -140,3 +140,5 @@ export type {
   Role,
   Session,
 } from './types';
+export { consultantAliases } from './consultantAliases';
+export type { AliasFilter, ConsultantAlias } from './consultantAliases';
