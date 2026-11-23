@@ -11,6 +11,7 @@ import { hasAnyRole, useSession } from '../auth/useAuth';
 import ListPage from '../components/ListPage';
 import { countOf } from '../components/countOf';
 import Pager from '../components/Pager';
+import EmployerDuplicates from './EmployerDuplicates';
 import './addclient.css';
 import './consultants.css';
 
@@ -321,6 +322,7 @@ function MergePanel({ employer, onMerged, onClose }: MergePanelProps) {
 export default function EmployersPage() {
   const session = useSession();
   const isAdmin = hasAnyRole(session, ['ADMIN']);
+  const canSeeSuggestions = hasAnyRole(session, ['MANAGER', 'ADMIN']);
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
   const [state, setState] = useState<'all' | 'active' | 'inactive' | 'review'>('all');
@@ -409,6 +411,14 @@ export default function EmployersPage() {
         )
       }
     >
+      {canSeeSuggestions && (
+        <EmployerDuplicates
+          reload={reload}
+          canMerge={isAdmin}
+          onMerged={() => setReload((n) => n + 1)}
+        />
+      )}
+
       <section className="lp-card" aria-labelledby="lp-title">
         <div className="lp-head">
           <h2 id="lp-title">Employer schedule</h2>

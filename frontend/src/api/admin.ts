@@ -74,6 +74,33 @@ export interface MergeEmployerResult {
   nameKeptAsAlias: boolean;
 }
 
+export interface EmployerDuplicate {
+  id: number;
+  name: string;
+  active: boolean;
+  needsReview: boolean;
+  clients: number;
+  version: number;
+}
+
+export interface EmployerDuplicateGroup {
+  suggestedTargetId: number | null;
+  employers: EmployerDuplicate[];
+}
+
+export interface EmployerDuplicateSuggestions {
+  groupCount: number;
+  employerCount: number;
+  groups: EmployerDuplicateGroup[];
+}
+
+export interface MergeGroupResult {
+  target: Employer;
+  merged: MergeEmployerResult[];
+  clientsMoved: number;
+  transactionsMoved: number;
+}
+
 export interface ProductQuotation {
   id: number;
   name: string;
@@ -201,6 +228,14 @@ export const mergeEmployer = (
   id: number,
   input: { targetEmployerId: number; version: number; reason: string },
 ) => api<MergeEmployerResult>(`/api/employers/${id}/merge`, json('POST', input));
+
+export const duplicateSuggestions = () =>
+  api<EmployerDuplicateSuggestions>('/api/employers/duplicate-suggestions');
+
+export const mergeEmployerGroup = (
+  id: number,
+  input: { employers: { id: number; version: number }[]; reason: string },
+) => api<MergeGroupResult>(`/api/employers/${id}/merge-group`, json('POST', input));
 
 export const keepEmployer = (id: number, version: number) =>
   api<Employer>(`/api/employers/${id}/review`, json('PATCH', { version }));

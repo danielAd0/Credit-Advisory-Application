@@ -1,6 +1,13 @@
 import { ApiError } from './http';
 import { delay } from './mock';
-import type { Employer, MergeEmployerResult, Product, ProductQuotation } from './admin';
+import type {
+  Employer,
+  EmployerDuplicateSuggestions,
+  MergeEmployerResult,
+  MergeGroupResult,
+  Product,
+  ProductQuotation,
+} from './admin';
 import type { NamedRef, PageResponse } from './types';
 
 const now = () => new Date().toISOString();
@@ -287,6 +294,100 @@ export async function mergeEmployer(
     transactionsMoved: 9,
     aliasesMoved: 0,
     nameKeptAsAlias: true,
+  };
+}
+
+const SHORT_FORMS: Record<string, string> = {
+  munic: 'municipality',
+  hosp: 'hospital',
+  co: 'company',
+};
+
+/** Same idea as the server: ignore case and punctuation, write short forms out, drop PTY / LTD. */
+const duplicateKey = (name: string) =>
+  name
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9 ]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => SHORT_FORMS[w] ?? w)
+    .filter((w, i) => i === 0 || (w !== 'pty' && w !== 'ltd'))
+    .join(' ');
+
+export async function duplicateSuggestions(): Promise<EmployerDuplicateSuggestions> {
+  await delay();
+  const byKey = new Map<string, Employer[]>();
+  for (const e of employers) {
+    const key = duplicateKey(e.name);
+    byKey.set(key, [...(byKey.get(key) ?? []), e]);
+  }
+  const groups = [...byKey.values()]
+    .filter((g) => g.length > 1)
+    .map((g) => {
+      const members = g.map((e) => ({
+        id: e.id,
+        name: e.name,
+        active: e.active,
+        needsReview: e.needsReview,
+        clients: (e.id * 3) % 7,
+        version: e.version,
+      }));
+      const target =
+        members
+          .filter((m) => m.active)
+          .sort(
+            (a, b) =>
+              Number(a.needsReview) - Number(b.needsReview) || b.clients - a.clients || a.id - b.id,
+          )[0] ?? null;
+      const employers = [...members].sort((a, b) =>
+        a.id === target?.id ? -1 : b.id === target?.id ? 1 : a.name.localeCompare(b.name),
+      );
+      return { suggestedTargetId: target?.id ?? null, employers };
+    })
+    .sort((a, b) => b.employers.length - a.employers.length);
+  return {
+    groupCount: groups.length,
+    employerCount: groups.reduce((n, g) => n + g.employers.length, 0),
+    groups,
+  };
+}
+
+export async function mergeEmployerGroup(
+  id: number,
+  input: { employers: { id: number; version: number }[]; reason: string },
+): Promise<MergeGroupResult> {
+  await delay();
+  const target = employers.find((x) => x.id === id);
+  if (!target) throw problem(404, 'employer:not-found', 'Employer not found.');
+  if (!target.active)
+    throw problem(409, 'employer:merge-target-inactive', 'Activate the target employer first.');
+  if (!input.reason.trim()) throw problem(400, 'validation:invalid-request', 'Give a reason.');
+  if (input.employers.length === 0)
+    throw problem(400, 'validation:invalid-request', 'Choose at least one employer.');
+  const sources = input.employers.map((m) => {
+    const e = employers.find((x) => x.id === m.id);
+    if (!e) throw problem(404, 'employer:not-found', 'Employer not found.');
+    if (e.id === id) throw problem(422, 'employer:merge-into-itself', 'The target is in the list.');
+    if (e.version !== m.version)
+      throw problem(409, 'conflict:stale-version', `${e.name} was changed first.`);
+    return e;
+  });
+  const merged = sources.map((e) => ({
+    mergedEmployerId: e.id,
+    mergedEmployerName: e.name,
+    target: { ...target },
+    clientsMoved: 6,
+    transactionsMoved: 9,
+    aliasesMoved: 0,
+    nameKeptAsAlias: true,
+  }));
+  for (const e of sources) employers.splice(employers.indexOf(e), 1);
+  return {
+    target: { ...target },
+    merged,
+    clientsMoved: merged.length * 6,
+    transactionsMoved: merged.length * 9,
   };
 }
 
