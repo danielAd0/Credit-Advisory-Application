@@ -107,6 +107,24 @@ export async function createConsultantAccount(input: {
   return { consultant: asConsultant(c), user };
 }
 
+export async function renameConsultant(
+  id: number,
+  fullName: string,
+  version: number,
+): Promise<Consultant> {
+  await delay();
+  const c = consultants.find((x) => x.id === id);
+  if (!c) throw problem(404, 'consultant:not-found', 'Consultant not found.');
+  if (!fullName.trim() || fullName.trim().length > 200)
+    throw problem(400, 'validation:invalid-request', 'Enter a name of up to 200 characters.');
+  if (c.version !== version)
+    throw problem(409, 'conflict:stale-version', 'Someone else changed this consultant first.');
+  c.fullName = fullName.trim();
+  c.updatedAt = now();
+  c.version += 1;
+  return asConsultant(c);
+}
+
 export async function changeConsultantStatus(
   id: number,
   status: ConsultantStatus,

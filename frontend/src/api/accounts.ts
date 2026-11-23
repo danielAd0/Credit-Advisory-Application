@@ -29,6 +29,7 @@ const real = {
     } = {},
   ): Promise<PageResponse<admin.Consultant>> => admin.listConsultants(params),
   createConsultantAccount: admin.createConsultantAccount,
+  renameConsultant: admin.renameConsultant,
   changeConsultantStatus: admin.changeConsultantStatus,
   findLogin,
   resetPassword: admin.resetPassword,

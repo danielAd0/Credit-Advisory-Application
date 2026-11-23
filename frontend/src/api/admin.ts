@@ -141,6 +141,9 @@ export const listConsultants = (
   params: { search?: string; status?: ConsultantStatus; page?: number; size?: number } = {},
 ) => api<PageResponse<Consultant>>(`/api/consultants${query(params)}`);
 
+export const renameConsultant = (id: number, fullName: string, version: number) =>
+  api<Consultant>(`/api/consultants/${id}`, json('PATCH', { fullName, version }));
+
 export const changeConsultantStatus = (
   id: number,
   status: ConsultantStatus,

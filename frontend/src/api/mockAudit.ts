@@ -1,4 +1,5 @@
 import { ApiError } from './http';
+import { saveFile } from './download';
 import { delay } from './mock';
 import type { AuditEntry, AuditFilter } from './audit';
 import type { PageResponse } from './types';
@@ -132,4 +133,29 @@ export async function list(filter: AuditFilter = {}): Promise<PageResponse<Audit
     totalItems: all.length,
     totalPages: Math.max(1, Math.ceil(all.length / size)),
   };
+}
+
+const csvCell = (v: string) => `"${v.replace(/"/g, '""')}"`;
+
+export async function exportCsv(filter: AuditFilter = {}): Promise<void> {
+  const rows = (await list({ ...filter, page: 0, size: 100000 })).items
+    .slice()
+    .sort((a, b) => Date.parse(a.occurredAt) - Date.parse(b.occurredAt));
+  const lines = [
+    ['Time (South Africa)', 'Action', 'By', 'By user id', 'Target type', 'Target id', 'Details'],
+    ...rows.map((e) => [
+      new Date(e.occurredAt).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg' }),
+      e.action,
+      e.actor?.email ?? 'System',
+      e.actor ? String(e.actor.id) : '',
+      e.targetType ?? '',
+      e.targetId ?? '',
+      e.metadata ? JSON.stringify(e.metadata) : '',
+    ]),
+  ].map((r) => r.map(csvCell).join(','));
+  const today = new Date().toISOString().slice(0, 10);
+  saveFile(
+    new Blob(['\uFEFF' + lines.join('\r\n') + '\r\n'], { type: 'text/csv;charset=utf-8' }),
+    `audit-log-${today}.csv`,
+  );
 }
