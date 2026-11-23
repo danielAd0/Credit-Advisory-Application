@@ -223,6 +223,8 @@ export default function AuditLogPage() {
   const [page, setPage] = useState(0);
   const [result, setResult] = useState<PageResponse<AuditEntry> | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   useEffect(() => {
     document.title = 'Audit log - Credit Advisory';
@@ -254,6 +256,21 @@ export default function AuditLogPage() {
   const reset = (fn: () => void) => () => {
     fn();
     setPage(0);
+  };
+
+  const download = () => {
+    setExporting(true);
+    setExportError(null);
+    audit
+      .exportCsv({
+        action: action || undefined,
+        targetType: targetType || undefined,
+        targetId: targetType && targetId.trim() ? targetId.trim() : undefined,
+        from: startOf(fromDate),
+        to: startOf(toDate, 1),
+      })
+      .catch((err) => setExportError(detailOf(err) ?? 'Could not download the audit log.'))
+      .finally(() => setExporting(false));
   };
 
   const filtered = Boolean(action || targetType || fromDate || toDate);
@@ -357,6 +374,21 @@ export default function AuditLogPage() {
           </span>
           <span>Newest first</span>
         </div>
+
+        <p className="al-export">
+          <button type="button" className="btn" onClick={download} disabled={exporting}>
+            {exporting ? 'Preparing...' : 'Download as CSV'}
+          </button>{' '}
+          <small>
+            {filtered ? 'Only the entries matching the filters above.' : 'Every entry.'} Oldest
+            first.
+          </small>
+        </p>
+        {exportError && (
+          <p className="alert error" role="alert">
+            {exportError}
+          </p>
+        )}
 
         {error && (
           <p className="alert error" role="alert">

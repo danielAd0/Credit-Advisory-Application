@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import {
   accounts,
@@ -34,6 +34,7 @@ interface PanelProps {
 function ManagePanel({ consultant, isAdmin, onChanged, onClose }: PanelProps) {
   const [status, setStatus] = useState<ConsultantStatus>(consultant.status);
   const [reason, setReason] = useState('');
+  const [name, setName] = useState(consultant.fullName);
   const [notice, setNotice] = useState<Notice>(null);
   const [busy, setBusy] = useState(false);
   const [login, setLogin] = useState<UserAccount | null | undefined>(undefined);
@@ -43,6 +44,11 @@ function ManagePanel({ consultant, isAdmin, onChanged, onClose }: PanelProps) {
   const [handedOver, setHandedOver] = useState<string | null>(null);
   const [confirmMfaReset, setConfirmMfaReset] = useState(false);
   const id = consultant.id;
+  const panelRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -55,6 +61,32 @@ function ManagePanel({ consultant, isAdmin, onChanged, onClose }: PanelProps) {
       current = false;
     };
   }, [id, isAdmin]);
+
+  async function saveName(e: FormEvent) {
+    e.preventDefault();
+    if (busy) return;
+    const next = name.trim();
+    if (!next) return setNotice({ kind: 'error', text: 'Enter the consultant’s name.' });
+    if (next === consultant.fullName)
+      return setNotice({ kind: 'error', text: 'That is already the name.' });
+    setBusy(true);
+    setNotice(null);
+    try {
+      const updated = await accounts.renameConsultant(id, next, consultant.version);
+      onChanged(updated);
+      setName(updated.fullName);
+      setNotice({ kind: 'ok', text: 'Name saved.' });
+    } catch (err) {
+      setNotice({
+        kind: 'error',
+        text: isStale(err)
+          ? 'Someone else changed this consultant. Close this panel, reopen it and try again.'
+          : (detailOf(err) ?? 'Could not save the name.'),
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function saveStatus(e: FormEvent) {
     e.preventDefault();
@@ -162,7 +194,7 @@ function ManagePanel({ consultant, isAdmin, onChanged, onClose }: PanelProps) {
   }
 
   return (
-    <section className="cn-panel" aria-label={`Manage ${consultant.fullName}`}>
+    <section ref={panelRef} className="cn-panel" aria-label={`Manage ${consultant.fullName}`}>
       <h2>
         {consultant.fullName} <span className="mono muted">{consultant.consultantCode}</span>
       </h2>
@@ -189,6 +221,27 @@ function ManagePanel({ consultant, isAdmin, onChanged, onClose }: PanelProps) {
         <p className="muted">Only an administrator can change a consultant or their login.</p>
       ) : (
         <>
+          <h3>Name</h3>
+          <form onSubmit={saveName} noValidate>
+            <div className="ac-field">
+              <label htmlFor="cn-name">Full name</label>
+              <input
+                id="cn-name"
+                type="text"
+                maxLength={200}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+              <p className="ac-hint">
+                The code {consultant.consultantCode} cannot be changed: the workbook is matched on
+                it. Renaming is recorded in the audit log.
+              </p>
+            </div>
+            <button type="submit" className="btn" disabled={busy}>
+              Save name
+            </button>
+          </form>
+
           <h3>Status</h3>
           <form onSubmit={saveStatus} noValidate>
             <div className="ac-field">
@@ -324,7 +377,6 @@ export default function ConsultantsPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
-  // Wait a moment after typing before asking the server.
   useEffect(() => {
     const t = setTimeout(() => {
       setQuery(search.trim());
