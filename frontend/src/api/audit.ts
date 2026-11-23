@@ -35,7 +35,7 @@ function query(params: AuditFilter): string {
 async function exportCsv(filter: AuditFilter = {}): Promise<void> {
   const res = await fetch(
     `/api/audit-logs/export${query({ ...filter, page: undefined, size: undefined })}`,
-    { credentials: 'include', headers: { Accept: 'text/csv' } },
+    { credentials: 'include', headers: { Accept: 'text/csv, application/problem+json' } },
   );
   if (res.status === 401) {
     window.location.assign('/login');
